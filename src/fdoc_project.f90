@@ -2,6 +2,7 @@ module fdoc_project
 !! The whole project: loads and parses the files, merges them into one list of entities, and
 !! connects the entities with each other.
 use iso_fortran_env, only: error_unit
+use json_module, only: json_core, json_value
 use fdoc_util
 use fdoc_model
 use fdoc_settings, only: settings_t
@@ -10,19 +11,13 @@ use fdoc_parser, only: parse_file
 implicit none
 private
 
-public :: load_project_sources, correlate, prune, public_symbols
+public :: load_project_sources, correlate, prune, public_symbols, find_module, read_use_spec, find_symbol
 
 type, public :: symbol_t
     !! An entity under the name it is known by in some scope.
     character(len=:), allocatable :: name   !! the name, in lowercase
     integer :: id = 0                       !! the entity
 end type symbol_t
-
-type :: rename_t
-    !! A name in the `only` list of a `use` statement.
-    character(len=:), allocatable :: used   !! the name in the used module, in lowercase
-    character(len=:), allocatable :: local  !! the name in the using scope, in lowercase
-end type rename_t
 
 type :: symbols_t
     !! The names a module makes public, by category.
@@ -39,6 +34,7 @@ type, public :: project_t
     integer, allocatable :: files(:)        !! the file entities
     integer, allocatable :: modules(:)      !! the module entities
     type(symbols_t), allocatable :: pub(:)  !! the public names of each entity in `modules`
+    integer, allocatable :: submodules(:)   !! the submodule entities
 end type project_t
 
 contains
@@ -123,79 +119,327 @@ subroutine merge_list(p, from)
             if (e%result > 0) e%result = e%result + offset
             if (allocated(e%arg_ids)) e%arg_ids = e%arg_ids + offset
             if (e%kind == E_MODULE) call push_int(p%modules, offset + k)
+            if (e%kind == E_SUBMODULE) call push_int(p%submodules, offset + k)
             if (e%kind == E_FILE) call push_int(p%files, offset + k)
         end associate
     end do
     p%list%n = needed
 end subroutine merge_list
 
-!> Connect entities across files: `use` statements, and the public names of each module.
-subroutine correlate(p)
+!> Connect entities across files: the public names of each module, and what types inherit.
+subroutine correlate(p, s)
     type(project_t), intent(inout) :: p     !! the project
+    type(settings_t), intent(in) :: s       !! the settings
     integer :: k, n
 
     if (.not. allocated(p%modules)) allocate (p%modules(0))
+    if (.not. allocated(p%submodules)) allocate (p%submodules(0))
+    call add_external_modules(p, s)
     allocate (p%pub(size(p%modules)))
+    call link_uses(p)
     do k = 1, size(p%modules)
         call public_names(p, k)
     end do
     n = p%list%n
     do k = 1, n
         if (p%list%box(k)%e%kind /= E_TYPE) cycle
+        if (p%list%box(k)%e%parent == 0) cycle
         call set_constructor(p, k)
         call inherit(p, k)
     end do
 end subroutine correlate
 
-!> The type that `name` means in scope `scope`, or 0.
-recursive integer function find_type(p, scope, name) result(id)
+!> Add modules documented elsewhere: `extra_mods`, and the `modules.json` of external projects.
+subroutine add_external_modules(p, s)
+    type(project_t), intent(inout) :: p     !! the project
+    type(settings_t), intent(in) :: s       !! the settings
+    integer :: k, id
+
+    do k = 1, size(s%extra_mods)
+        id = p%list%add(E_MODULE, 0)
+        associate (e => p%list%box(id)%e)
+            e%name = s%extra_mods(k)%key
+            e%external_url = s%extra_mods(k)%value
+            e%permission = 'public'
+            allocate (e%uses(0), e%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
+        end associate
+        call push_int(p%modules, id)
+    end do
+    do k = 1, size(s%external)
+        call load_external_project(p, s, s%external(k)%value)
+    end do
+end subroutine add_external_modules
+
+!> Add the modules in the `modules.json` of an external project at `url`, a path or a web address.
+subroutine load_external_project(p, s, url)
+    type(project_t), intent(inout) :: p     !! the project
+    type(settings_t), intent(in) :: s       !! the settings
+    character(len=*), intent(in) :: url     !! where the project's documentation is
+    type(json_core) :: json
+    type(json_value), pointer :: root, modules, item
+    character(len=:), allocatable :: path, base, fetched
+    logical :: found, remote
+    integer :: k, n, id, status
+
+    remote = starts_with(url, 'http://') .or. starts_with(url, 'https://')
+    if (remote) then
+        base = url
+        if (.not. ends_with(base, '/')) base = base//'/'
+        fetched = s%output_dir//'/.external-modules.json'
+        call execute_command_line("mkdir -p '"//s%output_dir//"'", exitstat=status)
+        call execute_command_line("curl -fsSL -o '"//fetched//"' '"//base//"modules.json'", exitstat=status)
+        path = fetched
+        if (status /= 0) then
+            write (error_unit, '(a)') "Could not open external URL '"//url//"'"
+            return
+        end if
+    else
+        base = resolve_path(s%directory, url)//'/'
+        path = base//'modules.json'
+    end if
+
+    call json%initialize()
+    call json%load(path, root)
+    if (json%failed()) then
+        call json%clear_exceptions()
+        write (error_unit, '(a)') "Could not open external URL '"//url//"'"
+        return
+    end if
+    call json%get_child(root, 'modules', modules, found)
+    if (found) then
+        call json%info(modules, n_children=n)
+        do k = 1, n
+            call json%get_child(modules, k, item, found)
+            call read_external(p, json, item, base, 0, id)
+            if (id > 0) call push_int(p%modules, id)
+        end do
+    end if
+    call json%destroy(root)
+    if (remote) then
+        open (newunit=n, file=path, status='old', iostat=status)
+        if (status == 0) close (n, status='delete')
+    end if
+end subroutine load_external_project
+
+!> Add the entity described by `node` of an external `modules.json`, with those inside it.
+recursive subroutine read_external(p, json, node, base, parent, id)
+    type(project_t), intent(inout) :: p             !! the project
+    type(json_core), intent(inout) :: json          !! the JSON handler
+    type(json_value), pointer, intent(in) :: node   !! the entity
+    character(len=*), intent(in) :: base            !! the external project's address, ending in `/`
+    integer, intent(in) :: parent                   !! the entity it goes in, or 0
+    integer, intent(out) :: id                      !! the new entity, or 0
+    character(len=*), parameter :: LISTS(*) = [character(len=13) :: 'pub_procs', 'pub_absints', 'pub_types', 'pub_vars', &
+                                               'boundprocs', 'variables']
+    character(len=:), allocatable :: name, url, obj, proctype, text
+    type(json_value), pointer :: list, item
+    logical :: found
+    integer :: k, n, j, child, kind
+
+    id = 0
+    call json%get(node, 'name', name, found)
+    if (.not. found) return
+    call json%get(node, 'obj', obj, found)
+    call json%get(node, 'proctype', proctype, found)
+    if (.not. found) proctype = ''
+    select case (obj)
+    case ('module'); kind = E_MODULE
+    case ('type'); kind = E_TYPE
+    case ('variable'); kind = E_VARIABLE
+    case ('boundprocedure'); kind = E_BOUNDPROC
+    case ('interface'); kind = E_INTERFACE
+    case default; kind = merge(E_FUNCTION, E_SUBROUTINE, proctype == 'Function')
+    end select
+    id = p%list%add(kind, parent)
+    call json%get(node, 'external_url', url, found)
+    associate (e => p%list%box(id)%e)
+        e%name = name
+        if (found) then
+            if (starts_with(url, './')) url = url(3:)
+            e%external_url = base//url
+        end if
+        call json%get(node, 'permission', text, found)
+        e%permission = 'public'
+        if (found) e%permission = text
+        call json%get(node, 'vartype', text, found)
+        e%vartype = ''
+        if (found) e%vartype = text
+        allocate (e%uses(0), e%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
+        e%var_role = VAR_PLAIN
+    end associate
+    do k = 1, size(LISTS)
+        call json%get_child(node, trim(LISTS(k)), list, found)
+        if (.not. found) cycle
+        call json%info(list, n_children=n)
+        do j = 1, n
+            call json%get_child(list, j, item, found)
+            call read_external(p, json, item, base, id, child)
+        end do
+    end do
+end subroutine read_external
+
+!> Find the modules that `use` statements and submodules refer to.
+subroutine link_uses(p)
+    type(project_t), intent(inout) :: p     !! the project
+    integer :: k, u, j, found
+
+    do k = 1, p%list%n
+        associate (e => p%list%box(k)%e)
+            if (allocated(e%uses)) then
+                do u = 1, size(e%uses)
+                    found = find_module(p, e%uses(u)%module)
+                    if (found > 0) e%uses(u)%target = p%modules(found)
+                    call read_use_spec(e%uses(u)%spec, e%uses(u)%only, e%uses(u)%renames)
+                end do
+            end if
+            if (e%kind /= E_SUBMODULE) cycle
+            found = find_module(p, e%ancestor)
+            if (found > 0) e%ancestor_id = p%modules(found)
+            if (allocated(e%parent_submodule)) then
+                do j = 1, size(p%submodules)
+                    if (lowercase(p%list%box(p%submodules(j))%e%name) == e%parent_submodule) then
+                        e%parent_submodule_id = p%submodules(j)
+                    end if
+                end do
+            end if
+        end associate
+    end do
+end subroutine link_uses
+
+!> The position of `name` in `symbols`, or 0.
+pure integer function find_in(symbols, name)
+    type(symbol_t), intent(in) :: symbols(:)    !! the names
+    character(len=*), intent(in) :: name        !! the name, in lowercase
+    integer :: k
+
+    find_in = 0
+    do k = 1, size(symbols)
+        if (symbols(k)%name == name) then
+            find_in = symbols(k)%id
+            return
+        end if
+    end do
+end function find_in
+
+!> True if entity `e` declares a name of category `category`: 1 procedures, 2 abstract interfaces,
+!> 3 types, 4 variables.
+pure logical function in_category(e, category)
+    type(entity_t), intent(in) :: e     !! the entity
+    integer, intent(in) :: category     !! the category
+
+    select case (category)
+    case (1)
+        in_category = e%kind == E_INTERFACE .or. ((e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION .or. &
+                                                   e%kind == E_MODPROC) .and. e%iface /= IFACE_ABSTRACT)
+    case (2)
+        in_category = (e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION) .and. e%iface == IFACE_ABSTRACT
+    case (3)
+        in_category = e%kind == E_TYPE
+    case default
+        in_category = e%kind == E_VARIABLE
+    end select
+end function in_category
+
+!> What `name` means in scope `scope` for category `category` (see [[in_category]]), or 0.
+recursive integer function find_symbol(p, scope, name, category) result(id)
     type(project_t), intent(in) :: p        !! the project
     integer, intent(in) :: scope            !! the entity to look in
     character(len=*), intent(in) :: name    !! the name, in lowercase
-    type(rename_t), allocatable :: renames(:)
-    character(len=:), allocatable :: remote
-    logical :: only
-    integer :: c, child, u, used, k, j
+    integer, intent(in) :: category         !! the category
+    integer :: c, b, child, u, j, used, target
 
     id = 0
     associate (e => p%list%box(scope)%e)
         do c = 1, size(e%children)
             child = e%children(c)
-            if (p%list%box(child)%e%kind /= E_TYPE) cycle
-            if (lowercase(p%list%box(child)%e%name) == name) then
-                id = child
-                return
-            end if
+            associate (item => p%list%box(child)%e)
+                if (.not. allocated(item%name)) cycle
+                if (in_category(item, category)) then
+                    if (lowercase(item%name) == name) then
+                        id = child
+                        return
+                    end if
+                end if
+                if (category == 1 .and. item%kind == E_INTERFACE) then
+                    do b = 1, size(item%children)
+                        associate (body => p%list%box(item%children(b))%e)
+                            if (.not. allocated(body%name)) cycle
+                            if (body%kind /= E_VARIABLE .and. lowercase(body%name) == name) then
+                                id = item%children(b)
+                                return
+                            end if
+                        end associate
+                    end do
+                end if
+                if (category == 1 .and. item%kind == E_VARIABLE) then
+                    if (item%vartype == 'procedure' .and. lowercase(item%name) == name) then
+                        id = child
+                        return
+                    end if
+                end if
+            end associate
         end do
         if (allocated(e%uses)) then
             do u = 1, size(e%uses)
-                used = find_module(p, e%uses(u)%module)
+                target = e%uses(u)%target
+                if (target == 0) cycle
+                used = module_position(p, target)
                 if (used == 0) cycle
-                call read_use_spec(e%uses(u)%spec, only, renames)
-                remote = name
-                if (only) then
-                    remote = ''
-                    do j = 1, size(renames)
-                        if (renames(j)%local == name) remote = renames(j)%used
+                if (e%uses(u)%only) then
+                    do j = 1, size(e%uses(u)%renames)
+                        if (e%uses(u)%renames(j)%local /= name) cycle
+                        id = public_symbol(p, used, e%uses(u)%renames(j)%used, category)
+                        if (id > 0) return
                     end do
-                    if (len(remote) == 0) cycle
+                else
+                    id = public_symbol(p, used, name, category)
+                    if (id > 0) return
                 end if
-                do k = 1, size(p%pub(used)%types)
-                    if (p%pub(used)%types(k)%name == remote) then
-                        id = p%pub(used)%types(k)%id
-                        return
-                    end if
-                end do
             end do
         end if
         if (e%kind == E_SUBMODULE) then
-            used = find_module(p, e%ancestor)
-            if (used > 0) id = find_type(p, p%modules(used), name)
+            if (e%parent_submodule_id > 0) then
+                id = find_symbol(p, e%parent_submodule_id, name, category)
+            else if (e%ancestor_id > 0) then
+                id = find_symbol(p, e%ancestor_id, name, category)
+            end if
             if (id > 0) return
         end if
-        if (e%parent > 0) id = find_type(p, e%parent, name)
+        if (e%parent > 0) id = find_symbol(p, e%parent, name, category)
     end associate
-end function find_type
+end function find_symbol
+
+!> The public entity of module `which` named `name` in category `category`, or 0.
+pure integer function public_symbol(p, which, name, category) result(id)
+    type(project_t), intent(in) :: p        !! the project
+    integer, intent(in) :: which            !! position in `p%modules`
+    character(len=*), intent(in) :: name    !! the name, in lowercase
+    integer, intent(in) :: category         !! the category
+
+    id = 0
+    if (.not. allocated(p%pub(which)%procs)) return
+    select case (category)
+    case (1); id = find_in(p%pub(which)%procs, name)
+    case (2); id = find_in(p%pub(which)%absints, name)
+    case (3); id = find_in(p%pub(which)%types, name)
+    case default; id = find_in(p%pub(which)%vars, name)
+    end select
+end function public_symbol
+
+!> The position in `p%modules` of module entity `id`, or 0.
+pure integer function module_position(p, id)
+    type(project_t), intent(in) :: p    !! the project
+    integer, intent(in) :: id           !! the module
+    integer :: k
+
+    module_position = 0
+    do k = 1, size(p%modules)
+        if (p%modules(k) == id) then
+            module_position = k
+            return
+        end if
+    end do
+end function module_position
 
 !> Work out what type `id` inherits, after its parent type.
 recursive subroutine inherit(p, id)
@@ -208,7 +452,7 @@ recursive subroutine inherit(p, id)
     p%list%box(id)%e%inherit_state = 1
     allocate (p%list%box(id)%e%inherited(0))
     if (allocated(p%list%box(id)%e%extends)) then
-        base = find_type(p, p%list%box(id)%e%parent, lowercase(p%list%box(id)%e%extends))
+        base = find_symbol(p, p%list%box(id)%e%parent, lowercase(p%list%box(id)%e%extends), 3)
         if (base > 0 .and. base /= id) then
             p%list%box(id)%e%extends_id = base
             call inherit(p, base)
@@ -355,7 +599,7 @@ recursive subroutine public_names(p, which)
     call generic_bodies(p, which, id)
 
     do u = 1, size(p%list%box(id)%e%uses)
-        used = find_module(p, p%list%box(id)%e%uses(u)%module)
+        used = module_position(p, p%list%box(id)%e%uses(u)%target)
         if (used == 0) cycle
         if (p%pub(used)%state == 1) cycle
         call public_names(p, used)

@@ -165,6 +165,9 @@ Each milestone ends with something that can be run and compared against FORD.
   arrays using the resolved scope.
 - Done when: uses, calls and inheritance lists match FORD, with differences reviewed one by one.
   Token-based call analysis should beat FORD's regexes in places, so a difference may be a fix.
+  **Reached:** `pixi run compare links` agrees on the 34 local projects, apart from calls FORD
+  misses (listed in `tools/compare.py`). External projects were tried by hand against one
+  FORD-written `modules.json`; remote `http` ones use `curl` and are untested.
 
 ### M4. Markdown
 

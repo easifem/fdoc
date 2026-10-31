@@ -32,7 +32,9 @@ subroutine collect_parser(testsuite)
                 new_unittest("metadata in doc comments", test_metadata), &
                 new_unittest("labelled do loops", test_labelled_do), &
                 new_unittest("several bindings on a line", test_several_bindings), &
-                new_unittest("common blocks", test_common) &
+                new_unittest("common blocks", test_common), &
+                new_unittest("calls", test_calls), &
+                new_unittest("calls through associate", test_associate_calls) &
                 ]
 end subroutine collect_parser
 
@@ -309,5 +311,30 @@ subroutine test_common(error)
     if (allocated(error)) return
     call check(error, l%box(find(l, E_VARIABLE, 'x'))%e%var_role, VAR_COMMON)
 end subroutine test_common
+
+!> Checks: calls.
+subroutine test_calls(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(entity_list_t) :: l
+    integer :: s
+
+    call parse('subroutine s(x)'//NL//'real :: y = f0(1)'//NL//"if (g(x) > 0) call a%b%c(h(1), 'k(2)')"//NL// &
+               'go to (1, 2) i'//NL//'y = sin(x) + a(3)%d(4)'//NL//'call e'//NL//'end subroutine s'//NL, l)
+    s = find(l, E_SUBROUTINE, 's')
+    call check(error, join(l%box(s)%e%calls, ' '), 'a%b%c g h a%d e')
+end subroutine test_calls
+
+!> Checks: calls through associate.
+subroutine test_associate_calls(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(entity_list_t) :: l
+    integer :: s
+
+    call parse('subroutine s(w)'//NL//'associate (e => w%e)'//NL//'associate (t => e%tmp(1:2))'//NL// &
+               'y = t(1)'//NL//'end associate'//NL//'end associate'//NL//'y = t(1)'//NL// &
+               'end subroutine s'//NL, l)
+    s = find(l, E_SUBROUTINE, 's')
+    call check(error, l%box(s)%e%calls(2)%s, 'w%e%tmp')
+end subroutine test_associate_calls
 
 end module test_parser

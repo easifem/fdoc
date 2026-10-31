@@ -3,6 +3,7 @@
 
     pixi run compare settings PROJECT_FILE...
     pixi run compare modules PROJECT_FILE...
+    pixi run compare links PROJECT_FILE...
 """
 
 import argparse
@@ -16,8 +17,13 @@ from dataclasses import asdict
 from pathlib import Path
 
 import ford
+import ford.fortran_project
+import ford.sourceform
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Calls that FORD's regular expressions miss, checked by hand: (procedure, name).
+FORD_MISSES = {("ffmt_format/format_text", "same_code")}
 
 # Not expected to agree: the time of the run, packaged paths, defaults that are fdoc's own.
 IGNORED = {"creation_date", "favicon", "parallel", "extra_filetypes_lexer"}
@@ -190,6 +196,112 @@ def compare_modules(project_files, limit: int) -> int:
     return 1 if failures else 0
 
 
+def ford_links(project_file: Path) -> dict:
+    """How FORD connects the entities of ``project_file``"""
+    text = project_file.read_text(encoding="utf-8")
+    docs, data = ford.load_settings(text, project_file.parent, str(project_file))
+    data = ford.convert_types_from_commandarguments(data, {})
+    data.normalise_paths(project_file.parent)
+    data.graph = False
+    project = ford.fortran_project.Project(data)
+    project.correlate()
+
+    def label(item):
+        return getattr(item, "name", item).lower()
+
+    def qualified(item):
+        names = []
+        while item is not None and getattr(item, "obj", "") != "sourcefile":
+            names.append(item.name.lower())
+            item = item.parent
+        return "/".join(reversed(names))
+
+    links = {}
+
+    def visit(item):
+        entry = {}
+        if hasattr(item, "uses"):
+            entry["uses"] = sorted({label(u) for u in item.uses})
+        if hasattr(item, "calls"):
+            entry["calls"] = sorted({label(c) for c in item.calls})
+        if hasattr(item, "bindings"):
+            entry["bindings"] = sorted({label(b) for b in item.bindings})
+        if getattr(item, "modprocs", None):
+            entry["modprocs"] = sorted(
+                {label(getattr(m, "procedure", m.name) or m.name) for m in item.modprocs}
+            )
+        if isinstance(getattr(item, "ancestor_module", None), ford.sourceform.FortranModule):
+            entry["ancestor"] = label(item.ancestor_module)
+        if isinstance(getattr(item, "extends", None), ford.sourceform.FortranType):
+            entry["extends"] = label(item.extends)
+        tag = "#type" if getattr(item, "obj", "") == "type" else ""
+        links[qualified(item) + tag] = entry
+        for attr in (
+            "functions",
+            "subroutines",
+            "interfaces",
+            "absinterfaces",
+            "types",
+            "boundprocs",
+            "modprocedures",
+        ):
+            for child in getattr(item, attr, []) or []:
+                visit(child)
+
+    for item in (*project.modules, *project.submodules, *project.programs):
+        visit(item)
+    for item in project.procedures:
+        if item.parobj == "sourcefile":
+            visit(item)
+    return links
+
+
+def compare_links(project_files, limit: int) -> int:
+    binary = fdoc_binary()
+    failures = 0
+    for name in project_files:
+        project_file = Path(name).resolve()
+        try:
+            reference = ford_links(project_file)
+        except Exception as e:
+            print(f"SKIP {name}: FORD fails: {e}")
+            continue
+        run = subprocess.run(
+            [binary, "--dump-links", project_file.name],
+            cwd=project_file.parent,
+            capture_output=True,
+            text=True,
+        )
+        if run.returncode != 0:
+            print(f"FAIL {name}: fdoc fails: {run.stderr[-300:]}")
+            failures += 1
+            continue
+        ours = json.loads(run.stdout)
+        found = []
+        for key, entry in reference.items():
+            if key not in ours:
+                continue
+            for field, value in entry.items():
+                theirs = ours[key].get(field)
+                if field in ("uses", "calls", "bindings", "modprocs"):
+                    theirs = sorted(set(theirs or []))
+                if field == "calls":
+                    theirs = [c for c in theirs if (key, c) not in FORD_MISSES]
+                if theirs != value:
+                    found.append((f"{key}:{field}", theirs, value))
+        if found:
+            failures += 1
+            fields = Counter(f[0].split(":")[1] for f in found)
+            print(f"FAIL {name}: {len(found)} of {len(reference)} entities: {fields.most_common()}")
+            for where, a, b in found[:limit]:
+                a, b = set(a or []), set(b or [])
+                print(f"  {where}\n    only fdoc: {sorted(a - b)[:8]}\n    only ford: {sorted(b - a)[:8]}")
+        else:
+            print(f"ok   {name}")
+    print(f"{len(project_files) - failures} of {len(project_files)} agree")
+    return 1 if failures else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="what", required=True)
@@ -198,7 +310,12 @@ def main() -> int:
     modules = sub.add_parser("modules", help="compare modules.json")
     modules.add_argument("project_files", nargs="+")
     modules.add_argument("--limit", type=int, default=8, help="differences to print")
+    links = sub.add_parser("links", help="compare how entities are connected")
+    links.add_argument("project_files", nargs="+")
+    links.add_argument("--limit", type=int, default=8, help="differences to print")
     args = parser.parse_args()
+    if args.what == "links":
+        return compare_links(args.project_files, args.limit)
     if args.what == "modules":
         return compare_modules(args.project_files, args.limit)
     return compare_settings(args.project_files)

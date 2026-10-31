@@ -87,6 +87,10 @@ recursive function entity_url(list, id) result(url)
     logical :: has_page
 
     associate (e => list%box(id)%e)
+        if (allocated(e%external_url)) then
+            url = e%external_url
+            return
+        end if
         has_page = .false.
         select case (e%kind)
         case (E_FILE, E_MODULE, E_SUBMODULE, E_PROGRAM, E_BLOCKDATA, E_NAMELIST)
@@ -142,6 +146,7 @@ subroutine write_modules(p, s, stat, errmsg)
     call json%create_array(modules, 'modules')
     call json%add(root, modules)
     do k = 1, size(p%modules)
+        if (allocated(p%list%box(p%modules(k))%e%external_url)) cycle
         call entity_json(json, p, p%modules(k), '', k, item)
         call json%add(modules, item)
     end do
@@ -306,6 +311,7 @@ contains
         call json%create_object(object, name)
         call json%add(node, object)
         do j = 1, size(symbols)
+            if (allocated(p%list%box(symbols(j)%id)%e%external_url)) cycle
             call entity_json(json, p, symbols(j)%id, symbols(j)%name, 0, item)
             call json%add(object, item)
         end do

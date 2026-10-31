@@ -17,6 +17,7 @@ use fdoc_model
 use fdoc_settings, only: settings_t
 use fdoc_project_file, only: parse_metadata, metadata_t
 use fdoc_decl
+use fdoc_intrinsics, only: is_intrinsic
 implicit none
 private
 
@@ -30,6 +31,13 @@ character(len=*), parameter :: ATTRIBUTE_WORDS(*) = [character(len=12) :: 'async
 character(len=*), parameter :: META_KEYS = &
     ' author category copy_subdir date deprecated display graph graph_maxdepth graph_maxnodes license num_lines '// &
     'ordered_subpage proc_internals since source summary title version '
+
+type :: association_t
+    !! A name given by an `associate` statement.
+    character(len=:), allocatable :: name       !! the name, in lowercase
+    character(len=:), allocatable :: chain      !! what it stands for, `%`-separated
+    integer :: level = 0                        !! how many `associate` constructs are open
+end type association_t
 
 type :: doc_lines_t
     !! Documentation lines of one item.
@@ -68,9 +76,10 @@ subroutine parse_file(path, text, s, list)
     type(diagnostic_t), allocatable :: diags(:)
     type(doc_lines_t), allocatable :: docs(:)
     type(string_t), allocatable :: file_doc(:)
+    type(association_t), allocatable :: associations(:)
     character(len=:), allocatable :: line
     integer :: stack(0:MAX_DEPTH)
-    integer :: top, k, root, current, id, depth
+    integer :: top, k, root, current, id, depth, caller, level
 
     call parse_source(text, src)
     call set_views(src, views)
@@ -84,6 +93,8 @@ subroutine parse_file(path, text, s, list)
     call inherit_display(list, root, s)
     stack(0) = root
     top = 0
+    level = 0
+    allocate (associations(0))
 
     do k = 1, src%stmts%n
         if (src%stmts%s(k)%kind /= SK_CODE) cycle
@@ -97,6 +108,8 @@ subroutine parse_file(path, text, s, list)
                 top = top - 1
             end do
             current = stack(top)
+            caller = nearest_caller(list, stack, top)
+            if (caller > 0) call statement_calls(src, k, views(k), info, list%box(caller)%e, associations, level)
             select case (info%role)
             case (ROLE_OPEN)
                 id = 0
@@ -128,6 +141,262 @@ subroutine parse_file(path, text, s, list)
         top = top - 1
     end do
 end subroutine parse_file
+
+!> The innermost entity on `stack` that can call procedures, or 0 if there is none or a declaration
+!> scope such as a type is inside it.
+pure integer function nearest_caller(list, stack, top) result(caller)
+    type(entity_list_t), intent(in) :: list !! the entities
+    integer, intent(in) :: top              !! the top of the stack
+    integer, intent(in) :: stack(0:top)     !! the open constructs
+    integer :: k
+
+    caller = 0
+    do k = top, 0, -1
+        if (stack(k) == 0) cycle
+        select case (list%box(stack(k))%e%kind)
+        case (E_SUBROUTINE, E_FUNCTION, E_MODPROC, E_PROGRAM)
+            caller = stack(k)
+        end select
+        return
+    end do
+end function nearest_caller
+
+!> True if statement `v` can have procedure references: not a declaration.
+logical function is_executable(v, info, source_low)
+    type(statement_view_t), intent(in) :: v     !! the statement
+    type(stmt_info_t), intent(in) :: info       !! its classification
+    character(len=*), intent(in) :: source_low  !! its first words, in lowercase
+
+    is_executable = .false.
+    select case (info%role)
+    case (ROLE_CLOSE)
+        return
+    case (ROLE_OPEN)
+        select case (info%construct)
+        case (C_IF, C_DO, C_SELECT, C_ASSOCIATE, C_WHERE, C_FORALL)
+            is_executable = .true.
+        end select
+        return
+    case (ROLE_MIDDLE)
+        is_executable = info%construct /= C_CONTAINS
+        return
+    end select
+    if (v%n == 0) return
+    if (is_type_declaration(source_low) .or. is_attribute_statement(source_low)) return
+    if (starts_word(source_low, 'use') .or. starts_word(source_low, 'implicit') .or. &
+        starts_word(source_low, 'import') .or. starts_word(source_low, 'namelist') .or. &
+        starts_word(source_low, 'common') .or. starts_word(source_low, 'format') .or. &
+        starts_word(source_low, 'equivalence') .or. starts_word(source_low, 'module')) return
+    if (starts_word(source_low, 'goto') .or. starts_word(source_low, 'go')) then
+        is_executable = index(source_low, '(') == 0
+        return
+    end if
+    is_executable = .true.
+end function is_executable
+
+!> The first code tokens of `v` from token `j`, in lowercase and joined by blanks, up to about 80
+!> characters.
+pure function leading_text(v, j) result(text)
+    type(statement_view_t), intent(in) :: v     !! the statement
+    integer, intent(in) :: j                    !! the first token
+    character(len=80) :: text
+    integer :: k, n, w
+
+    text = ''
+    n = 0
+    do k = j, v%n
+        w = v%hi(k) - v%lo(k) + 1
+        if (n + w >= len(text)) exit
+        text(n + 1:n + w) = v%low(v%lo(k):v%hi(k))
+        n = n + w + merge(1, 0, v%kind_of(k) == TK_NAME .and. v%kind_of(k + 1) == TK_NAME)
+    end do
+end function leading_text
+
+!> Add the procedures that a statement refers to to `e%calls`.
+subroutine statement_calls(src, item, v, info, e, associations, level)
+    type(source_t), intent(in) :: src                   !! the source
+    integer, intent(in) :: item                         !! the statement
+    type(statement_view_t), intent(in) :: v             !! the statement's tokens
+    type(stmt_info_t), intent(in) :: info               !! its classification
+    type(entity_t), intent(inout) :: e                  !! the entity it is in
+    type(association_t), allocatable, intent(inout) :: associations(:)  !! the names in scope
+    integer, intent(inout) :: level                     !! how many `associate` constructs are open
+    character(len=80) :: first
+    integer :: j, call_at, last, target
+
+    if (info%role == ROLE_CLOSE .and. info%construct == C_ASSOCIATE) then
+        associations = pack(associations, associations%level /= level)
+        level = max(0, level - 1)
+        return
+    end if
+    if (v%n == 0) return
+    first = leading_text(v, v%first)
+    if (.not. is_executable(v, info, trim(first))) return
+
+    ! a computed `go to` looks like a function reference
+    do j = v%first, v%n - 1
+        if (v%is(j + 1, '(') .and. (v%is(j, 'goto') .or. (v%is(j, 'to') .and. v%is(j - 1, 'go')))) return
+    end do
+
+    ! `call` may follow a logical `if`
+    call_at = 0
+    do j = v%first, v%n
+        if (v%depth(j) == 0 .and. v%is(j, 'call')) then
+            if (j == v%first .or. v%is(j - 1, ')')) then
+                call_at = j
+                exit
+            end if
+        end if
+    end do
+    target = 0
+    if (call_at > 0) then
+        last = call_at + 1
+        target = chain_end(v, last)
+        if (target > 0) call add_call(v, target, e, associations)
+    end if
+
+    do j = v%first, v%n - 1
+        if (v%kind_of(j) /= TK_NAME .or. .not. v%is(j + 1, '(')) cycle
+        if (call_at > 0 .and. j > call_at .and. v%depth(j) == 0) cycle
+        if (v%closing(j + 1) > 0) then
+            if (v%is(v%closing(j + 1) + 1, '%')) cycle
+        end if
+        call add_call(v, j, e, associations)
+    end do
+
+    if (info%role == ROLE_OPEN .and. info%construct == C_ASSOCIATE) call read_associations(v, associations, level)
+end subroutine statement_calls
+
+!> The last name of the component chain starting at token `j`, or 0.
+function chain_end(v, j) result(last)
+    type(statement_view_t), intent(in) :: v     !! the statement
+    integer, intent(in) :: j                    !! the first name
+    integer :: last, k
+
+    last = 0
+    k = j
+    do
+        if (v%kind_of(k) /= TK_NAME) return
+        last = k
+        k = k + 1
+        if (v%is(k, '(')) then
+            if (v%closing(k) == 0) return
+            k = v%closing(k) + 1
+        end if
+        if (.not. v%is(k, '%')) return
+        k = k + 1
+    end do
+end function chain_end
+
+!> The first token of the component chain ending at name `j`.
+function chain_start(v, j) result(first)
+    type(statement_view_t), intent(in) :: v     !! the statement
+    integer, intent(in) :: j                    !! the last name
+    integer :: first, k, depth
+
+    first = j
+    do
+        if (.not. v%is(first - 1, '%')) return
+        k = first - 2
+        if (v%is(k, ')')) then
+            depth = 0
+            do while (k >= 1)
+                if (v%is(k, ')')) depth = depth + 1
+                if (v%is(k, '(')) depth = depth - 1
+                if (depth == 0) exit
+                k = k - 1
+            end do
+            k = k - 1
+        end if
+        if (k < 1) return
+        if (v%kind_of(k) /= TK_NAME) return
+        first = k
+    end do
+end function chain_start
+
+!> Add the reference ending at name `j` to `e%calls`, unless it is intrinsic or already there.
+subroutine add_call(v, j, e, associations)
+    type(statement_view_t), intent(in) :: v     !! the statement
+    integer, intent(in) :: j                    !! the last name
+    type(entity_t), intent(inout) :: e          !! the entity it is in
+    type(association_t), intent(in) :: associations(:)  !! the names in scope
+    character(len=:), allocatable :: chain
+    integer :: k, depth, a, first
+    logical :: start
+
+    if (is_intrinsic(v%low(v%lo(j):v%hi(j)))) return
+    if (.not. allocated(e%calls)) allocate (e%calls(0))
+    do k = 1, size(e%calls)
+        if (ends_with(e%calls(k)%s, v%low(v%lo(j):v%hi(j)))) then
+            if (e%calls(k)%s == v%low(v%lo(j):v%hi(j))) return
+            a = len(e%calls(k)%s) - (v%hi(j) - v%lo(j) + 1)
+            if (e%calls(k)%s(a:a) == '%') return
+        end if
+    end do
+
+    first = chain_start(v, j)
+    chain = ''
+    start = .true.
+    depth = v%depth(first)
+    do k = first, j
+        if (v%depth(k) /= depth .or. v%kind_of(k) /= TK_NAME) cycle
+        if (start) then
+            start = .false.
+            chain = v%low(v%lo(k):v%hi(k))
+            do a = size(associations), 1, -1
+                if (associations(a)%name == chain) then
+                    chain = associations(a)%chain
+                    exit
+                end if
+            end do
+        else
+            chain = chain//'%'//v%low(v%lo(k):v%hi(k))
+        end if
+    end do
+    call push(e%calls, chain)
+end subroutine add_call
+
+!> Add the names of an `associate` statement to `associations`.
+subroutine read_associations(v, associations, level)
+    type(statement_view_t), intent(in) :: v     !! the statement
+    type(association_t), allocatable, intent(inout) :: associations(:)  !! the names in scope
+    integer, intent(inout) :: level             !! how many `associate` constructs are open
+    character(len=:), allocatable :: chain
+    integer :: j, k, depth, stop_at, head
+
+    level = level + 1
+    do j = v%first, v%n - 1
+        if (.not. v%is(j + 1, '=>')) cycle
+        if (v%kind_of(j) /= TK_NAME) cycle
+        depth = v%depth(j)
+        stop_at = j + 2
+        do while (stop_at < v%n)
+            if (v%depth(stop_at + 1) < depth .or. (v%depth(stop_at + 1) == depth .and. v%is(stop_at + 1, ','))) exit
+            stop_at = stop_at + 1
+        end do
+        chain = ''
+        do k = j + 2, stop_at
+            if (v%depth(k) /= depth) cycle
+            if (v%kind_of(k) == TK_NAME) then
+                if (len(chain) > 0) chain = chain//'%'
+                chain = chain//v%low(v%lo(k):v%hi(k))
+            else if (.not. v%is(k, '%') .and. .not. v%is(k, '(') .and. .not. v%is(k, ')')) then
+                chain = ''
+                exit
+            end if
+        end do
+        if (len(chain) == 0) cycle
+        ! what it stands for may itself be an associated name
+        head = index(chain//'%', '%') - 1
+        do k = size(associations), 1, -1
+            if (associations(k)%name == chain(:head)) then
+                chain = associations(k)%chain//chain(head + 1:)
+                exit
+            end if
+        end do
+        associations = [associations, association_t(v%low(v%lo(j):v%hi(j)), chain, level)]
+    end do
+end subroutine read_associations
 
 !> The code of statement `item`: its tokens as written, without comments and continuation marks.
 !> Continuation lines are joined as FORD joins them.

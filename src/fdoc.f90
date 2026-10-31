@@ -3,11 +3,13 @@ module fdoc
 use iso_fortran_env, only: error_unit, output_unit
 use ffmt_fs, only: parent_directory
 use fdoc_util, only: string_t
-use fdoc_cli, only: args_t, parse_args, apply_args, usage, VERSION, ACTION_HELP, ACTION_VERSION, ACTION_DUMP
+use fdoc_cli, only: args_t, parse_args, apply_args, usage, VERSION, ACTION_HELP, ACTION_VERSION, ACTION_DUMP, &
+                    ACTION_DUMP_LINKS
 use fdoc_settings, only: settings_t, check_settings, finish_settings, dump_settings
 use fdoc_project_file, only: load_project, apply_toml_string
 use fdoc_project, only: project_t, load_project_sources, correlate, prune
 use fdoc_output, only: write_modules
+use fdoc_links, only: link_project, dump_links
 implicit none
 private
 
@@ -64,8 +66,13 @@ integer function run(args) result(status)
         status = 1
         return
     end if
-    call correlate(p)
+    call correlate(p, s)
+    call link_project(p)
     call prune(p, s)
+    if (parsed%action == ACTION_DUMP_LINKS) then
+        call write_text(dump_links(p))
+        return
+    end if
     if (s%externalize) call write_modules(p, s, stat, errmsg)
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg
@@ -74,5 +81,11 @@ integer function run(args) result(status)
     end if
     write (error_unit, '(a)') 'fdoc: only modules.json is generated so far; the HTML site is not implemented yet'
 end function run
+
+!> Write `text` to standard output.
+subroutine write_text(text)
+    character(len=*), intent(in) :: text    !! the text
+    write (output_unit, '(a)', advance='no') text
+end subroutine write_text
 
 end module fdoc

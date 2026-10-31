@@ -44,11 +44,19 @@ type, public :: attribute_t
     character(len=:), allocatable :: value      !! the attribute
 end type attribute_t
 
+type, public :: rename_t
+    !! A name in the `only` list of a `use` statement.
+    character(len=:), allocatable :: used   !! the name in the used module, in lowercase
+    character(len=:), allocatable :: local  !! the name in the using scope, in lowercase
+end type rename_t
+
 type, public :: use_t
     !! A `use` statement.
     character(len=:), allocatable :: module     !! the module, in lowercase
     character(len=:), allocatable :: spec       !! what follows the module name
-    integer :: target = 0                       !! the module's entity, if it is in the project
+    integer :: target = 0                       !! the module's entity, if it is known
+    logical :: only = .false.                   !! has an `only` list
+    type(rename_t), allocatable :: renames(:)   !! the `only` list
 end type use_t
 
 type, public :: meta_t
@@ -73,6 +81,7 @@ type, public :: entity_t
     logical :: visible = .true.                 !! false once pruned
     type(string_t), allocatable :: display(:)   !! the permissions shown inside this entity
     logical :: internals = .false.              !! the `proc_internals` setting that applies here
+    character(len=:), allocatable :: external_url  !! where it is documented, if in another project
 
     ! containers
     type(use_t), allocatable :: uses(:)         !! its `use` statements
@@ -85,6 +94,9 @@ type, public :: entity_t
     ! submodules
     character(len=:), allocatable :: ancestor       !! the ancestor module, in lowercase
     character(len=:), allocatable :: parent_submodule  !! the parent submodule, in lowercase
+    integer :: ancestor_id = 0                  !! the ancestor module, once found
+    integer :: parent_submodule_id = 0          !! the parent submodule, once found
+    integer, allocatable :: descendants(:)      !! the submodules directly below this entity
 
     ! procedures
     type(string_t), allocatable :: args(:)      !! dummy argument names as written
@@ -94,11 +106,16 @@ type, public :: entity_t
     character(len=:), allocatable :: bind_c     !! the text of `bind(...)`, if any
     logical :: is_module = .false.              !! has the `module` prefix
     integer :: iface = IFACE_NONE               !! one of the `IFACE_*` constants
+    type(string_t), allocatable :: calls(:)     !! `%`-separated names of what it calls, in lowercase
+    integer, allocatable :: call_ids(:)         !! the procedures called, once found
+    type(string_t), allocatable :: unknown_calls(:) !! the names of calls that were not found
+    integer :: implements = 0                   !! the interface of a separate module procedure, once found
 
     ! interfaces
     logical :: abstract = .false.               !! an `abstract interface` block
     logical :: generic = .false.                !! a generic interface or binding
     type(string_t), allocatable :: modprocs(:)  !! procedures listed by `module procedure`
+    integer, allocatable :: modproc_ids(:)      !! those procedures, once found
 
     ! types
     character(len=:), allocatable :: extends    !! the parent type's name as written, if any
@@ -106,12 +123,15 @@ type, public :: entity_t
     logical :: sequence = .false.               !! has a `sequence` statement
     integer :: extends_id = 0                   !! the parent type, once found
     integer, allocatable :: inherited(:)        !! the components and bindings it inherits
+    integer :: constructor = 0                  !! the procedure or interface named like it, once found
     integer :: inherit_state = 0                !! 0 not done, 1 in progress, 2 done
 
     ! bound procedures
     logical :: deferred = .false.               !! has the `deferred` attribute
     type(string_t), allocatable :: bindings(:)  !! what it is bound to
     character(len=:), allocatable :: proto_text !! the interface in `procedure(...)`, if any
+    integer :: proto_id = 0                     !! the interface or type it refers to, once found
+    integer, allocatable :: binding_ids(:)      !! what each of `bindings` is, once found
 
     ! variables
     integer :: var_role = VAR_PLAIN             !! one of the `VAR_*` constants
