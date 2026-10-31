@@ -1,10 +1,61 @@
 module fdoc
-  implicit none
-  private
+!! The `fdoc` program: documentation for modern Fortran, from FORD project files.
+use iso_fortran_env, only: error_unit, output_unit
+use ffmt_fs, only: parent_directory
+use fdoc_util, only: string_t
+use fdoc_cli, only: args_t, parse_args, apply_args, usage, VERSION, ACTION_HELP, ACTION_VERSION, ACTION_DUMP
+use fdoc_settings, only: settings_t, check_settings, finish_settings, dump_settings
+use fdoc_project_file, only: load_project, apply_toml_string
+implicit none
+private
 
-  public :: say_hello
+public :: run
+
 contains
-  subroutine say_hello
-    print *, "Hello, fdoc!"
-  end subroutine say_hello
+
+!> Run with command line `args`, returning the exit status.
+integer function run(args) result(status)
+    type(string_t), intent(in) :: args(:)   !! the arguments, in order
+    type(args_t) :: parsed
+    type(settings_t) :: s
+    character(len=:), allocatable :: errmsg, body, directory
+    integer :: stat
+
+    status = 0
+    call parse_args(args, parsed, stat, errmsg)
+    if (stat /= 0) then
+        write (error_unit, '(a)') 'fdoc: '//errmsg
+        write (error_unit, '(a)') 'Try "fdoc --help".'
+        status = 2
+        return
+    end if
+    if (parsed%action == ACTION_HELP) then
+        write (output_unit, '(a)', advance='no') usage()
+        return
+    end if
+    if (parsed%action == ACTION_VERSION) then
+        write (output_unit, '(a)') 'fdoc version '//VERSION
+        return
+    end if
+
+    directory = parent_directory(parsed%project_file)
+    call load_project(parsed%project_file, directory, s, body, stat, errmsg)
+    if (stat == 0) call check_settings(s, stat, errmsg)
+    if (stat == 0 .and. allocated(parsed%config)) call apply_toml_string(parsed%config, s, stat, errmsg)
+    if (stat == 0) call apply_args(parsed, s, stat, errmsg)
+    if (stat == 0) call finish_settings(s, directory, stat, errmsg)
+    if (stat /= 0) then
+        write (error_unit, '(a)') 'fdoc: '//errmsg
+        status = 1
+        return
+    end if
+
+    if (parsed%action == ACTION_DUMP) then
+        write (output_unit, '(a)', advance='no') dump_settings(s)
+        return
+    end if
+    write (error_unit, '(a)') 'fdoc: documentation generation is not implemented yet'
+    status = 1
+end function run
+
 end module fdoc

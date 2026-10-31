@@ -5,6 +5,13 @@ name = "fdoc"
 platforms = ["osx-arm64", "linux-64", "linux-aarch64", "osx-64", "win-64"]
 version = "0.0.1"
 
+[tasks]
+build = { cmd = "fpm build --profile release", description = "Build fdoc" }
+test = { cmd = "fpm test", description = "Run the unit tests" }
+doc = { cmd = "fpm run fdoc --profile release --", description = "Run fdoc: pixi run doc ford.md" }
+check-docs = { cmd = "python tools/check_docs.py", description = "Check that every routine and argument is documented" }
+compare = { cmd = "python tools/compare.py", description = "Compare fdoc with FORD: pixi run compare settings PROJECT_FILE..." }
+
 [dependencies]
 gfortran = "15.*"
 fpm = ">=0.13.0,<0.14"

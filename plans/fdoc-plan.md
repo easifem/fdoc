@@ -15,11 +15,10 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
 | Where FORD's time goes (bspline, profiled run) | Roughly half is ~450 `dot` subprocess calls; the rest was not broken down |
 | fformat lexer + statements + structure, as a dependency, unmodified | ~950k lines/s; 3.2M lines in 8,969 files in 3.4 s (serial, release) |
 | Same parse on json-fortran | 18 ms |
-| Parallel read + parse, all state local to a called procedure | Results match serial, file by file (8,969 files, 3 passes each at 4/8/10 threads) |
-| Same, repeated at 6 and 8 threads | Intermittent segfault: 0 of 10 runs with default stacks, 3 of 10 with `OMP_STACKSIZE=64M` |
-| OpenMP `private()` on a deferred-length string | **Wrong**: 76 bad lengths in 3M iterations at 8 threads, with no file I/O |
-| Parallel parse with reads serialized | Correct at 1/4/8/10 threads, even with `private()` on strings |
-| Parse scaling | 2.9 s at 1 thread, 1.6 s at 2, 1.1 s at 4, ~1.5 s at 8+ (machine has 4 performance cores) |
+| Parallel parse with fformat 1.0.1 | **Not thread-safe**: heap corruption and wrong results, even with serial reads |
+| Parallel read + parse with fformat 1.0.2 | Correct: 40 runs of 8,969 files at 1–10 threads, plus debug and guard-page allocator runs |
+| gfortran 15.3 deferred-length function results under threads | **Compiler defect**: wrong lengths in valid code (`example/slen_race.f90`) |
+| Parse scaling (before the cause was known, so indicative only) | 2.9 s at 1 thread, 1.6 s at 2, 1.1 s at 4, ~1.5 s at 8+ (machine has 4 performance cores) |
 | Parallel writes (4,000 files) | Correct at 1–8 threads; speedup stops at 3–4 |
 
 ### Conclusions
@@ -27,27 +26,29 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
 - Parsing will not be the bottleneck, and fformat is good enough to build on.
 - `dot` is the largest single cost and is external, so graph runs have a floor that fdoc only
   partly controls. See M7.
-- OpenMP is viable, but the two failures have to be handled separately:
-  - The wrong counts came from the spike's `private(text)`, a gfortran problem with
-    deferred-length strings. It is avoided by keeping per-iteration state in a called procedure.
-  - The segfault is not explained. It was caught once in libgfortran (`read` →
-    `data_transfer_init` → `check_for_recursive`), with fformat having no shared state on that
-    path. A separate threaded test also produced a truncated deferred-length path string
-    (`1924.t` for `1924.txt`), so another string problem may be involved.
-- The env's `libgomp` is a symlink to LLVM's `libomp`, so GCC-compiled OpenMP runs on LLVM's
-  runtime here. Whether that matters is untested.
+- OpenMP works, except for one gfortran 15.3 defect that explains every failure seen. The caller of
+  a function returning `character(len=:), allocatable` keeps the result's length in static storage
+  (`slen.N` in `__bss`), which threads share. The code is valid and the result is wrong lengths,
+  wild copies and heap corruption.
+  - No option helps: `-frecursive`, `-fstack-arrays`, `-fautomatic`, `-fmax-stack-var-size` and the
+    `recursive` attribute all fail. An `intent(out)` deferred-length argument is clean.
+  - fformat's parser calls such functions (`word`, `view_word`, `opened`, ...), caught exactly in
+    `classify_statement` with the guard-page allocator. Earlier crashes in `read` and `malloc` were
+    this corruption surfacing elsewhere; file I/O itself was never shown to be at fault.
+  - `nm` on an object file lists the `slen.` symbols, so affected code can be found mechanically.
 
 ## 2. Decisions
 
 1. **Use fformat as an fpm dependency, not a copy, and improve it upstream.** It links unchanged.
-   Move it from `[dev-dependencies]` to `[dependencies]`, pinned to tag `1.0.1`, and bump the tag as
+   Move it from `[dev-dependencies]` to `[dependencies]`, pinned to tag `1.0.2`, and bump the tag as
    changes land. Both projects have the same owner, so general Fortran parsing belongs in fformat
    and documentation logic belongs in fdoc. Likely upstream changes:
    - Fixed-form lexing (M8), rather than a text conversion pass in fdoc, if it keeps
      formatter behavior unchanged.
    - Declaration parsing (attributes, kinds, argument lists) if fformat's own rules can use it too.
    - Lower allocation in `statement_view_t` and the token paths if profiling at M2 shows contention.
-   - A `read_file` fix if the stress test shows it is needed.
+   - Done in 1.0.2: deferred-length functions removed from the parse path, with the same public
+     interfaces (`to_s`, `token_text`, `token_lower`, `construct_label` and `word`).
    - Any Windows fix to `ffmt_fs`.
 2. **Reimplement from behavior; never translate FORD's code.** FORD is GPLv3 and fdoc is MIT, so
    no FORD code, templates or CSS may be copied or ported. Work from its docs and observed
@@ -59,9 +60,12 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
    faster and simpler, but it means `html_template_dir` is not supported (see section 7).
 5. **Keep Graphviz in v1**, batched and parallel. Replacing it is optional later work.
 6. **Concurrency model:** OpenMP via fpm's `openmp` metapackage, defaulting to 4 threads;
-   `parallel:` overrides. Loop bodies call a procedure that owns its state, and `private()` is never
-   used on deferred-length strings. File I/O starts serial, which costs little. Enable parallel
-   I/O only once the M0 stress test passes.
+   `parallel:` overrides.
+   - Parsing is parallel, on fformat 1.0.2 or later.
+   - Parallel stages (markdown, rendering) are fdoc's own code. They never call a function returning
+     a deferred-length string; they use `intent(out)` arguments or caller-supplied buffers.
+   - File I/O moves into the parallel loops only if measurement shows a gain.
+   - `test/stress_parallel.f90` checks parallel parsing as part of `fpm test`.
 7. **Handles, not pointers.** All entities live in one array and refer to each other by integer
    index, with name lookup through hash tables. Each file parses into a private result; a serial
    merge step builds the global model.
@@ -71,12 +75,12 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
 ```
 ford.md / fpm.toml [extra.ford] + CLI
   → settings
-  → discover files → read (serial for now) → preprocess → fixed→free
+  → discover files → read (serial) → preprocess → fixed→free
   → parse (parallel): tokens, statements, structure, doc comments, entities
   → merge → correlate (use/rename, extends, generics, bound procs, submodules, calls)
   → markdown (parallel): doc text → HTML, resolving [[links]] and |aliases|
   → render pages (parallel, to buffers) + graphs + search index + modules.json
-  → write (serial for now), copy media/assets
+  → write (serial), copy media/assets
 ```
 
 ## 4. Source layout
@@ -88,7 +92,7 @@ ford.md / fpm.toml [extra.ford] + CLI
 | Fortran | `fdoc_model`, `fdoc_docs` (doc comments, meta, doxygen), `fdoc_parser`, `fdoc_decl` | 3,000 |
 | Semantics | `fdoc_correlate`, `fdoc_calls`, `fdoc_intrinsics`, `fdoc_external` | 1,500 |
 | Markdown | `fdoc_md_block`, `fdoc_md_inline`, `fdoc_md_ext` | 2,000 |
-| Output | `fdoc_html`, `fdoc_pages`, `fdoc_lists`, `fdoc_pagetree`, `fdoc_highlight`, `fdoc_search`, `fdoc_json` | 3,000 |
+| Output | `fdoc_html`, `fdoc_pages`, `fdoc_lists`, `fdoc_pagetree`, `fdoc_highlight`, `fdoc_search` | 3,000 |
 | Graphs | `fdoc_graph`, `fdoc_dot` | 800 |
 
 Sizes are estimates, about 12k lines of Fortran in total.
@@ -100,8 +104,9 @@ Still missing: declarations (`fformat` classifies statements but doesn't parse a
 or argument lists), doc comment attachment, and fixed-form input. Doc comments go in fdoc; the
 other two are candidates for fformat (decision 1), which would shrink `fdoc_decl` and `fdoc_fixed`.
 
-toml-f (for `[extra.ford]`) and fregex already come in through fformat. Declare toml-f directly
-at fformat's pinned tag (`v0.5.2`).
+No hand-written JSON or TOML: json-fortran handles all JSON (`modules.json`, search index,
+settings dump) and toml-f handles TOML, both as direct fpm dependencies. fregex comes in through
+fformat, and toml-f stays at fformat's pinned tag (`v0.5.2`).
 
 ## 5. Milestones
 
@@ -113,11 +118,13 @@ Each milestone ends with something that can be run and compared against FORD.
   `auto-executables = false` with no `[[executable]]` entry means nothing uses the library, so
   fpm prunes every object. Adding the `[[executable]]` and having `app/main.f90` use the library
   fixed this in a scratch copy.
-- Move fformat to `[dependencies]`; add toml-f and `openmp = "*"`.
+- Move fformat to `[dependencies]`; add json-fortran, toml-f and `openmp = "*"`.
 - Add pixi tasks: `build`, `test`, `doc`, `compare`, `bench`.
 - Replace `say_hello` with a `test-drive` suite.
-- Add an OpenMP stress test: repeated parallel read + parse over the corpus, compared with serial
-  results, built with `pixi run fpm`. Use it to settle the intermittent segfault in section 1.
+- Add `test/stress_parallel.f90` (parallel parse compared with serial) and `example/slen_race.f90`
+  (the compiler defect, run with `fpm run --example`).
+- Add `tools/check_docs.py` (`pixi run check-docs`): every routine has an `!>` block and every
+  argument an inline `!!`.
 - Add `tools/compare.py` (run in the pixi env, dev-only) and a corpus: bspline-fortran,
   json-fortran, roots-fortran, fformat, plus the other `ford.md` projects under `~/git`.
 
@@ -254,8 +261,7 @@ Targets, not results. `pixi run bench` tracks them from M2 on.
 | Markdown dialect edge cases are the largest source of visible bugs | Differential tests against Python-Markdown on the real corpus from day one |
 | Corpus is mostly one author's style | Add third-party projects (stdlib, fpm, toml-f) at M2 |
 | Fypp sources: fformat tokenizes them but they aren't valid Fortran | Match FORD: require `preprocessor:`; test with stdlib |
-| Allocator contention limits scaling (worse past 4 threads) | Reduce per-token allocations in fdoc's own code; reuse buffers; profile at M2 |
+| Scaling past 4 threads is unknown; earlier numbers were affected by the defect | Reuse buffers in parallel stages; measure at M4 |
 | gfortran-only behavior | Only gfortran is supported through the pixi env for v1 |
 | Windows: `win-64` is in `pixi.toml`, but `ffmt_fs` binds POSIX `opendir`/`readdir`, untested there | Test at M0. If it fails, drop `win-64` until v1 or fix upstream |
-| Intermittent segfault in parallel runs is unexplained | M0 stress test settles it; file I/O stays serial until it passes |
-| Deferred-length strings under threads (`private()` confirmed, truncated path seen) | Keep state in called procedures; the stress test compares every result with serial |
+| gfortran deferred-length defect reaches a parallel stage | A `check-threads` tool (with M4, the first parallel code) fails if parallel modules contain `slen.` symbols; retest `slen_race` on compiler upgrades |
