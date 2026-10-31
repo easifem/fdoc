@@ -6,6 +6,8 @@ use fdoc_util, only: string_t
 use fdoc_cli, only: args_t, parse_args, apply_args, usage, VERSION, ACTION_HELP, ACTION_VERSION, ACTION_DUMP
 use fdoc_settings, only: settings_t, check_settings, finish_settings, dump_settings
 use fdoc_project_file, only: load_project, apply_toml_string
+use fdoc_project, only: project_t, load_project_sources, correlate, prune
+use fdoc_output, only: write_modules
 implicit none
 private
 
@@ -18,6 +20,7 @@ integer function run(args) result(status)
     type(string_t), intent(in) :: args(:)   !! the arguments, in order
     type(args_t) :: parsed
     type(settings_t) :: s
+    type(project_t) :: p
     character(len=:), allocatable :: errmsg, body, directory
     integer :: stat
 
@@ -54,8 +57,22 @@ integer function run(args) result(status)
         write (output_unit, '(a)', advance='no') dump_settings(s)
         return
     end if
-    write (error_unit, '(a)') 'fdoc: documentation generation is not implemented yet'
-    status = 1
+
+    call load_project_sources(s, p, stat, errmsg)
+    if (stat /= 0) then
+        write (error_unit, '(a)') 'fdoc: '//errmsg
+        status = 1
+        return
+    end if
+    call correlate(p)
+    call prune(p, s)
+    if (s%externalize) call write_modules(p, s, stat, errmsg)
+    if (stat /= 0) then
+        write (error_unit, '(a)') 'fdoc: '//errmsg
+        status = 1
+        return
+    end if
+    write (error_unit, '(a)') 'fdoc: only modules.json is generated so far; the HTML site is not implemented yet'
 end function run
 
 end module fdoc

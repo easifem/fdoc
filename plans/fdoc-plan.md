@@ -1,5 +1,7 @@
 # fdoc: a FORD replacement in modern Fortran
 
+Scope: **free-form Fortran only for now.** Fixed-form input is deferred (see M8).
+
 Goal: `fdoc ford.md` takes the same project file, flags and doc comments as FORD and produces a
 clean, modern HTML site, fast. It runs from a single Fortran binary with no Python at runtime.
 
@@ -43,8 +45,7 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
    Move it from `[dev-dependencies]` to `[dependencies]`, pinned to tag `1.0.2`, and bump the tag as
    changes land. Both projects have the same owner, so general Fortran parsing belongs in fformat
    and documentation logic belongs in fdoc. Likely upstream changes:
-   - Fixed-form lexing (M8), rather than a text conversion pass in fdoc, if it keeps
-     formatter behavior unchanged.
+   - Fixed-form lexing, when fixed-form support is taken up (deferred, see M8).
    - Declaration parsing (attributes, kinds, argument lists) if fformat's own rules can use it too.
    - Lower allocation in `statement_view_t` and the token paths if profiling at M2 shows contention.
    - Done in 1.0.2: deferred-length functions removed from the parse path, with the same public
@@ -75,7 +76,7 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
 ```
 ford.md / fpm.toml [extra.ford] + CLI
   → settings
-  → discover files → read (serial) → preprocess → fixed→free
+  → discover files → read (serial) → preprocess
   → parse (parallel): tokens, statements, structure, doc comments, entities
   → merge → correlate (use/rename, extends, generics, bound procs, submodules, calls)
   → markdown (parallel): doc text → HTML, resolving [[links]] and |aliases|
@@ -88,7 +89,7 @@ ford.md / fpm.toml [extra.ford] + CLI
 | Area | Modules (`src/`) | Rough size |
 |---|---|---|
 | Config | `fdoc_cli`, `fdoc_settings`, `fdoc_project_file` | 1,000 |
-| Input | `fdoc_discover`, `fdoc_preproc`, `fdoc_fixed` | 500 |
+| Input | `fdoc_input` (discovery, preprocessing, `include`) | 500 |
 | Fortran | `fdoc_model`, `fdoc_docs` (doc comments, meta, doxygen), `fdoc_parser`, `fdoc_decl` | 3,000 |
 | Semantics | `fdoc_correlate`, `fdoc_calls`, `fdoc_intrinsics`, `fdoc_external` | 1,500 |
 | Markdown | `fdoc_md_block`, `fdoc_md_inline`, `fdoc_md_ext` | 2,000 |
@@ -101,8 +102,8 @@ Reused from fformat: `ffmt_lexer`, `ffmt_tokens`, `ffmt_statements`, `ffmt_const
 `ffmt_structure`, `ffmt_source`, `ffmt_io` (serial only), `ffmt_fs`, `ffmt_walk`, `ffmt_strings`.
 
 Still missing: declarations (`fformat` classifies statements but doesn't parse attributes, types
-or argument lists), doc comment attachment, and fixed-form input. Doc comments go in fdoc; the
-other two are candidates for fformat (decision 1), which would shrink `fdoc_decl` and `fdoc_fixed`.
+or argument lists) and doc comment attachment. Doc comments go in fdoc; declarations are a candidate
+for fformat (decision 1), which would shrink `fdoc_decl`. Fixed-form input is deferred.
 
 No hand-written JSON or TOML: json-fortran handles all JSON (`modules.json`, search index,
 settings dump) and toml-f handles TOML, both as direct fpm dependencies. fregex comes in through
@@ -152,7 +153,8 @@ Each milestone ends with something that can be run and compared against FORD.
 - `display`, `hide_undoc`, `proc_internals`, `sort` modes, `lower`.
 - `source: true` slices original bytes from token ranges, with no re-reading.
 - Done when: fdoc writes `modules.json`, and it matches FORD's output across the corpus. This
-  gives an exact parser oracle before any HTML exists.
+  gives an exact parser oracle before any HTML exists. **Reached:** `pixi run compare modules`
+  agrees on the 34 local projects. Page names with `~N` suffixes are not compared yet (M5).
 
 ### M3. Correlation
 
@@ -216,14 +218,16 @@ nesting, for example).
 - Small own pan/zoom script; theme-aware SVG colors.
 - Warn clearly if `graph: true` and `dot` is missing, and carry on without graphs.
 
-### M8. Preprocessing and fixed form
+### M8. Preprocessing
 
 - `preprocessor:` runs the configured command, in parallel subprocesses to temp files.
 - FORD's default is `pcpp`, which is Python: when that default is in effect, use `gfortran -E -cpp`
   and say so. Respect `macro`, `include`, `fpp_extensions`.
-- `fixed_extensions`, `fixed_length_limit`: fformat is free-form only today, so add fixed-form
-  lexing there if practical, otherwise a fixed→free pass in `fdoc_fixed`. Either way, doc comments
-  and line numbers must survive.
+
+**Fixed form is deferred.** Files with `fixed_extensions` are skipped with a warning naming them;
+`fixed_extensions` and `fixed_length_limit` are still read from the project file. If taken up later,
+add fixed-form lexing to fformat if practical, otherwise a fixed→free pass in `fdoc_fixed`; either
+way doc comments and line numbers must survive.
 
 ### M9. Parity and handover
 
@@ -249,6 +253,7 @@ Targets, not results. `pixi run bench` tracks them from M2 on.
 
 ## 7. Known differences from FORD
 
+- Fixed-form sources are not documented yet: they are skipped with a warning.
 - `html_template_dir` is not supported, because there are no Jinja templates.
 - `md_extensions` beyond the built-ins can't load Python extensions; they warn and are skipped.
 - `preprocessor: pcpp` runs through gfortran.

@@ -9,6 +9,7 @@ private
 public :: string_t, lowercase
 public :: strip, starts_with, ends_with, split_lines, split_words, split_on, join, push, contains_string
 public :: parse_bool, parse_int, expand_vars, strftime, resolve_path, sort_strings
+public :: top_split, top_index, closing_paren, remove_blanks, starts_word, word_at, push_int
 
 character(len=*), parameter :: WHITESPACE = ' '//achar(9)//achar(10)//achar(11)//achar(12)//achar(13)
 
@@ -35,19 +36,165 @@ end interface
 
 contains
 
+!> Length of `s` without leading and trailing whitespace.
+pure integer function stripped_length(s)
+    character(len=*), intent(in) :: s   !! the string
+    integer :: a
+    a = verify(s, WHITESPACE)
+    stripped_length = 0
+    if (a > 0) stripped_length = verify(s, WHITESPACE, back=.true.) - a + 1
+end function stripped_length
+
 !> `s` without leading and trailing whitespace.
+!>
+!> This and the other functions here that are used while parsing give their results an explicit
+!> length: gfortran keeps the length of a deferred-length result in static storage, so it is not
+!> safe in parallel regions (see `example/slen_race.f90`).
 pure function strip(s) result(t)
     character(len=*), intent(in) :: s   !! the string
-    character(len=:), allocatable :: t
-    integer :: a, b
+    character(len=stripped_length(s)) :: t
+    integer :: a
     a = verify(s, WHITESPACE)
-    if (a == 0) then
-        t = ''
-        return
-    end if
-    b = verify(s, WHITESPACE, back=.true.)
-    t = s(a:b)
+    if (a > 0) t = s(a:)
 end function strip
+
+!> Number of blanks and tabs in `s`.
+pure integer function count_blanks(s)
+    character(len=*), intent(in) :: s   !! the string
+    integer :: k
+    count_blanks = 0
+    do k = 1, len(s)
+        if (s(k:k) == ' ' .or. s(k:k) == achar(9)) count_blanks = count_blanks + 1
+    end do
+end function count_blanks
+
+!> `s` without blanks and tabs.
+pure function remove_blanks(s) result(t)
+    character(len=*), intent(in) :: s   !! the string
+    character(len=len(s) - count_blanks(s)) :: t
+    integer :: k, n
+    n = 0
+    do k = 1, len(s)
+        if (s(k:k) == ' ' .or. s(k:k) == achar(9)) cycle
+        n = n + 1
+        t(n:n) = s(k:k)
+    end do
+end function remove_blanks
+
+!> Append `value` to `list`, allocating it if needed.
+pure subroutine push_int(list, value)
+    integer, allocatable, intent(inout) :: list(:)  !! the list
+    integer, intent(in) :: value                    !! the value to append
+    integer, allocatable :: grown(:)
+    integer :: n
+
+    n = 0
+    if (allocated(list)) n = size(list)
+    allocate (grown(n + 1))
+    if (n > 0) grown(1:n) = list
+    grown(n + 1) = value
+    call move_alloc(grown, list)
+end subroutine push_int
+
+!> Position of the `)` matching the `(` at `open` in `s`, skipping strings, or 0.
+pure integer function closing_paren(s, open)
+    character(len=*), intent(in) :: s   !! the text
+    integer, intent(in) :: open         !! position of the `(`
+    integer :: k, depth
+    character :: quote
+
+    closing_paren = 0
+    depth = 0
+    quote = ' '
+    do k = open, len(s)
+        if (quote /= ' ') then
+            if (s(k:k) == quote) quote = ' '
+            cycle
+        end if
+        select case (s(k:k))
+        case ('"', "'")
+            quote = s(k:k)
+        case ('(', '[')
+            depth = depth + 1
+        case (')', ']')
+            depth = depth - 1
+            if (depth == 0) then
+                closing_paren = k
+                return
+            end if
+        end select
+    end do
+end function closing_paren
+
+!> Position of the first `pattern` in `s` outside brackets and strings, or 0.
+pure integer function top_index(s, pattern)
+    character(len=*), intent(in) :: s       !! the text
+    character(len=*), intent(in) :: pattern !! the text to find
+    integer :: k, depth
+    character :: quote
+
+    top_index = 0
+    depth = 0
+    quote = ' '
+    do k = 1, len(s) - len(pattern) + 1
+        if (quote /= ' ') then
+            if (s(k:k) == quote) quote = ' '
+            cycle
+        end if
+        if (depth == 0 .and. s(k:k + len(pattern) - 1) == pattern) then
+            top_index = k
+            return
+        end if
+        select case (s(k:k))
+        case ('"', "'")
+            quote = s(k:k)
+        case ('(', '[')
+            depth = depth + 1
+        case (')', ']')
+            depth = depth - 1
+        end select
+    end do
+end function top_index
+
+!> The parts of `s` between the characters `sep` outside brackets and strings, each stripped.
+function top_split(s, sep) result(parts)
+    character(len=*), intent(in) :: s   !! the text
+    character, intent(in) :: sep        !! the separator
+    type(string_t), allocatable :: parts(:)
+    integer :: start, at
+
+    allocate (parts(0))
+    start = 1
+    do
+        at = top_index(s(start:), sep)
+        if (at == 0) exit
+        call push(parts, strip(s(start:start + at - 2)))
+        start = start + at
+    end do
+    call push(parts, strip(s(start:)))
+end function top_split
+
+!> True if `s` starts with word `word`: followed by anything but a letter, digit or `_`.
+pure logical function starts_word(s, word)
+    character(len=*), intent(in) :: s       !! the text
+    character(len=*), intent(in) :: word    !! the word
+    starts_word = word_at(s, 1, word)
+end function starts_word
+
+!> True if whole word `word` is at position `at` of `s`.
+pure logical function word_at(s, at, word)
+    character(len=*), intent(in) :: s       !! the text
+    integer, intent(in) :: at               !! the position
+    character(len=*), intent(in) :: word    !! the word
+    character(len=*), parameter :: NAME_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'
+
+    word_at = .false.
+    if (at + len(word) - 1 > len(s)) return
+    if (s(at:at + len(word) - 1) /= word) return
+    word_at = .true.
+    if (at + len(word) <= len(s)) word_at = index(NAME_CHARS, s(at + len(word):at + len(word))) == 0
+    if (word_at .and. at > 1) word_at = index(NAME_CHARS, s(at - 1:at - 1)) == 0
+end function word_at
 
 !> True if `s` begins with `prefix`.
 pure logical function starts_with(s, prefix)
@@ -172,17 +319,33 @@ function split_on(text, sep) result(parts)
     end do
 end function split_on
 
-!> The strings of `list` with `sep` between them.
-function join(list, sep) result(text)
+!> Length of the result of [[join]].
+pure integer function joined_length(list, sep)
     type(string_t), intent(in) :: list(:)   !! the strings
     character(len=*), intent(in) :: sep     !! the separator
-    character(len=:), allocatable :: text
     integer :: k
 
-    text = ''
+    joined_length = len(sep)*max(0, size(list) - 1)
     do k = 1, size(list)
-        if (k > 1) text = text//sep
-        text = text//list(k)%s
+        joined_length = joined_length + len(list(k)%s)
+    end do
+end function joined_length
+
+!> The strings of `list` with `sep` between them.
+pure function join(list, sep) result(text)
+    type(string_t), intent(in) :: list(:)   !! the strings
+    character(len=*), intent(in) :: sep     !! the separator
+    character(len=joined_length(list, sep)) :: text
+    integer :: k, n
+
+    n = 0
+    do k = 1, size(list)
+        if (k > 1) then
+            text(n + 1:n + len(sep)) = sep
+            n = n + len(sep)
+        end if
+        text(n + 1:n + len(list(k)%s)) = list(k)%s
+        n = n + len(list(k)%s)
     end do
 end function join
 
