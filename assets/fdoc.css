@@ -165,3 +165,9 @@ td.binds { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word
 .listing th { white-space: nowrap; }
 .listing td.link { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; }
 .item h3 .attr, h1 .attr { margin-left: .5rem; vertical-align: middle; }
+.ico { display: inline-block; width: 1.05rem; height: 1.05rem; margin-right: .4rem; border-radius: 3px; color: #fff;
+  background: #646d7e; font: 700 .68rem/1.05rem var(--sans); text-align: center; vertical-align: .05rem; }
+.ico-m { background: #3657c9; } .ico-p { background: #a61e69; } .ico-s { background: #1d7a55; }
+.ico-f { background: #0b7285; } .ico-i { background: #6a4fb3; } .ico-a { background: #8a4fb3; }
+.ico-t { background: #a15c00; } .ico-b { background: #7a6a2d; } .ico-v { background: #646d7e; }
+.ico-n { background: #5c6f2d; } .ico-d { background: #8a5a44; } .ico-_ { background: #5c6f2d; }

@@ -613,11 +613,53 @@ subroutine side_group(site, title, ids, b)
             call html_escape(url, b, .true.)
         end if
         call add(b, '">')
+        call side_icon(site%p%list%box(ids(k))%e, b)
         call html_escape(site%p%list%box(ids(k))%e%name, b, .false.)
         call add(b, '</a></li>')
     end do
     call add(b, '</ul>'//achar(10))
 end subroutine side_group
+
+!> Write the icon of entity `e` in a sidebar: a letter, with what it stands for as its tooltip.
+subroutine side_icon(e, b)
+    type(entity_t), intent(in) :: e     !! the entity
+    type(buffer_t), intent(inout) :: b  !! the HTML
+    character(len=:), allocatable :: letter, word
+
+    select case (e%kind)
+    case (E_FILE); letter = '&equiv;'; word = 'source file'
+    case (E_MODULE); letter = 'M'; word = 'module'
+    case (E_SUBMODULE); letter = 'M'; word = 'submodule'
+    case (E_PROGRAM); letter = 'P'; word = 'program'
+    case (E_BLOCKDATA); letter = 'D'; word = 'block data'
+    case (E_SUBROUTINE); letter = 'S'; word = 'subroutine'
+    case (E_FUNCTION); letter = 'F'; word = 'function'
+    case (E_MODPROC); letter = 'S'; word = 'module procedure'
+    case (E_INTERFACE); letter = 'I'; word = 'interface'
+    case (E_TYPE); letter = 'T'; word = 'derived type'
+    case (E_BOUNDPROC); letter = 'B'; word = 'type-bound procedure'
+    case (E_VARIABLE); letter = 'V'; word = 'variable'
+    case (E_NAMELIST); letter = 'N'; word = 'namelist'
+    case default; return
+    end select
+    if (e%iface == IFACE_EXPLICIT) then
+        letter = 'I'
+        word = 'interface'
+    else if (e%iface == IFACE_ABSTRACT) then
+        letter = 'A'
+        word = 'abstract interface'
+    end if
+    call add(b, '<span class="ico ico-'//letter_class(letter)//'" title="'//word//'" aria-hidden="true">'//letter//'</span>')
+end subroutine side_icon
+
+!> The lowercase class for icon `letter`.
+pure function letter_class(letter) result(class)
+    character(len=*), intent(in) :: letter  !! the letter, or an entity for a symbol
+    character :: class
+
+    class = '_'
+    if (len(letter) == 1) class = achar(iachar(letter) + 32)
+end function letter_class
 
 !> Write the title of an entity's page, with what is known about it.
 subroutine entity_title(site, id, word, b)
@@ -1518,6 +1560,7 @@ subroutine site_side(site, here, prefix, full, b)
                 call add(b, '<li><a href="'//prefix)
                 call html_escape(url, b, .true.)
                 call add(b, '">')
+                call side_icon(site%p%list%box(id)%e, b)
                 call html_escape(display_name(site%p%list%box(id)%e), b, .false.)
                 call add(b, '</a></li>')
             end associate

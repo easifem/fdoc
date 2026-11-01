@@ -142,7 +142,13 @@ subroutine asset_fdoc_css(b)
         //'}'//NL//'td.binds { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; max-width: 2' &
         //'0rem; }'//NL//'.listing th { white-space: nowrap; }'//NL//'.listing td.link { font-family: var(--mono); font-s' &
         //'ize: .84em; overflow-wrap: break-word; }'//NL//'.item h3 .attr, h1 .attr { margin-left: .5rem; vertical' &
-        //'-align: middle; }'//NL//'')
+        //'-align: middle; }'//NL//'.ico { display: inline-block; width: 1.05rem; height: 1.05rem; margin-right: .' &
+        //'4rem; border-radius: 3px; color: #fff;'//NL//'  background: #646d7e; font: 700 .68rem/1.05rem var(--san' &
+        //'s); text-align: center; vertical-align: .05rem; }'//NL//'.ico-m { background: #3657c9; } .ico-p { backg' &
+        //'round: #a61e69; } .ico-s { background: #1d7a55; }'//NL//'.ico-f { background: #0b7285; } .ico-i { backg' &
+        //'round: #6a4fb3; } .ico-a { background: #8a4fb3; }'//NL//'.ico-t { background: #a15c00; } .ico-b { backg' &
+        //'round: #7a6a2d; } .ico-v { background: #646d7e; }'//NL//'.ico-n { background: #5c6f2d; } .ico-d { backg' &
+        //'round: #8a5a44; } .ico-_ { background: #5c6f2d; }'//NL//'')
 end subroutine asset_fdoc_css
 
 !> The contents of `assets/fdoc.js`.
