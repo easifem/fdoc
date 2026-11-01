@@ -13,7 +13,7 @@ fdoc is in early development and has only been tested on macOS with gfortran. Se
 
 ## Getting started
 
-You need [gfortran](https://gcc.gnu.org/fortran/) 16 and [fpm](https://fpm.fortran-lang.org). [Graphviz](https://graphviz.org) is needed only for graphs.
+You need [gfortran](https://gcc.gnu.org/fortran/) 16 and [fpm](https://fpm.fortran-lang.org).
 
 The easiest way to get all of these is [pixi](https://pixi.sh), which installs them for this repository:
 
@@ -119,27 +119,27 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.3 s | 93× | 3.1 s | <0.1 s | 78× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.3 s | 91× | 6.5 s | 0.1 s | 72× |
-| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.3 s | 222× | 8.2 s | 0.2 s | 55× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 50× | 6.8 s | 0.2 s | 38× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 123× | 9.0 s | 0.1 s | 75× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.4 s | 131× | 25.3 s | 0.9 s | 29× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.1 s | 226× | 3.1 s | <0.1 s | 78× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.1 s | 163× | 6.5 s | 0.1 s | 72× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.2 s | 271× | 8.2 s | 0.2 s | 55× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 0.6 s | 115× | 6.8 s | 0.2 s | 38× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.2 s | 274× | 9.0 s | 0.1 s | 75× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 0.9 s | 338× | 25.3 s | 0.9 s | 29× |
 
-Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 3.8 s against FORD's 690 s (181×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (50×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
+Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 2.2 s against FORD's 690 s (317×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (50×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.1 s against 20.7 s (159×).
 
 Peak memory and the size of the site, with graphs:
 
 | Project | FORD memory | fdoc memory | FORD site | fdoc site |
 |---|---:|---:|---:|---:|
-| fformat | 134 MB | 32 MB | 17 MB | 5 MB |
-| bspline-fortran | 175 MB | 32 MB | 17 MB | 5 MB |
+| fformat | 134 MB | 22 MB | 17 MB | 5 MB |
+| bspline-fortran | 175 MB | 33 MB | 17 MB | 5 MB |
 | rklib | 318 MB | 67 MB | 25 MB | 10 MB |
-| json-fortran | 310 MB | 83 MB | 83 MB | 30 MB |
-| Fortran-Astrodynamics-Toolkit | 197 MB | 45 MB | 31 MB | 9 MB |
-| qt-fortran | 425 MB | 116 MB | 100 MB | 33 MB |
+| json-fortran | 310 MB | 72 MB | 83 MB | 30 MB |
+| Fortran-Astrodynamics-Toolkit | 197 MB | 49 MB | 31 MB | 9 MB |
+| qt-fortran | 425 MB | 115 MB | 100 MB | 33 MB |
 
-Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 16.2, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
+Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 16.2, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. FORD's memory doesn't include `dot`.
 
 The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Graphs take most of fdoc's time, and on projects with deep call chains, such as json-fortran, they limit the speedup.
 
@@ -156,7 +156,7 @@ pixi run bench path/to/ford.md ...
 3. **Parsing** runs in parallel. [fformat](https://github.com/jacobwilliams/fformat) splits each file into tokens and statements and works out its structure, and fdoc reads the declarations and doc comments from those.
 4. **Linking** connects names across the project: `use` statements, inheritance, interfaces, bindings and calls.
 5. **Markdown** is converted to HTML in parallel, by a converter that follows the dialect of Python-Markdown.
-6. **Graphs** are built and given to `dot` in batches, so that it doesn't start once for each graph. Several batches run at once, and the SVG is then rewritten to take half the space.
+6. **Graphs** are laid out in parallel by [fdot](https://github.com/jacobwilliams/fdot), a Fortran port of the layout of Graphviz `dot`, with no files and no other process.
 7. **Pages** are rendered in parallel and written out.
 
 ## Development
@@ -196,13 +196,13 @@ File statements in parallel code go inside `!$omp critical (file_io)`. In libgfo
 
 | Package | Used for |
 |---|---|
+| [fdot](https://github.com/jacobwilliams/fdot) | Laying out and drawing graphs |
 | [fformat](https://github.com/jacobwilliams/fformat) | Tokens, statements and structure of Fortran source |
 | [JSON-Fortran](https://github.com/jacobwilliams/json-fortran) | `modules.json` and the search index |
 | [TOML Fortran](https://github.com/toml-f/toml-f) | Settings in `fpm.toml` |
 | [fregex](https://github.com/jacobwilliams/fregex) | Exclude patterns, through fformat |
 | OpenMP | Parallel parsing and rendering |
 | [test-drive](https://github.com/fortran-lang/test-drive) | Tests |
-| [Graphviz](https://graphviz.org) | Laying out graphs, if `graph` is on |
 
 fpm fetches the Fortran packages. FORD and Python are needed only for `compare` and `bench`, not to run fdoc.
 
@@ -210,4 +210,4 @@ Generated sites load [MathJax](https://www.mathjax.org) from a CDN, only on page
 
 ## License
 
-fdoc is released under the [MIT License](https://github.com/jacobwilliams/fdoc/blob/master/LICENSE). It is an independent program, not derived from FORD's code, and owes its project file format and doc comment conventions to FORD. [src/fdoc_fypp.f90](https://github.com/jacobwilliams/fdoc/blob/master/src/fdoc_fypp.f90) is a partial port of [Fypp](https://github.com/aradi/fypp) by Bálint Aradi, and keeps its BSD 2-clause license notice.
+fdoc is released under the [MIT License](https://github.com/jacobwilliams/fdoc/blob/master/LICENSE). It is an independent program, not derived from FORD's code, and owes its project file format and doc comment conventions to FORD. [src/fdoc_fypp.f90](https://github.com/jacobwilliams/fdoc/blob/master/src/fdoc_fypp.f90) is a partial port of [Fypp](https://github.com/aradi/fypp) by Bálint Aradi, and keeps its BSD 2-clause license notice. Binaries of fdoc include [fdot](https://github.com/jacobwilliams/fdot), a port of part of [Graphviz](https://graphviz.org), which is under the Eclipse Public License 2.0.

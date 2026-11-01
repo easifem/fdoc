@@ -10,7 +10,7 @@ stands in the way is listed in M9.
 **Requirement: portable, standard Fortran.** fdoc must be able to build with other compilers, such as
 ifx, though only gfortran is tested for now. Compiler extensions are not used, which `pixi run
 check-standard` checks with `-std=f2018`. C library routines are used only for what has no Fortran
-equivalent: sleeping (`usleep`), detecting a terminal (`isatty`), and in fformat listing directories
+equivalent: detecting a terminal (`isatty`), and in fformat listing directories
 (`opendir`, `readdir`, `closedir`) and the current directory (`getcwd`).
 
 **Requirement: no races, and no shared file names.** Threads and processes running at once must not
@@ -79,7 +79,8 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
    links and external projects keep working. Markup and styling are all new.
 4. **No template engine.** Pages are rendered by Fortran procedures into string buffers. That is
    faster and simpler, but it means `html_template_dir` is not supported (see section 7).
-5. **Keep Graphviz in v1**, batched and parallel. Replacing it is optional later work.
+5. **Graphs are laid out by fdot**, a Fortran library in its own repository, in threads. Graphviz is
+   no longer used, except by FORD in `compare` and `bench`.
 6. **Concurrency model:** OpenMP via fpm's `openmp` metapackage, defaulting to 4 threads;
    `parallel:` overrides.
    - Parsing is parallel, on fformat 1.0.2 or later.
@@ -114,7 +115,7 @@ ford.md / fpm.toml [extra.ford] + CLI
 | Semantics | `fdoc_correlate`, `fdoc_calls`, `fdoc_intrinsics`, `fdoc_external` | 1,500 |
 | Markdown | `fdoc_md_block`, `fdoc_md_inline`, `fdoc_md_ext` | 2,000 |
 | Output | `fdoc_html`, `fdoc_pages`, `fdoc_lists`, `fdoc_pagetree`, `fdoc_highlight`, `fdoc_search` | 3,000 |
-| Graphs | `fdoc_graph`, `fdoc_dot` | 800 |
+| Graphs | `fdoc_graphs` | 800 |
 
 Sizes are estimates, about 12k lines of Fortran in total.
 
@@ -255,12 +256,13 @@ nesting, for example).
   rather than one process per graph. The saving needs measuring; if `dot` layout itself dominates,
   batching helps less than hoped.
 - Small own pan/zoom script; theme-aware SVG colors.
-- Warn clearly if `graph: true` and `dot` is missing, and carry on without graphs.
 - **Reached.** Module, type, file and interface graphs have the same nodes as FORD's on bspline-fortran
-  and json-fortran, and call graphs nearly so; `dot` takes batches of 25 files, with no process per
-  graph. Unlike FORD, project-wide graphs of more than 400 nodes are left out, and graphs too large
-  for `graph_maxnodes` are not turned into tables. Graphs are embedded, and rewritten after `dot` to
-  take half the space with the same drawing: json-fortran's site is 29 MB, against 80 MB with FORD.
+  and json-fortran, and call graphs nearly so. Unlike FORD, project-wide graphs of more than 400 nodes are left out, and graphs too large
+  for `graph_maxnodes` are not turned into tables. Graphs are embedded in a compact form:
+  json-fortran's site is 29 MB, against 80 MB with FORD.
+- **Replaced `dot` with fdot 0.1.0.** Each thread describes, lays out and draws its graphs in memory.
+  There is no batching, temporary file, polling or `usleep`, and no warning for a missing program.
+  `graph_dir` keeps a `.gv` and an `.svg` file for each graph, which fdot's corpus tools read.
 
 ### M8. Preprocessing
 
@@ -296,12 +298,10 @@ What is not supported stops with an error naming it, and the file is read as it 
   and `pixi run test-projects` on each, in CI, where Windows does not count yet. Known work:
   - File system commands are in `fdoc_shell`, which picks the command for the platform at run time, as
     standard Fortran cannot create or copy directories. `curl` for external projects is still needed.
-  - POSIX functions: `usleep` and `isatty` in fdoc, and `opendir`, `readdir`, `closedir` and `getcwd`
+  - POSIX functions: `isatty` in fdoc, and `opendir`, `readdir`, `closedir` and `getcwd`
     in fformat, need checking on Windows.
   - Paths: backslashes, drive letters and case-insensitive names, in settings, `exclude` and URLs.
   - Text: CRLF line endings, and UTF-8 paths.
-  - `execute_command_line(wait=.false.)` is expected to run in turn on Windows. Check that, and the
-    speed of graph layout there.
   - A preprocessor default that works where `gfortran -E` does, and `curl` for external projects,
     which may need to be optional.
 
@@ -313,7 +313,7 @@ M5. M6–M8 are independent.
 | Case | FORD | fdoc target |
 |---|---|---|
 | json-fortran, no graphs | not measured yet | under 0.5 s |
-| json-fortran, full | 65.4 s | under 5 s, depends on `dot` |
+| json-fortran, full | 65.4 s | under 5 s |
 | Peak memory, json-fortran | 356 MB | under 100 MB |
 
 Targets, not results. `pixi run bench` tracks them from M2 on.

@@ -3,7 +3,7 @@ module test_shell
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use ffmt_fs, only: is_directory
 use fdoc_util, only: read_whole_file, write_whole_file
-use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path, program_exists, &
+use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path, &
                       run_command, temporary_directory
 implicit none
 private
@@ -82,15 +82,11 @@ subroutine test_copies(error)
     call remove_directory(COPIED)
 end subroutine test_copies
 
-!> Checks: programs are found. The tests run under fpm, which runs the compiler.
+!> Checks: a program that does not exist is a failure, and does not stop this one.
 subroutine test_programs(error)
     type(error_type), allocatable, intent(out) :: error     !! the failure, if any
     integer :: stat
 
-    call check(error, program_exists('gfortran'), 'the compiler is there')
-    if (allocated(error)) return
-    call check(error, .not. program_exists('no-such-program-fdoc'), 'this is not')
-    if (allocated(error)) return
     call run_command('no-such-program-fdoc', stat)
     call check(error, stat /= 0, 'running it fails without stopping the program')
     if (allocated(error)) return

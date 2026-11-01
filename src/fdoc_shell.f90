@@ -7,7 +7,7 @@ implicit none
 private
 
 public :: quoted, quoted_path, make_directory, remove_directory, copy_file, copy_path
-public :: program_exists, temporary_directory, run_command
+public :: temporary_directory, run_command
 
 contains
 
@@ -113,19 +113,6 @@ subroutine copy_path(from, to, stat)
         call run_command('cp -R '//quoted_path(from)//' '//quoted_path(to), stat)
     end if
 end subroutine copy_path
-
-!> True if program `name` can be run.
-logical function program_exists(name)
-    character(len=*), intent(in) :: name    !! the program
-    integer :: stat
-
-    if (is_windows()) then
-        call run_command('where '//name//' >nul 2>nul', stat)
-    else
-        call run_command('command -v '//name//' > /dev/null 2>&1', stat)
-    end if
-    program_exists = stat == 0
-end function program_exists
 
 !> The directory for temporary files.
 subroutine temporary_directory(path)

@@ -1,8 +1,7 @@
 module fdoc_graphs
 !! Dependency graphs: which modules use which, what procedures call, how types extend each other and
-!! how files depend on each other. Graphs are written in Graphviz's language, laid out by [[fdoc_dot]]
-!! and made smaller by [[fdoc_svg]].
-use iso_fortran_env, only: int64
+!! how files depend on each other. Graphs are laid out and drawn by fdot, in parallel, each by one
+!! thread.
 use fdoc_util
 use fdoc_buffer
 use fdoc_model
@@ -10,9 +9,8 @@ use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t
 use fdoc_urls, only: entity_url
 use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
-use fdoc_shell, only: make_directory, remove_directory, program_exists
-use fdoc_svg, only: slim_svg, FONT_SIZE, EDGE_COLOUR
-use fdoc_dot, only: run_batches, file_name
+use fdoc_shell, only: make_directory
+use fdot, only: layout_t => graph_t, RANK_LR, RANK_RL, FDOT_OK
 implicit none
 private
 
@@ -24,7 +22,6 @@ integer, parameter, public :: REL_INHERITS = 3   !! types extended
 integer, parameter, public :: REL_FILES = 4      !! files depended on
 integer, parameter :: NUM_RELATIONS = 4
 
-character(len=*), parameter :: LABEL_FONT_SIZE = '11'   !! points, of the labels of edges
 character(len=*), parameter :: EDGE_COLOURS(*) = [character(len=7) :: '#3657c9', '#1d7a55', '#a15c00', '#b3261e', &
                                                   '#6a4fb3', '#0b7285', '#a61e69', '#5c6f2d']
 
@@ -58,13 +55,29 @@ type :: graph_set_t
     type(graph_t), allocatable :: graphs(:)     !! the graphs
 end type graph_set_t
 
-type :: dot_file_t
-    !! A graph waiting for layout.
-    character(len=:), allocatable :: text       !! its description for `dot`
+type :: graph_job_t
+    !! A graph waiting to be drawn.
+    integer, allocatable :: roots(:)            !! where to start
     character(len=:), allocatable :: title      !! its heading
+    integer :: relation = 0                     !! the relation
+    logical :: forward = .true.                 !! true to follow edges forward
+    integer :: max_depth = 0                    !! how many hops to follow
+    integer :: max_nodes = 0                    !! how many nodes to allow
+    integer :: direction = RANK_LR              !! which way ranks go
     integer :: owner = 0                        !! the entity whose page shows it, or 0
     integer :: list_page = 0                    !! the list page that shows it, or 0
-end type dot_file_t
+end type graph_job_t
+
+type :: walk_t
+    !! The working space of one thread, sized once, for finding what a graph holds.
+    integer, allocatable :: marked(:)           !! when each entity was last reached
+    integer, allocatable :: places(:)           !! the number of each entity in the graph
+    integer, allocatable :: queue(:)            !! the entities reached
+    integer, allocatable :: levels(:)           !! the hops to each of `queue`
+    integer, allocatable :: from(:)             !! where each edge starts
+    integer, allocatable :: to(:)               !! where each edge ends
+    integer :: stamp = 0                        !! a number new for each graph
+end type walk_t
 
 contains
 
@@ -270,37 +283,32 @@ logical function graphs_wanted(p, s, id, depth, nodes)
     end associate
 end function graphs_wanted
 
-!> The description of the graph reached from `roots`, or `''` if it has only one node.
-subroutine describe_graph(p, s, relation, forward, roots, marked, stamp, max_depth, max_nodes, direction, text)
-    type(project_t), intent(in) :: p                    !! the project
-    type(settings_t), intent(in) :: s                   !! the settings
-    type(adjacency_t), intent(in) :: relation           !! the relation
-    logical, intent(in) :: forward                      !! true to follow edges forward
-    integer, intent(in) :: roots(:)                     !! where to start
-    integer, intent(inout) :: marked(:)                 !! when each entity was last reached
-    integer, intent(inout) :: stamp                     !! a number new for each graph
-    integer, intent(in) :: max_depth                    !! how many hops to follow
-    integer, intent(in) :: max_nodes                    !! how many nodes to allow
-    character(len=*), intent(in) :: direction           !! `rankdir`
-    character(len=:), allocatable, intent(out) :: text  !! the description
-    integer, allocatable :: queue(:), levels(:), next(:)
-    type(buffer_t) :: nodes, edges
-    integer :: head, k, id, other, j, tail, edge_count
+!> Put the graph of `job` in `g`. `found` is false if it would have only one node or no edges. Nodes go
+!> in as they are reached, and edges after them.
+subroutine describe_graph(p, s, relation, job, w, g, found)
+    type(project_t), intent(in) :: p        !! the project
+    type(settings_t), intent(in) :: s       !! the settings
+    type(adjacency_t), intent(in) :: relation   !! the relation
+    type(graph_job_t), intent(in) :: job    !! the graph
+    type(walk_t), intent(inout) :: w        !! the working space
+    type(layout_t), intent(out) :: g        !! the description
+    logical, intent(out) :: found           !! whether there is a graph
+    integer, allocatable :: next(:)
+    integer :: head, k, id, other, j, reached, edges
 
-    stamp = stamp + 1
-    allocate (queue(0), levels(0))
-    do k = 1, size(roots)
-        marked(roots(k)) = stamp
-        call push_int(queue, roots(k))
-        call push_int(levels, 0)
+    w%stamp = w%stamp + 1
+    reached = size(job%roots)
+    do k = 1, reached
+        w%marked(job%roots(k)) = w%stamp
+        w%queue(k) = job%roots(k)
+        w%levels(k) = 0
     end do
     head = 1
-    edge_count = 0
-    do while (head <= size(queue))
-        id = queue(head)
-        call add_node(p, id, any(roots == id) .and. size(roots) == 1, nodes)
-        if (levels(head) < max_depth) then
-            if (forward) then
+    edges = 0
+    do while (head <= reached)
+        id = w%queue(head)
+        if (w%levels(head) < job%max_depth) then
+            if (job%forward) then
                 if (allocated(relation%out(id)%ids)) then
                     next = relation%out(id)%ids
                 else
@@ -316,48 +324,56 @@ subroutine describe_graph(p, s, relation, forward, roots, marked, stamp, max_dep
             do j = 1, size(next)
                 other = next(j)
                 if (p%list%box(other)%e%kind == E_NONE) cycle
-                if (marked(other) /= stamp) then
-                    if (size(queue) >= max_nodes) cycle
-                    marked(other) = stamp
-                    call push_int(queue, other)
-                    call push_int(levels, levels(head) + 1)
+                if (w%marked(other) /= w%stamp) then
+                    if (reached >= job%max_nodes) cycle
+                    w%marked(other) = w%stamp
+                    reached = reached + 1
+                    w%queue(reached) = other
+                    w%levels(reached) = w%levels(head) + 1
                 end if
-                edge_count = edge_count + 1
-                tail = merge(id, other, forward)
-                call add_edge(s, relation, tail, merge(other, id, forward), edges)
+                edges = edges + 1
+                if (edges > size(w%from)) call grow_edges(w)
+                w%from(edges) = merge(id, other, job%forward)
+                w%to(edges) = merge(other, id, job%forward)
             end do
             deallocate (next)
         end if
         head = head + 1
     end do
-    if (size(queue) <= 1 .or. edge_count == 0) then
-        text = ''
-        return
-    end if
-    block
-        type(buffer_t) :: b
-        character(len=:), allocatable :: body
-
-        call add(b, 'digraph g {'//achar(10)//'rankdir='//direction//'; bgcolor="transparent"; concentrate=true;'//achar(10))
-        call add(b, 'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize='//FONT_SIZE//', fontcolor=white, ')
-        call add(b, 'color=transparent, height=0.3, margin="0.1,0.04"];'//achar(10))
-        call add(b, 'edge [color="'//EDGE_COLOUR//'", arrowsize=0.7];'//achar(10))
-        call take(nodes, body)
-        call add(b, body)
-        call take(edges, body)
-        call add(b, body)
-        call add(b, '}'//achar(10))
-        call take(b, text)
-    end block
+    found = reached > 1 .and. edges > 0
+    if (.not. found) return
+    call g%initialize(direction=job%direction, concentrate=.true.)
+    do k = 1, reached
+        call add_node(p, w%queue(k), k == 1 .and. size(job%roots) == 1, g, w%places(w%queue(k)))
+    end do
+    do k = 1, edges
+        call add_edge(s, relation, w%from(k), w%to(k), w%places, g)
+    end do
 end subroutine describe_graph
 
+!> Make room for more edges.
+pure subroutine grow_edges(w)
+    type(walk_t), intent(inout) :: w    !! the working space
+    integer, allocatable :: grown(:)
+    integer :: n
+
+    n = size(w%from)
+    allocate (grown(2*n))
+    grown(1:n) = w%from
+    call move_alloc(grown, w%from)
+    allocate (grown(2*n))
+    grown(1:n) = w%to
+    call move_alloc(grown, w%to)
+end subroutine grow_edges
+
 !> Add node `id` to a description.
-subroutine add_node(p, id, root, b)
+subroutine add_node(p, id, root, g, place)
     type(project_t), intent(in) :: p    !! the project
     integer, intent(in) :: id           !! the entity
     logical, intent(in) :: root         !! true for the entity the graph is about
-    type(buffer_t), intent(inout) :: b  !! the description
-    character(len=:), allocatable :: url, colour, name
+    type(layout_t), intent(inout) :: g  !! the description
+    integer, intent(out) :: place       !! its number in `g`
+    character(len=:), allocatable :: url, colour, name, outline
     integer :: at
 
     associate (e => p%list%box(id)%e)
@@ -384,53 +400,36 @@ subroutine add_node(p, id, root, b)
         if (e%visible .or. allocated(e%external_url)) call entity_url(p%list, id, url)
         if (.not. e%visible .and. .not. allocated(e%external_url)) colour = '#8a93a5'
         if (allocated(e%external_url)) colour = '#646d7e'
-        call add(b, 'n'//trim(int_text(id))//' [label="')
-        call dot_escaped(name, b)
-        call add(b, '", fillcolor="'//colour//'"')
-        if (root) call add(b, ', penwidth=2, color="#f0a868"')
-        if (len(url) > 0) then
-            call add(b, ', URL="')
-            if (.not. allocated(e%external_url)) call add(b, '../')
-            call dot_escaped(url, b)
-            call add(b, '"')
-        end if
-        call add(b, '];'//achar(10))
+        if (len(url) > 0 .and. .not. allocated(e%external_url)) url = '../'//url
+        outline = ''
+        if (root) outline = '#f0a868'
+        call g%add_node(name, place, fill=colour, link=url, outline=outline)
     end associate
 end subroutine add_node
 
 !> Add an edge to a description.
-subroutine add_edge(s, relation, from, to, b)
+subroutine add_edge(s, relation, from, to, places, g)
     type(settings_t), intent(in) :: s           !! the settings
     type(adjacency_t), intent(in) :: relation   !! the relation
     integer, intent(in) :: from                 !! where it starts
     integer, intent(in) :: to                   !! where it ends
-    type(buffer_t), intent(inout) :: b          !! the description
+    integer, intent(in) :: places(:)            !! the number in `g` of each entity
+    type(layout_t), intent(inout) :: g          !! the description
+    character(len=:), allocatable :: label
     integer :: k
 
-    call add(b, 'n'//trim(int_text(from))//' -> n'//trim(int_text(to))//' [')
-    if (s%coloured_edges) call add(b, 'color="'//EDGE_COLOURS(mod(from, size(EDGE_COLOURS)) + 1)//'", ')
+    label = ''
     do k = 1, size(relation%out(from)%ids)
         if (relation%out(from)%ids(k) /= to) cycle
-        if (len(relation%labels(from)%text(k)%s) == 0) exit
-        call add(b, 'style=dashed, fontname="Helvetica", fontsize='//LABEL_FONT_SIZE//', fontcolor="#8a93a5", label="')
-        call dot_escaped(relation%labels(from)%text(k)%s, b)
-        call add(b, '"')
+        label = relation%labels(from)%text(k)%s
         exit
     end do
-    call add(b, '];'//achar(10))
+    if (s%coloured_edges) then
+        call g%add_edge(places(from), places(to), colour=EDGE_COLOURS(mod(from, size(EDGE_COLOURS)) + 1), label=label)
+    else
+        call g%add_edge(places(from), places(to), label=label)
+    end if
 end subroutine add_edge
-
-!> Append `text` for use inside a quoted string of `dot`.
-pure subroutine dot_escaped(text, b)
-    character(len=*), intent(in) :: text    !! the text
-    type(buffer_t), intent(inout) :: b      !! the description
-    integer :: k
-
-    do k = 1, len(text)
-        if (text(k:k) == '"' .or. text(k:k) == '\') call add(b, '\')
-        call add(b, text(k:k))
-    end do
-end subroutine dot_escaped
 
 !> Build the graphs of the project: those of `s%graph`, and of entities that ask for them.
 subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
@@ -442,13 +441,14 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg !! what is wrong
     type(adjacency_t) :: relations(NUM_RELATIONS)
-    type(dot_file_t), allocatable :: files(:)
-    integer, allocatable :: marked(:), roots(:)
+    type(graph_job_t), allocatable :: jobs(:)
+    type(string_t), allocatable :: drawings(:), descriptions(:)
+    logical, allocatable :: failed(:)
+    integer, allocatable :: roots(:)
     character(len=:), allocatable :: directory
     character(len=32) :: tag
-    logical :: any_wanted
-    logical, allocatable :: found(:)
-    integer :: k, n, stamp, depth, nodes, status, count_files
+    logical :: any_wanted, keep
+    integer :: k, m, n, depth, nodes, status, count_jobs
 
     stat = 0
     allocate (set%graphs(0))
@@ -458,39 +458,33 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
         if (any([(p%list%box(k)%e%meta(n)%key == 'graph', n=1, size(p%list%box(k)%e%meta))])) any_wanted = .true.
     end do
     if (.not. any_wanted) return
-    if (.not. program_exists('dot')) then
-        call warn('graphs need Graphviz, and dot was not found: leaving them out')
-        return
-    end if
 
     call progress_start('Finding dependencies', size(members))
     call build_relations(p, relations)
-    allocate (marked(p%list%n), files(0))
-    count_files = 0
-    marked = 0
-    stamp = 0
+    allocate (jobs(0))
+    count_jobs = 0
     do k = 1, size(members)
         call progress_tick()
         associate (id => members(k))
             if (.not. graphs_wanted(p, s, id, depth, nodes)) cycle
             select case (p%list%box(id)%e%kind)
             case (E_MODULE, E_SUBMODULE)
-                call one(id, REL_USES, .true., 'Uses', 'RL')
-                call one(id, REL_USES, .false., 'Used by', 'RL')
+                call one(id, REL_USES, .true., 'Uses', RANK_RL)
+                call one(id, REL_USES, .false., 'Used by', RANK_RL)
             case (E_TYPE)
-                call one(id, REL_INHERITS, .true., 'Inherits', 'RL')
-                call one(id, REL_INHERITS, .false., 'Inherited by', 'RL')
+                call one(id, REL_INHERITS, .true., 'Inherits', RANK_RL)
+                call one(id, REL_INHERITS, .false., 'Inherited by', RANK_RL)
             case (E_SUBROUTINE, E_FUNCTION, E_MODPROC, E_INTERFACE)
-                call one(id, REL_CALLS, .true., 'Calls', 'LR')
-                call one(id, REL_CALLS, .false., 'Called by', 'RL')
+                call one(id, REL_CALLS, .true., 'Calls', RANK_LR)
+                call one(id, REL_CALLS, .false., 'Called by', RANK_RL)
             case (E_PROGRAM)
-                call one(id, REL_CALLS, .true., 'Calls', 'LR')
-                call one(id, REL_USES, .true., 'Uses', 'RL')
+                call one(id, REL_CALLS, .true., 'Calls', RANK_LR)
+                call one(id, REL_USES, .true., 'Uses', RANK_RL)
             case (E_BLOCKDATA)
-                call one(id, REL_USES, .true., 'Uses', 'RL')
+                call one(id, REL_USES, .true., 'Uses', RANK_RL)
             case (E_FILE)
-                call one(id, REL_FILES, .true., 'Files this one depends on', 'RL')
-                call one(id, REL_FILES, .false., 'Files that depend on this one', 'RL')
+                call one(id, REL_FILES, .true., 'Files this one depends on', RANK_RL)
+                call one(id, REL_FILES, .false., 'Files that depend on this one', RANK_RL)
             end select
         end associate
     end do
@@ -502,33 +496,36 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     end if
     call progress_finish()
 
-    n = count_files
+    n = count_jobs
     if (n == 0) return
-    call unique_tag(tag)
-    ! a directory of this run's own, as the names of the files inside are the same in every run
-    directory = s%output_dir//'/.graphs-'//trim(tag)
-    if (allocated(s%graph_dir)) directory = s%graph_dir//'/'//trim(tag)
-    call make_directory(directory, status)
-    do k = 1, n
-        call write_whole_file(trim(file_name(directory, k, '')), files(k)%text, stat, errmsg)
-        if (stat /= 0) return
-    end do
+    keep = allocated(s%graph_dir)
+    allocate (drawings(n), descriptions(n), failed(n))
+    call draw_graphs(p, s, relations, jobs(1:n), keep, drawings, descriptions, failed, max(1, s%parallel))
 
-    call run_batches(directory, trim(tag), n, max(1, s%parallel))
-
+    if (keep) then
+        call unique_tag(tag)
+        ! a directory of this run's own, as the names of the files inside are the same in every run
+        directory = s%graph_dir//'/'//trim(tag)
+        call make_directory(directory, status)
+    end if
     deallocate (set%graphs)
-    allocate (set%graphs(n))
-    allocate (found(n))
+    allocate (set%graphs(count([(allocated(drawings(k)%s), k=1, n)])))
+    m = 0
     do k = 1, n
-        set%graphs(k)%title = files(k)%title
-        set%graphs(k)%owner = files(k)%owner
-        set%graphs(k)%list_page = files(k)%list_page
+        if (failed(k)) call warn('no layout for a graph of '//jobs(k)%title)
+        if (.not. allocated(drawings(k)%s)) cycle
+        m = m + 1
+        if (keep) then
+            call write_whole_file(directory//'/g'//trim(int_text(m))//'.gv', descriptions(k)%s, stat, errmsg)
+            if (stat /= 0) return
+            call write_whole_file(directory//'/g'//trim(int_text(m))//'.gv.svg', drawings(k)%s, stat, errmsg)
+            if (stat /= 0) return
+        end if
+        call move_alloc(drawings(k)%s, set%graphs(m)%svg)
+        call move_alloc(jobs(k)%title, set%graphs(m)%title)
+        set%graphs(m)%owner = jobs(k)%owner
+        set%graphs(m)%list_page = jobs(k)%list_page
     end do
-    call load_graphs(directory, set%graphs, found, max(1, s%parallel))
-    do k = 1, n
-        if (.not. found(k)) call warn('no layout for a graph of '//files(k)%title)
-    end do
-    if (.not. allocated(s%graph_dir)) call remove_directory(directory)
 
 contains
 
@@ -538,12 +535,9 @@ contains
         integer, intent(in) :: relation             !! the relation
         logical, intent(in) :: forward              !! true to follow edges forward
         character(len=*), intent(in) :: title       !! the heading
-        character(len=*), intent(in) :: direction   !! `rankdir`
-        character(len=:), allocatable :: description
+        integer, intent(in) :: direction            !! which way ranks go
 
-        call describe_graph(p, s, relations(relation), forward, [id], marked, stamp, depth, nodes, direction, description)
-        if (len(description) == 0) return
-        call add_file(description, title, id, 0)
+        call add_job([id], relation, forward, depth, nodes, direction, title, id, 0)
     end subroutine one
 
     !> Add the graph of a whole relation to a list page.
@@ -552,7 +546,6 @@ contains
         integer, intent(in) :: relation         !! the relation
         integer, intent(in) :: page             !! the list page
         character(len=*), intent(in) :: title   !! the heading
-        character(len=:), allocatable :: description
         integer :: j
 
         allocate (roots(0))
@@ -564,74 +557,121 @@ contains
             call warn(title//' left out: it would have more than '//trim(int_text(s%graph_project_maxnodes))// &
                       ' nodes (see graph_project_maxnodes)')
         else if (size(roots) > 1) then
-            call describe_graph(p, s, relations(relation), .true., roots, marked, stamp, 1, huge(1), 'RL', description)
-            if (len(description) > 0) call add_file(description, title, 0, page)
+            call add_job(roots, relation, .true., 1, huge(1), RANK_RL, title, 0, page)
         end if
         deallocate (roots)
     end subroutine project_graph
 
     !> Add a graph to the list.
-    subroutine add_file(description, title, owner, page)
-        character(len=*), intent(in) :: description !! its description
-        character(len=*), intent(in) :: title       !! its heading
-        integer, intent(in) :: owner                !! the entity whose page shows it, or 0
-        integer, intent(in) :: page                 !! the list page that shows it, or 0
-
-        type(dot_file_t), allocatable :: grown(:)
+    subroutine add_job(start, relation, forward, max_depth, max_nodes, direction, title, owner, page)
+        integer, intent(in) :: start(:)         !! where to start
+        integer, intent(in) :: relation         !! the relation
+        logical, intent(in) :: forward          !! true to follow edges forward
+        integer, intent(in) :: max_depth        !! how many hops to follow
+        integer, intent(in) :: max_nodes        !! how many nodes to allow
+        integer, intent(in) :: direction        !! which way ranks go
+        character(len=*), intent(in) :: title   !! its heading
+        integer, intent(in) :: owner            !! the entity whose page shows it, or 0
+        integer, intent(in) :: page             !! the list page that shows it, or 0
+        type(graph_job_t), allocatable :: grown(:)
         integer :: j
 
-        if (count_files == size(files)) then
-            allocate (grown(max(64, 2*count_files)))
-            do j = 1, count_files
-                call move_alloc(files(j)%text, grown(j)%text)
-                call move_alloc(files(j)%title, grown(j)%title)
-                grown(j)%owner = files(j)%owner
-                grown(j)%list_page = files(j)%list_page
+        if (count_jobs == size(jobs)) then
+            allocate (grown(max(64, 2*count_jobs)))
+            do j = 1, count_jobs
+                call move_alloc(jobs(j)%roots, grown(j)%roots)
+                call move_alloc(jobs(j)%title, grown(j)%title)
+                grown(j)%relation = jobs(j)%relation
+                grown(j)%forward = jobs(j)%forward
+                grown(j)%max_depth = jobs(j)%max_depth
+                grown(j)%max_nodes = jobs(j)%max_nodes
+                grown(j)%direction = jobs(j)%direction
+                grown(j)%owner = jobs(j)%owner
+                grown(j)%list_page = jobs(j)%list_page
             end do
-            call move_alloc(grown, files)
+            call move_alloc(grown, jobs)
         end if
-        count_files = count_files + 1
-        files(count_files)%text = description
-        files(count_files)%title = title
-        files(count_files)%owner = owner
-        files(count_files)%list_page = page
-    end subroutine add_file
+        count_jobs = count_jobs + 1
+        associate (job => jobs(count_jobs))
+            job%roots = start
+            job%title = title
+            job%relation = relation
+            job%forward = forward
+            job%max_depth = max_depth
+            job%max_nodes = max_nodes
+            job%direction = direction
+            job%owner = owner
+            job%list_page = page
+        end associate
+    end subroutine add_job
 
 end subroutine build_graphs
 
-!> Read the drawings of `graphs` from `directory`, and slim them. The directory is an argument with a
-!> plain length because a deferred-length string does not work when it is shared with a parallel region.
-subroutine load_graphs(directory, graphs, found, threads)
-    character(len=*), intent(in) :: directory       !! the directory
-    type(graph_t), intent(inout) :: graphs(:)       !! the graphs
-    logical, intent(out) :: found(:)                !! whether each one has a drawing
-    integer, intent(in) :: threads                  !! how many threads to use
+!> Lay out and draw `jobs`. A graph that turns out to have nothing to show gets no drawing.
+subroutine draw_graphs(p, s, relations, jobs, keep, drawings, descriptions, failed, threads)
+    type(project_t), intent(in) :: p                    !! the project
+    type(settings_t), intent(in) :: s                   !! the settings
+    type(adjacency_t), intent(in) :: relations(NUM_RELATIONS)   !! the relations
+    type(graph_job_t), intent(in) :: jobs(:)            !! the graphs
+    logical, intent(in) :: keep                         !! whether to give the descriptions too
+    type(string_t), intent(inout) :: drawings(:)        !! the drawing of each graph
+    type(string_t), intent(inout) :: descriptions(:)    !! the description of each graph, with `keep`
+    logical, intent(out) :: failed(:)                   !! whether the layout of each graph failed
+    integer, intent(in) :: threads                      !! how many threads to use
+
+    failed = .false.
+    call progress_start('Laying out graphs', size(jobs))
+    !$omp parallel num_threads(threads) default(shared)
+    call draw_some(p, s, relations, jobs, keep, drawings, descriptions, failed)
+    !$omp end parallel
+    call progress_finish()
+end subroutine draw_graphs
+
+!> The share of [[draw_graphs]] of one thread, with working space of its own.
+subroutine draw_some(p, s, relations, jobs, keep, drawings, descriptions, failed)
+    type(project_t), intent(in) :: p                    !! the project
+    type(settings_t), intent(in) :: s                   !! the settings
+    type(adjacency_t), intent(in) :: relations(NUM_RELATIONS)   !! the relations
+    type(graph_job_t), intent(in) :: jobs(:)            !! the graphs
+    logical, intent(in) :: keep                         !! whether to give the descriptions too
+    type(string_t), intent(inout) :: drawings(:)        !! the drawing of each graph
+    type(string_t), intent(inout) :: descriptions(:)    !! the description of each graph, with `keep`
+    logical, intent(inout) :: failed(:)                 !! whether the layout of each graph failed
+    type(walk_t) :: w
     integer :: k
 
-    call progress_start('Slimming graphs', size(graphs))
-    !$omp parallel do schedule(dynamic) num_threads(threads) default(shared) private(k)
-    do k = 1, size(graphs)
-        call load_graph(trim(file_name(directory, k, '.svg')), graphs(k)%svg, found(k))
+    allocate (w%marked(p%list%n), source=0)
+    allocate (w%places(p%list%n), w%queue(p%list%n), w%levels(p%list%n), w%from(1024), w%to(1024))
+    !$omp do schedule(dynamic)
+    do k = 1, size(jobs)
+        call draw_graph(p, s, relations(jobs(k)%relation), jobs(k), keep, w, drawings(k), descriptions(k), failed(k))
         call progress_tick()
     end do
-    !$omp end parallel do
-    call progress_finish()
-end subroutine load_graphs
+    !$omp end do
+end subroutine draw_some
 
-!> Read and slim the drawing in file `path`.
-subroutine load_graph(path, svg, found)
-    character(len=*), intent(in) :: path                !! the file
-    character(len=:), allocatable, intent(out) :: svg   !! the slimmed drawing
-    logical, intent(out) :: found                       !! whether the file could be read
-    character(len=:), allocatable :: text, errmsg
-    integer :: at, status
+!> Lay out and draw one graph.
+subroutine draw_graph(p, s, relation, job, keep, w, drawing, description, failed)
+    type(project_t), intent(in) :: p            !! the project
+    type(settings_t), intent(in) :: s           !! the settings
+    type(adjacency_t), intent(in) :: relation   !! the relation
+    type(graph_job_t), intent(in) :: job        !! the graph
+    logical, intent(in) :: keep                 !! whether to give the description too
+    type(walk_t), intent(inout) :: w            !! the working space
+    type(string_t), intent(inout) :: drawing    !! the drawing
+    type(string_t), intent(inout) :: description    !! the description, with `keep`
+    logical, intent(out) :: failed              !! whether the layout failed
+    type(layout_t) :: g
+    logical :: found
+    integer :: status
 
-    svg = ''
-    call read_whole_file(path, text, status, errmsg)
-    found = status == 0
+    failed = .false.
+    call describe_graph(p, s, relation, job, w, g, found)
     if (.not. found) return
-    at = index(text, '<svg')
-    if (at > 0) call slim_svg(text(at:), svg)
-end subroutine load_graph
+    if (keep) call g%write_dot(description%s)
+    call g%layout(status)
+    failed = status /= FDOT_OK
+    if (.not. failed) call g%write_svg(drawing%s)
+end subroutine draw_graph
 
 end module fdoc_graphs
