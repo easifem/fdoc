@@ -76,6 +76,8 @@ type, public :: entity_t
     character(len=:), allocatable :: permission !! `public`, `private` or `protected`
     type(string_t), allocatable :: doc(:)       !! its documentation, without metadata
     type(meta_t), allocatable :: meta(:)        !! the metadata of its documentation
+    character(len=:), allocatable :: html       !! its documentation as HTML
+    character(len=:), allocatable :: summary    !! its summary as HTML
     type(string_t), allocatable :: attribs(:)   !! its attributes
     integer, allocatable :: children(:)         !! the entities directly inside this one, in order
     logical :: visible = .true.                 !! false once pruned

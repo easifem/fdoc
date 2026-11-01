@@ -4,6 +4,7 @@
     pixi run compare settings PROJECT_FILE...
     pixi run compare modules PROJECT_FILE...
     pixi run compare links PROJECT_FILE...
+    pixi run compare markdown PROJECT_FILE...
 """
 
 import argparse
@@ -12,6 +13,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
@@ -19,6 +21,8 @@ from pathlib import Path
 import ford
 import ford.fortran_project
 import ford.sourceform
+import ford.utils
+from ford._markdown import MetaMarkdown
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -302,6 +306,107 @@ def compare_links(project_files, limit: int) -> int:
     return 1 if failures else 0
 
 
+def doc_texts(project_file: Path) -> list:
+    """The Markdown of the documentation of ``project_file``, as FORD would convert it"""
+    text = project_file.read_text(encoding="utf-8")
+    docs, data = ford.load_settings(text, project_file.parent, str(project_file))
+    data = ford.convert_types_from_commandarguments(data, {})
+    data.normalise_paths(project_file.parent)
+    data.graph = False
+    project = ford.fortran_project.Project(data)
+    project.correlate()
+    texts = {docs}
+    for source in project.files:
+        for item in source._to_be_markdowned:
+            if item.doc_list:
+                texts.add(textwrap.dedent("\n".join(item.doc_list)))
+    for path in (data.page_dir.glob("**/*.md") if data.page_dir else []):
+        _, body = ford.utils.meta_preprocessor(path.read_text(encoding="utf-8"))
+        texts.add("\n".join(body))
+    return sorted(t for t in texts if t.strip())
+
+
+# FORD's HTML parser takes `x<y` for a tag that never ends, and drops the rest of the text.
+UNCLOSED_TAG = re.compile(r"<[a-zA-Z][^<>]*$", re.MULTILINE)
+
+
+def normalize_html(html: str) -> str:
+    """``html`` with differences that do not matter removed"""
+    html = re.sub(r"<span[^>]*>|</span>", "", html)
+    html = html.replace('<pre><code>', "<pre>").replace("</code></pre>", "</pre>")
+    html = re.sub(r'<pre><code class="language-[^"]*">', "<pre>", html)
+    html = re.sub(r"\s+", " ", html)
+    html = re.sub(r"\s*(<[/]?(?:p|li|ul|ol|div|h\d|table|thead|tbody|tr|td|th|dl|dt|dd|blockquote|hr|pre|script)\b)", r"\1", html)
+    html = re.sub(r"(<[/]?(?:p|li|ul|ol|div|h\d|table|thead|tbody|tr|dl|dt|dd|blockquote|hr)\b[^>]*>)\s*", r"\1", html)
+    html = html.replace("&#160;", " ").replace("&quot;", '"').replace("&#39;", "'")
+    return html.strip()
+
+
+def compare_markdown(project_files, limit: int) -> int:
+    binary = fdoc_binary()
+    cache = Path(tempfile.gettempdir()) / "fdoc-compare"
+    cache.mkdir(exist_ok=True)
+    total = bad = dropped = 0
+    examples = []
+    for name in project_files:
+        project_file = Path(name).resolve()
+        cached = cache / f"md-{project_file.parent.name}-{project_file.stem}.json"
+        if cached.exists():
+            texts, reference = json.loads(cached.read_text(encoding="utf-8"))
+        else:
+            try:
+                texts = doc_texts(project_file)
+            except Exception as e:
+                print(f"SKIP {name}: FORD fails: {e}")
+                continue
+            # a new converter for each text: one object would carry abbreviations from text to text
+            reference = []
+            for text in texts:
+                md = MetaMarkdown(
+                    project_file.parent,
+                    aliases={"url": "URL", "media": "MEDIA", "page": "PAGE"},
+                )
+                try:
+                    reference.append(md.convert(text))
+                except Exception as e:
+                    reference.append(f"FORD FAILED {e}")
+            cached.write_text(json.dumps([texts, reference]), encoding="utf-8")
+        inputs = cache / "inputs.json"
+        inputs.write_text(json.dumps(texts), encoding="utf-8")
+        run = subprocess.run(
+            [binary, "--markdown-list", str(inputs)],
+            cwd=project_file.parent,
+            capture_output=True,
+            text=True,
+        )
+        if run.returncode != 0:
+            print(f"FAIL {name}: {run.stderr[-400:]}")
+            bad += len(texts)
+            total += len(texts)
+            continue
+        ours = json.loads(run.stdout)
+        wrong = 0
+        for text, a, b in zip(texts, ours, reference):
+            if b.startswith("FORD FAILED"):
+                continue
+            total += 1
+            if normalize_html(a) != normalize_html(b):
+                if UNCLOSED_TAG.search(text):
+                    dropped += 1
+                    continue
+                wrong += 1
+                examples.append((name, text, normalize_html(a), normalize_html(b)))
+        bad += wrong
+        print(f"{'ok  ' if not wrong else 'FAIL'} {Path(name).parent.name}: {len(texts) - wrong} of {len(texts)}")
+    print(f"{total - bad - dropped} of {total} texts agree, {dropped} where FORD loses text after a '<'")
+    examples.sort(key=lambda e: len(e[1]))
+    for name, text, a, b in examples[:limit]:
+        n = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+        print(f"--- {Path(name).parent.name} ({len(text)} chars)\n{text[:260]!r}")
+        print(f"  fdoc: ...{a[max(0, n - 50):n + 90]!r}\n  ford: ...{b[max(0, n - 50):n + 90]!r}")
+    return 1 if bad else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="what", required=True)
@@ -313,7 +418,12 @@ def main() -> int:
     links = sub.add_parser("links", help="compare how entities are connected")
     links.add_argument("project_files", nargs="+")
     links.add_argument("--limit", type=int, default=8, help="differences to print")
+    markdown = sub.add_parser("markdown", help="compare Markdown conversion")
+    markdown.add_argument("project_files", nargs="+")
+    markdown.add_argument("--limit", type=int, default=8, help="differences to print")
     args = parser.parse_args()
+    if args.what == "markdown":
+        return compare_markdown(args.project_files, args.limit)
     if args.what == "links":
         return compare_links(args.project_files, args.limit)
     if args.what == "modules":

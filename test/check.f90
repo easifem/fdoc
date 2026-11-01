@@ -6,6 +6,7 @@ use test_project_file, only: collect_project_file
 use test_settings, only: collect_settings
 use test_cli, only: collect_cli
 use test_parser, only: collect_parser
+use test_markdown, only: collect_markdown
 implicit none
 
 type(testsuite_type), allocatable :: testsuites(:)
@@ -16,7 +17,8 @@ testsuites = [ &
              new_testsuite("project file", collect_project_file), &
              new_testsuite("settings", collect_settings), &
              new_testsuite("cli", collect_cli), &
-             new_testsuite("parser", collect_parser) &
+             new_testsuite("parser", collect_parser), &
+             new_testsuite("markdown", collect_markdown) &
              ]
 do is = 1, size(testsuites)
     write (error_unit, '(a)') '# Testing: '//testsuites(is)%name

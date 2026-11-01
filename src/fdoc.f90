@@ -4,12 +4,15 @@ use iso_fortran_env, only: error_unit, output_unit
 use ffmt_fs, only: parent_directory
 use fdoc_util, only: string_t
 use fdoc_cli, only: args_t, parse_args, apply_args, usage, VERSION, ACTION_HELP, ACTION_VERSION, ACTION_DUMP, &
-                    ACTION_DUMP_LINKS
-use fdoc_settings, only: settings_t, check_settings, finish_settings, dump_settings
+                    ACTION_DUMP_LINKS, ACTION_MARKDOWN
+use fdoc_settings, only: settings_t, check_settings, finish_settings, dump_settings, map_entry_t
 use fdoc_project_file, only: load_project, apply_toml_string
 use fdoc_project, only: project_t, load_project_sources, correlate, prune
 use fdoc_output, only: write_modules
 use fdoc_links, only: link_project, dump_links
+use fdoc_markdown, only: markdown_to_html, markdown_options_t
+use fdoc_docs, only: base_options, render_documentation
+use json_module, only: json_core, json_value
 implicit none
 private
 
@@ -22,7 +25,8 @@ integer function run(args) result(status)
     type(string_t), intent(in) :: args(:)   !! the arguments, in order
     type(args_t) :: parsed
     type(settings_t) :: s
-    type(project_t) :: p
+    type(project_t), target :: p
+    type(markdown_options_t) :: options
     character(len=:), allocatable :: errmsg, body, directory
     integer :: stat
 
@@ -40,6 +44,11 @@ integer function run(args) result(status)
     end if
     if (parsed%action == ACTION_VERSION) then
         write (output_unit, '(a)') 'fdoc version '//VERSION
+        return
+    end if
+
+    if (parsed%action == ACTION_MARKDOWN) then
+        call markdown_list(parsed%project_file)
         return
     end if
 
@@ -73,6 +82,8 @@ integer function run(args) result(status)
         call write_text(dump_links(p))
         return
     end if
+    call base_options(s, options)
+    call render_documentation(p, s, options)
     if (s%externalize) call write_modules(p, s, stat, errmsg)
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg
@@ -81,6 +92,34 @@ integer function run(args) result(status)
     end if
     write (error_unit, '(a)') 'fdoc: only modules.json is generated so far; the HTML site is not implemented yet'
 end function run
+
+!> Convert the Markdown texts in JSON array file `path`, and print the results as a JSON array.
+subroutine markdown_list(path)
+    character(len=*), intent(in) :: path    !! the file
+    type(json_core) :: json
+    type(json_value), pointer :: root, item, results
+    type(markdown_options_t) :: options
+    character(len=:), allocatable :: source, html, text
+    logical :: found
+    integer :: k, n
+
+    options%base_path = '.'
+    options%aliases = [map_entry_t('url', 'URL'), map_entry_t('media', 'MEDIA'), map_entry_t('page', 'PAGE')]
+    call json%initialize()
+    call json%load(path, root)
+    call json%info(root, n_children=n)
+    call json%create_array(results, '')
+    do k = 1, n
+        call json%get_child(root, k, item, found)
+        call json%get(item, source)
+        call markdown_to_html(source, options, html)
+        call json%add(results, '', html)
+    end do
+    call json%serialize(results, text)
+    call write_text(text)
+    call json%destroy(root)
+    call json%destroy(results)
+end subroutine markdown_list
 
 !> Write `text` to standard output.
 subroutine write_text(text)

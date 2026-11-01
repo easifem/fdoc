@@ -1,0 +1,107 @@
+module fdoc_docs
+!! Rendering the documentation of every entity from Markdown to HTML.
+use fdoc_util
+use fdoc_model
+use fdoc_settings, only: settings_t, map_entry_t
+use fdoc_project, only: project_t
+use fdoc_markdown, only: markdown_to_html, markdown_options_t, dedent
+use fdoc_urls, only: link_context_t, resolve_link
+implicit none
+private
+
+public :: base_options, render_documentation, render_text
+
+contains
+
+!> The Markdown options of a project.
+subroutine base_options(s, options)
+    type(settings_t), intent(in) :: s                   !! the settings
+    type(markdown_options_t), intent(out) :: options    !! the options
+    integer :: k
+    character(len=:), allocatable :: url
+
+    url = s%project_url
+    options%aliases = [s%alias, s%external, map_entry_t('url', url), map_entry_t('media', url//'/media'), &
+                       map_entry_t('page', url//'/page')]
+    options%base_path = s%md_base_dir
+    options%resolver => resolve_link
+    do k = 1, size(s%md_extensions)
+        select case (s%md_extensions(k)%s)
+        case ('markdown.extensions.toc', 'toc')
+            options%toc = .true.
+        case ('markdown.extensions.smarty', 'smarty')
+            options%smarty = .true.
+        end select
+    end do
+end subroutine base_options
+
+!> Render `text`, as if it belonged to entity `context`, for a page `prefix` away from the root.
+subroutine render_text(p, base, context, prefix, text, html)
+    type(project_t), intent(inout), target :: p         !! the project
+    type(markdown_options_t), intent(in) :: base        !! the Markdown options
+    integer, intent(in) :: context                      !! the entity, or 0
+    character(len=*), intent(in) :: prefix              !! from the page to the root of the site
+    character(len=*), intent(in) :: text                !! the Markdown
+    character(len=:), allocatable, intent(out) :: html  !! the HTML
+    type(markdown_options_t) :: options
+    type(link_context_t), target :: link
+
+    options = base
+    link%list => p%list
+    link%entity = context
+    link%prefix = prefix
+    options%resolver_data => link
+    call markdown_to_html(text, options, html)
+end subroutine render_text
+
+!> The first paragraph of `html`, or `''`.
+pure subroutine first_paragraph(html, out)
+    character(len=*), intent(in) :: html                !! the HTML
+    character(len=:), allocatable, intent(out) :: out   !! the paragraph
+    integer :: a, b
+
+    out = ''
+    a = index(html, '<p>')
+    if (a == 0) a = index(html, '<p ')
+    if (a == 0) return
+    b = index(html(a:), '</p>')
+    if (b > 0) out = html(a:a + b + 2)
+end subroutine first_paragraph
+
+!> Render the documentation and summary of each entity.
+subroutine render_documentation(p, s, options)
+    type(project_t), intent(inout), target :: p         !! the project
+    type(settings_t), intent(in) :: s                   !! the settings
+    type(markdown_options_t), intent(in) :: options     !! the Markdown options
+    integer :: k
+
+    !$omp parallel do schedule(dynamic, 16) num_threads(max(1, s%parallel)) default(shared)
+    do k = 1, p%list%n
+        call render_entity(p, options, k)
+    end do
+    !$omp end parallel do
+end subroutine render_documentation
+
+!> Render the documentation and summary of entity `id`.
+subroutine render_entity(p, options, id)
+    type(project_t), intent(inout), target :: p         !! the project
+    type(markdown_options_t), intent(in) :: options     !! the Markdown options
+    integer, intent(in) :: id                           !! the entity
+    type(string_t), allocatable :: lines(:)
+    integer :: k
+
+    if (.not. allocated(p%list%box(id)%e%doc)) return
+    if (p%list%box(id)%e%kind == E_NONE) return
+    associate (e => p%list%box(id)%e)
+        lines = e%doc
+        call dedent(lines)
+        call render_text(p, options, id, '../', join(lines, achar(10)), e%html)
+        do k = 1, size(e%meta)
+            if (e%meta(k)%key /= 'summary') cycle
+            call render_text(p, options, id, '../', join(split_words(join(e%meta(k)%values, ' ')), ' '), e%summary)
+        end do
+        if (.not. allocated(e%summary)) call first_paragraph(e%html, e%summary)
+    end associate
+end subroutine render_entity
+
+end module fdoc_docs

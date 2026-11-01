@@ -7,125 +7,13 @@ use fdoc_util
 use fdoc_model
 use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t, public_symbols, symbol_t
+use fdoc_urls, only: entity_url, object_word
 implicit none
 private
 
-public :: write_modules, entity_url
+public :: write_modules
 
 contains
-
-!> `name` as used in file names and anchors.
-function page_name(name) result(out)
-    character(len=*), intent(in) :: name    !! the name
-    character(len=:), allocatable :: out
-    integer :: k
-
-    out = ''
-    do k = 1, len(name)
-        select case (name(k:k))
-        case ('<'); out = out//'lt'
-        case ('>'); out = out//'gt'
-        case ('/'); out = out//'SLASH'
-        case ('*'); out = out//'ASTERISK'
-        case ('A':'Z'); out = out//achar(iachar(name(k:k)) + 32)
-        case default; out = out//name(k:k)
-        end select
-    end do
-    if (len(out) == 0) out = '__unnamed__'
-end function page_name
-
-!> `text` with characters that are not safe in a URL percent-encoded.
-function url_quote(text) result(out)
-    character(len=*), intent(in) :: text    !! the text
-    character(len=:), allocatable :: out
-    character(len=*), parameter :: HEX = '0123456789ABCDEF'
-    character(len=*), parameter :: SAFE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-~/'
-    integer :: k, c
-
-    out = ''
-    do k = 1, len(text)
-        if (index(SAFE, text(k:k)) > 0) then
-            out = out//text(k:k)
-        else
-            c = iand(ichar(text(k:k)), 255)
-            out = out//'%'//HEX(c/16 + 1:c/16 + 1)//HEX(mod(c, 16) + 1:mod(c, 16) + 1)
-        end if
-    end do
-end function url_quote
-
-!> The word FORD uses for the kind of entity `id`.
-function object_word(e) result(word)
-    type(entity_t), intent(in) :: e     !! the entity
-    character(len=:), allocatable :: word
-
-    select case (e%kind)
-    case (E_FILE); word = 'sourcefile'
-    case (E_MODULE); word = 'module'
-    case (E_SUBMODULE); word = 'submodule'
-    case (E_PROGRAM); word = 'program'
-    case (E_BLOCKDATA); word = 'blockdata'
-    case (E_SUBROUTINE, E_FUNCTION, E_MODPROC); word = 'proc'
-    case (E_INTERFACE); word = 'interface'
-    case (E_TYPE); word = 'type'
-    case (E_ENUM); word = 'enum'
-    case (E_BOUNDPROC); word = 'boundprocedure'
-    case (E_FINAL); word = 'finalproc'
-    case (E_VARIABLE); word = 'variable'
-    case (E_NAMELIST); word = 'namelist'
-    case (E_COMMON); word = 'common'
-    case default; word = ''
-    end select
-    if ((e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION) .and. e%iface /= IFACE_NONE) word = 'interface'
-end function object_word
-
-!> The URL of an entity relative to the base URL, or `''`.
-recursive function entity_url(list, id) result(url)
-    type(entity_list_t), intent(in) :: list !! the entities
-    integer, intent(in) :: id               !! the entity
-    character(len=:), allocatable :: url
-    integer :: at
-    logical :: has_page
-
-    associate (e => list%box(id)%e)
-        if (allocated(e%external_url)) then
-            url = e%external_url
-            return
-        end if
-        has_page = .false.
-        select case (e%kind)
-        case (E_FILE, E_MODULE, E_SUBMODULE, E_PROGRAM, E_BLOCKDATA, E_NAMELIST)
-            has_page = .true.
-        case (E_TYPE, E_INTERFACE, E_SUBROUTINE, E_FUNCTION, E_MODPROC)
-            has_page = e%iface /= IFACE_NONE
-            if (e%parent > 0) then
-                select case (list%box(e%parent)%e%kind)
-                case (E_FILE, E_MODULE, E_SUBMODULE, E_PROGRAM, E_BLOCKDATA)
-                    has_page = .true.
-                end select
-            end if
-        end select
-        if (has_page) then
-            url = merge('module   ', 'XXXXXXXXX', e%kind == E_SUBMODULE)
-            if (e%kind == E_SUBMODULE) then
-                url = 'module'
-            else
-                url = object_word(e)
-            end if
-            url = url//'/'//page_name(e%name)//'.html'
-            return
-        end if
-        url = ''
-        if (e%parent == 0) return
-        select case (e%kind)
-        case (E_BOUNDPROC, E_COMMON, E_VARIABLE, E_ENUM, E_FINAL, E_SUBROUTINE, E_FUNCTION)
-            url = entity_url(list, e%parent)
-            if (len(url) == 0) return
-            at = index(url, '#')
-            if (at > 0) url = url(:at - 1)
-            url = url//'#'//object_word(e)//'-'//url_quote(page_name(e%name))
-        end select
-    end associate
-end function entity_url
 
 !> Write `modules.json`, which other projects can use to link to this one.
 subroutine write_modules(p, s, stat, errmsg)
@@ -164,15 +52,16 @@ recursive subroutine entity_json(json, p, id, key, module_index, node)
     character(len=*), intent(in) :: key             !! its key in the parent's JSON
     integer, intent(in) :: module_index             !! position in `p%modules`, or 0 if not a module
     type(json_value), pointer, intent(out) :: node  !! the result
-    character(len=:), allocatable :: word
+    character(len=:), allocatable :: word, url
     type(json_value), pointer :: array
     integer :: k
 
     call json%create_object(node, key)
     associate (e => p%list%box(id)%e)
-        word = object_word(e)
+        call object_word(e, word)
+        call entity_url(p%list, id, url)
         call json%add(node, 'name', e%name)
-        call json%add(node, 'external_url', './'//entity_url(p%list, id))
+        call json%add(node, 'external_url', './'//url)
         call json%add(node, 'obj', word)
         select case (e%kind)
         case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)

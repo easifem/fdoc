@@ -15,6 +15,7 @@ integer, parameter, public :: ACTION_HELP = 1      !! print the usage
 integer, parameter, public :: ACTION_VERSION = 2   !! print the version
 integer, parameter, public :: ACTION_DUMP = 3      !! print the settings
 integer, parameter, public :: ACTION_DUMP_LINKS = 4 !! print how entities are connected
+integer, parameter, public :: ACTION_MARKDOWN = 5  !! convert a JSON list of Markdown texts
 
 type, public :: option_t
     !! An option given on the command line, in the form [[set_option]] takes.
@@ -61,6 +62,7 @@ function usage() result(text)
            '      --config TOML        other options, as TOML with ; between lines'//NL// &
            '      --dump-settings      print the settings as JSON and stop'//NL// &
            '      --dump-links         print how entities are connected as JSON and stop'//NL// &
+           '      --markdown-list FILE convert a JSON list of Markdown texts, to compare with FORD'//NL// &
            '  -V, --version            print the version'//NL// &
            '  -h, --help               print this help'//NL
 end function usage
@@ -113,6 +115,10 @@ subroutine parse_args(args, parsed, stat, errmsg)
         case ('-V', '--version'); parsed%action = ACTION_VERSION
         case ('--dump-settings'); parsed%action = ACTION_DUMP
         case ('--dump-links'); parsed%action = ACTION_DUMP_LINKS
+        case ('--markdown-list')
+            parsed%action = ACTION_MARKDOWN
+            call take_value()
+            if (stat == 0) parsed%project_file = value
         case ('-w', '--warn'); call flag('warn', 'true')
         case ('-f', '--force'); call flag('force', 'true')
         case ('-g', '--graph'); call flag('graph', 'true')

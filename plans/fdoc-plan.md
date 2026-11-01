@@ -186,6 +186,15 @@ nesting, for example).
 - Hand-written scanners, not regex, for speed.
 - Done when: differential tests of corpus doc text against Python-Markdown (run from
   `tools/compare.py`) pass with an agreed list of accepted differences.
+  **Reached:** `pixi run compare markdown` agrees on 16,593 of 16,649 corpus texts. A further 40
+  differ because FORD drops everything after a `<` such as `x<y`; fdoc keeps that text. Of the
+  other 16, most are FORD output that is itself wrong (`<script>` nested in `<script>`, a literal
+  `@note`), and the rest are odd runs of `*` and backticks in link addresses. To do for parity:
+  - Abbreviations are per text. FORD's one Markdown object lets them leak from text to text, in
+    processing order, so make a `*[X]:` definition apply to the whole project.
+  - Doxygen `@param` and `@see` are not translated yet.
+  - `toc` and `smarty` have unit tests, but the comparison does not turn them on.
+  - Code blocks are not highlighted yet (M5).
 
 ### M5. HTML site
 
