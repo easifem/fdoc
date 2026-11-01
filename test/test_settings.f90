@@ -22,9 +22,26 @@ subroutine collect_settings(testsuite)
                 new_unittest("equal doc markers are rejected", test_docmarks), &
                 new_unittest("option names", test_names), &
                 new_unittest("paths", test_paths), &
+                new_unittest("project graph limit", test_project_nodes), &
                 new_unittest("line splitting", test_lines) &
                 ]
 end subroutine collect_settings
+
+!> Checks: the limit on graphs of a whole project.
+subroutine test_project_nodes(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(settings_t) :: s
+    character(len=:), allocatable :: msg
+    integer :: stat
+
+    s = new_settings()
+    call check(error, s%graph_project_maxnodes, 400)
+    if (allocated(error)) return
+    call set_option(s, 'graph_project_maxnodes', [string_t('1000')], stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call check(error, s%graph_project_maxnodes, 1000)
+end subroutine test_project_nodes
 
 !> Checks: logical options.
 subroutine test_logical(error)

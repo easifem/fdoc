@@ -51,3 +51,4 @@ sort = "alpha"
 search = true
 md_extensions = ["markdown.extensions.toc"]
 front_page_file = "README.md"
+graph_project_maxnodes=1000

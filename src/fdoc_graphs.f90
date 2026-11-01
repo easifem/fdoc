@@ -24,7 +24,6 @@ integer, parameter :: REL_FILES = 4      !! files depended on
 integer, parameter :: NUM_RELATIONS = 4
 
 integer, parameter :: BATCH = 25             !! graphs for one `dot` process
-integer, parameter :: MAX_PROJECT_NODES = 400   !! larger graphs of a whole project are left out
 integer(c_int), parameter :: POLL_MICROSECONDS = 2000   !! how often to look for finished batches
 
 character(len=*), parameter :: EDGE_COLOUR = '#8a93a5'
@@ -583,8 +582,9 @@ contains
             if (p%list%box(members(j))%e%iface == IFACE_ABSTRACT) cycle
             if (any(p%list%box(members(j))%e%kind == kinds)) call push_int(roots, members(j))
         end do
-        if (size(roots) > MAX_PROJECT_NODES) then
-            call warn(title//' left out: it would have more than '//trim(number(MAX_PROJECT_NODES))//' nodes')
+        if (size(roots) > s%graph_project_maxnodes) then
+            call warn(title//' left out: it would have more than '//trim(number(s%graph_project_maxnodes))// &
+                      ' nodes (see graph_project_maxnodes)')
         else if (size(roots) > 1) then
             call describe_graph(p, s, relations(relation), .true., roots, marked, stamp, 1, huge(1), 'RL', description)
             if (len(description) > 0) call add_file(description, title, 0, page)

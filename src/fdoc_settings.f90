@@ -23,7 +23,7 @@ character(len=*), parameter :: PATH_OPTIONS = &
 character(len=*), parameter :: LOGICAL_OPTIONS = &
     ' coloured_edges dbg doxygen externalize fixed_length_limit force graph hide_undoc incl_src lower preprocess'// &
     ' print_creation_date proc_internals quiet search show_proc_parent source warn '
-character(len=*), parameter :: INTEGER_OPTIONS = ' graph_maxdepth graph_maxnodes max_frontpage_items parallel '
+character(len=*), parameter :: INTEGER_OPTIONS = ' graph_maxdepth graph_maxnodes graph_project_maxnodes max_frontpage_items parallel '
 character(len=*), parameter :: LIST_OPTIONS = &
     ' copy_subdir display exclude exclude_dir extensions extra_vartypes fixed_extensions fpp_extensions'// &
     ' html_template_dir include macro md_extensions src_dir '
@@ -59,7 +59,8 @@ type, public :: settings_t
     logical :: lower = .false., preprocess = .true., print_creation_date = .false., proc_internals = .false.
     logical :: quiet = .false., search = .true., show_proc_parent = .false., source = .false., warn = .false.
     logical :: relative = .true.                        !! true if `project_url` was not given
-    integer :: graph_maxdepth = 10000, graph_maxnodes = 1000000000, max_frontpage_items = 10
+    integer :: graph_maxdepth = 10000, graph_maxnodes = 1000000000, graph_project_maxnodes = 400
+    integer :: max_frontpage_items = 10
     integer :: parallel = 4
     type(string_t), allocatable :: copy_subdir(:), display(:), exclude(:), exclude_dir(:), extensions(:)
     type(string_t), allocatable :: extra_vartypes(:), fixed_extensions(:), fpp_extensions(:), html_template_dir(:)
@@ -150,6 +151,7 @@ subroutine set_option(s, key, values, stat, errmsg)
         select case (key)
         case ('graph_maxdepth'); s%graph_maxdepth = number
         case ('graph_maxnodes'); s%graph_maxnodes = number
+        case ('graph_project_maxnodes'); s%graph_project_maxnodes = number
         case ('max_frontpage_items'); s%max_frontpage_items = number
         case ('parallel'); s%parallel = number
         end select

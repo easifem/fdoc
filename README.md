@@ -106,7 +106,7 @@ end function add
 * **Of the Python-Markdown extensions in `md_extensions`,** only `toc` and `smarty` are available. Others are skipped with a warning.
 * **`pcpp` is replaced by `gfortran -E -cpp`** when it's the preprocessor, as `pcpp` is Python. Other `preprocessor` commands run as given.
 * **Search covers names and summaries,** not the full text of the documentation.
-* **Whole-project graphs of more than 400 nodes are left out,** with a warning, as they are slow to lay out and hard to read.
+* **Whole-project graphs of more than 400 nodes are left out,** with a warning, as they are slow to lay out and hard to read. The setting `graph_project_maxnodes` changes the limit.
 * **Text after a `<`, as in `x<y`, is kept.** FORD's Markdown drops it.
 * **`externalize: false` is honored.** FORD's command line default overrides it.
 * **Calls are found from tokens,** so fdoc finds a few that FORD's regular expressions miss.
