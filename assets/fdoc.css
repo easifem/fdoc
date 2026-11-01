@@ -56,6 +56,7 @@ h2 { font-size: 1.3rem; margin: 2.4rem 0 .8rem; padding-bottom: .3rem; border-bo
 .doc h2 { font-size: 1.25rem; }
 .doc h3 { font-size: 1.05rem; margin-top: 1.4rem; }
 .crumbs { color: var(--muted); font-size: .88rem; margin-bottom: .3rem; }
+.crumbs .sep { margin: 0 .15rem; }
 .kind { color: var(--muted); font-weight: 400; font-size: .62em; margin-right: .35rem; }
 .meta { display: flex; flex-wrap: wrap; gap: .3rem 1rem; color: var(--muted); font-size: .88rem; margin: .4rem 0 1.1rem; }
 .lead { font-size: 1.05rem; color: var(--muted); margin: .1rem 0 .4rem; }

@@ -25,6 +25,8 @@ integer, parameter :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIS
 integer, parameter :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
 integer, parameter :: NUM_LISTS = 8
 
+integer, parameter :: MAX_NESTING = 16  !! how many levels of containers a page shows
+
 character(len=*), parameter :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
                                                        'types', 'programs', 'blockdata', 'namelists']
 character(len=*), parameter :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'Source Files', 'Modules', 'Procedures', &
@@ -661,20 +663,11 @@ subroutine entity_title(site, id, word, b)
     integer, intent(in) :: id               !! the entity
     character(len=*), intent(in) :: word    !! what it is
     type(buffer_t), intent(inout) :: b      !! the HTML
-    integer :: parent, k
+    integer :: k
     logical :: open
 
     associate (e => site%p%list%box(id)%e)
-        parent = e%parent
-        if (parent > 0) then
-            associate (up => site%p%list%box(parent)%e)
-                if (up%kind /= E_FILE) then
-                    call add(b, '<div class="crumbs">')
-                    call link_to(site, parent, up%name, b)
-                    call add(b, '</div>'//achar(10))
-                end if
-            end associate
-        end if
+        call breadcrumbs(site, id, b)
         call add(b, '<h1><span class="kind">'//word//'</span>')
         call html_escape(display_name(e), b, .false.)
         if (allocated(e%permission)) then
@@ -711,6 +704,30 @@ subroutine entity_title(site, id, word, b)
         end if
     end associate
 end subroutine entity_title
+
+!> Write what contains entity `id`, from its source file down, each with a link to its page.
+subroutine breadcrumbs(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: chain(MAX_NESTING)
+    integer :: k, n, up
+
+    n = 0
+    up = site%p%list%box(id)%e%parent
+    do while (up > 0 .and. n < MAX_NESTING)
+        n = n + 1
+        chain(n) = up
+        up = site%p%list%box(up)%e%parent
+    end do
+    if (n == 0) return
+    call add(b, '<div class="crumbs">')
+    do k = n, 1, -1
+        call link_to(site, chain(k), display_name(site%p%list%box(chain(k))%e), b)
+        if (k > 1) call add(b, ' <span class="sep">&rsaquo;</span> ')
+    end do
+    call add(b, '</div>'//achar(10))
+end subroutine breadcrumbs
 
 !> The base name of a file entity, or the name of another.
 pure function display_name(e) result(name)
