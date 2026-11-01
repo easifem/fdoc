@@ -13,6 +13,7 @@ gen-assets = { cmd = "python tools/gen_assets.py", description = "Generate src/f
 check-links = { cmd = "python tools/check_links.py", description = "Check the links of a generated site: pixi run check-links doc" }
 check-docs = { cmd = "python tools/check_docs.py", description = "Check that every routine and argument is documented" }
 check-threads = { cmd = "python tools/check_threads.py", depends-on = ["build"], description = "Check that code running in parallel avoids deferred-length function results" }
+bench = { cmd = "python tools/benchmark.py", description = "Compare the speed of fdoc and FORD: pixi run bench PROJECT_FILE..." }
 compare = { cmd = "python tools/compare.py", description = "Compare fdoc with FORD: pixi run compare settings PROJECT_FILE..." }
 
 [dependencies]

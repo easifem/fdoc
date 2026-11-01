@@ -49,4 +49,5 @@ source = true
 graph = true
 sort = "alpha"
 search = true
+md_extensions = ["markdown.extensions.toc"]
 front_page_file = "README.md"

@@ -14,7 +14,7 @@ use fdoc_markdown, only: markdown_to_html, markdown_options_t
 use fdoc_docs, only: base_options, render_documentation, render_text, collect_abbreviations
 use fdoc_site, only: assign_pages, write_site
 use fdoc_pages, only: load_pages, page_t
-use fdoc_progress, only: progress_enable, progress_start, progress_finish, progress_summary
+use fdoc_progress, only: progress_enable, progress_start, progress_finish, progress_summary, warn
 use json_module, only: json_core, json_value
 implicit none
 private
@@ -76,6 +76,7 @@ integer function run(args) result(status)
     end if
 
     if (parsed%action /= ACTION_DUMP_LINKS .and. .not. s%quiet) call progress_enable()
+    call warn_unsupported(s)
     call load_project_sources(s, p, stat, errmsg)
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg
@@ -109,6 +110,22 @@ integer function run(args) result(status)
     write (count_text, '(i0)') pages
     call progress_summary(trim(count_text)//' pages written to '//s%output_dir)
 end function run
+
+!> Warn about settings that are read but have no effect.
+subroutine warn_unsupported(s)
+    type(settings_t), intent(in) :: s   !! the settings
+    integer :: k
+
+    if (size(s%html_template_dir) > 0) call warn('html_template_dir has no effect: fdoc does not use templates')
+    do k = 1, size(s%md_extensions)
+        select case (s%md_extensions(k)%s)
+        case ('markdown.extensions.toc', 'toc', 'markdown.extensions.smarty', 'smarty')
+            continue
+        case default
+            call warn('md_extensions: '//s%md_extensions(k)%s//' is not available, only toc and smarty')
+        end select
+    end do
+end subroutine warn_unsupported
 
 !> Convert the Markdown texts in JSON array file `path`, and print the results as a JSON array.
 subroutine markdown_list(path)

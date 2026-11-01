@@ -1683,7 +1683,7 @@ subroutine index_page(site, front, html)
         call page_head(site, s%project, 0, '', index(front, 'math/tex') > 0, b)
         call add(b, '<aside class="side">'//achar(10))
         call site_side(site, 0, '', .false., b)
-        call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<h1>')
+        call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<div class="hero">'//achar(10)//'<h1>')
         call html_escape(s%project, b, .false.)
         call add(b, '</h1>'//achar(10))
         if (allocated(s%summary)) then
@@ -1709,7 +1709,7 @@ subroutine index_page(site, front, html)
             call add(b, '<a class="card" href="lists/'//trim(LIST_FILE(k))//'.html"><b>'// &
                      trim(number(size(site%members(k)%ids)))//'</b><span>'//trim(LIST_TITLE(k))//'</span></a>')
         end do
-        call add(b, '</div>'//achar(10)//'<div class="doc">'//achar(10))
+        call add(b, '</div>'//achar(10)//'</div>'//achar(10)//'<div class="doc">'//achar(10))
         call add(b, front)
         call add(b, achar(10)//'</div>'//achar(10))
         call page_foot(site, b)

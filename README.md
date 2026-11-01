@@ -1,2 +1,203 @@
 # fdoc
-My cool new project!
+
+A documentation generator for modern Fortran, written in modern Fortran.
+
+fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 10 to 70 times faster.
+
+* **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
+* **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, so existing links keep working.
+* **Clean output.** Light and dark themes, a layout that works on a phone, and instant search with typo tolerance. The site needs no framework, and its CSS and JavaScript are built into the program.
+* **Small output.** Sites take about a third of the space of FORD's.
+
+fdoc is in early development and has only been tested on macOS with gfortran. See [Differences from FORD](#differences-from-ford) for what isn't supported yet.
+
+## Getting started
+
+You need [gfortran](https://gcc.gnu.org/fortran/) 15 and [fpm](https://fpm.fortran-lang.org). [Graphviz](https://graphviz.org) is needed only for graphs.
+
+The easiest way to get all of these is [pixi](https://pixi.sh), which installs them for this repository:
+
+```
+git clone https://github.com/jacobwilliams/fdoc.git
+cd fdoc
+pixi run doc ~/my-project/ford.md
+```
+
+That builds fdoc and documents the project described by `ford.md`, writing to its `output_dir`, which is `./doc` next to the project file by default. FORD's output in that directory is replaced, so use `-o` to write somewhere else while comparing the two.
+
+To install the binary:
+
+```
+pixi run fpm install --profile release --prefix ~/.local
+```
+
+## Usage
+
+```
+fdoc [options] [project_file]
+```
+
+The options are FORD's, including `-o`, `-d`, `-p`, `-g`, `-m`, `-I`, `-L`, `-q` and `--config`. Run `fdoc --help` for the full list. Command line options override the project's settings.
+
+Without a project file, fdoc looks in the current directory for an `[extra.fdoc]` or `[extra.ford]` table in `fpm.toml`, and then for `ford.md`.
+
+### Configuration
+
+A FORD project file works as it is:
+
+```
+project: My Project
+src_dir: ./src
+output_dir: ./doc
+display: public
+         private
+source: true
+graph: true
+
+The text of the front page, in Markdown.
+```
+
+Or put everything in `fpm.toml`, and have no project file at all. fpm ignores what's under `[extra]`:
+
+```toml
+[extra.fdoc]
+project = "My Project"
+src_dir = ["./src"]
+output_dir = "./doc"
+display = ["public", "private"]
+source = true
+graph = true
+front_page_file = "README.md"
+```
+
+`front_page_file` names a Markdown file for the front page, relative to `fpm.toml`. To write the text there instead, use `front_page`. Both are specific to `[extra.fdoc]`, as FORD doesn't read that table. Its own `[extra.ford]` table also works.
+
+### Doc comments
+
+fdoc follows FORD's conventions:
+
+```fortran
+!> Add two numbers.
+!!
+!! The text is Markdown, and can link to other entities: see [[subtract]].
+pure function add(a, b) result(c)
+    real, intent(in) :: a   !! the first number
+    real, intent(in) :: b   !! the second number
+    real :: c               !! their sum
+    c = a + b
+end function add
+```
+
+`!!` documents what comes before it and `!>` what comes after it. The markers can be changed with `docmark`, `predocmark`, `docmark_alt` and `predocmark_alt`. Metadata such as `author:` and `summary:`, admonitions, aliases, doxygen commands such as `@brief` and `@param`, math, and file includes all work as they do in FORD.
+
+### What it generates
+
+* Pages for modules, submodules, procedures, interfaces, derived types, programs, block data, namelists and source files, plus static pages from `page_dir`.
+* Tables of arguments, components and variables showing intent and attributes as coloured badges.
+* Graphs of module use, procedure calls, type inheritance and file dependencies, with links, zoom and panning.
+* Syntax highlighted Fortran source.
+* A search box. Press `/` to use it.
+* `modules.json`, so that other projects can link to this one. fdoc and FORD can read each other's.
+
+## Differences from FORD
+
+* **Fixed-form source is not supported yet.** Those files are skipped with a warning.
+* **`html_template_dir` has no effect**, because there are no templates. The HTML is different too, so CSS written for FORD's pages needs rewriting. `css:` still adds your own style sheet.
+* **Of the Python-Markdown extensions in `md_extensions`,** only `toc` and `smarty` are available. Others are skipped with a warning.
+* **`pcpp` is replaced by `gfortran -E -cpp`** when it's the preprocessor, as `pcpp` is Python. Other `preprocessor` commands run as given.
+* **Search covers names and summaries,** not the full text of the documentation.
+* **Whole-project graphs of more than 400 nodes are left out,** with a warning, as they are slow to lay out and hard to read.
+* **Text after a `<`, as in `x<y`, is kept.** FORD's Markdown drops it.
+* **`externalize: false` is honored.** FORD's command line default overrides it.
+* **Calls are found from tokens,** so fdoc finds a few that FORD's regular expressions miss.
+
+## Benchmarks
+
+Time to generate each project's documentation, using the project's own settings:
+
+| Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.05 s | 1.15 s | 24× | 3.10 s | 0.10 s | 31× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.75 s | 0.74 s | 31× | 6.51 s | 0.16 s | 41× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.26 s | 0.92 s | 68× | 8.23 s | 0.45 s | 18× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.49 s | 6.14 s | 11× | 6.79 s | 0.22 s | 31× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.33 s | 1.64 s | 37× | 8.97 s | 0.30 s | 30× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 6.59 s | 48× | 25.27 s | 0.75 s | 34× |
+
+Peak memory and the size of the site, with graphs:
+
+| Project | FORD memory | fdoc memory | FORD site | fdoc site |
+|---|---:|---:|---:|---:|
+| fformat | 134 MB | 33 MB | 17 MB | 5 MB |
+| bspline-fortran | 175 MB | 38 MB | 17 MB | 5 MB |
+| rklib | 318 MB | 80 MB | 25 MB | 10 MB |
+| json-fortran | 310 MB | 97 MB | 83 MB | 30 MB |
+| Fortran-Astrodynamics-Toolkit | 197 MB | 55 MB | 31 MB | 9 MB |
+| qt-fortran | 425 MB | 148 MB | 100 MB | 33 MB |
+
+Measured on an Apple M5 with 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
+
+The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Most of the remaining time in fdoc is `dot` laying out graphs. On projects with deep call chains, such as json-fortran, that is what limits the speedup.
+
+To run them yourself:
+
+```
+pixi run bench path/to/ford.md ...
+```
+
+## How it works
+
+1. **Settings** come from the project file or `fpm.toml`, with [TOML Fortran](https://github.com/toml-f/toml-f), and the command line.
+2. **Files** are found, preprocessed if needed, and read.
+3. **Parsing** runs in parallel. [fformat](https://github.com/jacobwilliams/fformat) splits each file into tokens and statements and works out its structure, and fdoc reads the declarations and doc comments from those.
+4. **Linking** connects names across the project: `use` statements, inheritance, interfaces, bindings and calls.
+5. **Markdown** is converted to HTML in parallel, by a converter that follows the dialect of Python-Markdown.
+6. **Graphs** are built and given to `dot` in batches, so that it doesn't start once for each graph, and the SVG is then rewritten to take half the space.
+7. **Pages** are rendered in parallel and written out.
+
+## Development
+
+The project is built with fpm, and pixi provides everything else:
+
+```
+pixi run build           # build fdoc
+pixi run test            # run the tests
+pixi run doc             # generate fdoc's own documentation in ./doc
+pixi run check-docs      # check that every routine and argument is documented
+pixi run check-threads   # check that code running in parallel is thread-safe
+pixi run check-links doc # check the links of a generated site
+pixi run gen-assets      # regenerate src/fdoc_assets.f90 after changing assets/
+```
+
+FORD serves as the reference, and `compare` checks fdoc against it on real projects:
+
+```
+pixi run compare settings path/to/ford.md ...   # settings
+pixi run compare modules path/to/ford.md ...    # modules.json
+pixi run compare links path/to/ford.md ...      # uses, calls and inheritance
+pixi run compare markdown path/to/ford.md ...   # conversion of doc comments
+```
+
+Every routine has an `!>` block and every argument an inline `!!`, which `check-docs` enforces.
+
+Code that runs in parallel must not call functions returning `character(len=:), allocatable`. gfortran 15 keeps the length of such a result in static storage, which threads share, so this gives wrong results in valid code. `example/slen_race.f90` shows the problem. Use an `intent(out)` argument, or a result with an explicit length, and `check-threads` will catch what gets through.
+
+## Dependencies
+
+| Package | Used for |
+|---|---|
+| [fformat](https://github.com/jacobwilliams/fformat) | Tokens, statements and structure of Fortran source |
+| [JSON-Fortran](https://github.com/jacobwilliams/json-fortran) | `modules.json` and the search index |
+| [TOML Fortran](https://github.com/toml-f/toml-f) | Settings in `fpm.toml` |
+| [fregex](https://github.com/jacobwilliams/fregex) | Exclude patterns, through fformat |
+| OpenMP | Parallel parsing and rendering |
+| [test-drive](https://github.com/fortran-lang/test-drive) | Tests |
+| [Graphviz](https://graphviz.org) | Laying out graphs, if `graph` is on |
+
+fpm fetches the Fortran packages. FORD and Python are needed only for `compare` and `bench`, not to run fdoc.
+
+Generated sites load [MathJax](https://www.mathjax.org) from a CDN, only on pages that contain math.
+
+## License
+
+fdoc is released under the [MIT License](https://github.com/jacobwilliams/fdoc/blob/master/LICENSE). It is an independent program, not derived from FORD's code, and owes its project file format and doc comment conventions to FORD.
