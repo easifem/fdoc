@@ -1,7 +1,7 @@
 module fdoc_shell
 !! What standard Fortran cannot do with the file system, through the shell of the platform: `cmd.exe` on
-!! Windows, and `sh` elsewhere. All commands that differ between them are here. These routines run
-!! commands, so they are for serial code only.
+!! Windows, and `sh` elsewhere. All commands that differ between them are here. The tests call these
+!! from several threads, so they do not return deferred-length strings (see `example/slen_race.f90`).
 use ffmt_fs, only: is_directory
 implicit none
 private
@@ -35,7 +35,7 @@ end function is_windows
 !> `text` in quotes, as one argument of a command.
 function quoted(text) result(out)
     character(len=*), intent(in) :: text    !! the text
-    character(len=:), allocatable :: out
+    character(len=len(text) + 2) :: out
 
     if (is_windows()) then
         out = '"'//text//'"'
@@ -47,7 +47,7 @@ end function quoted
 !> `path` in quotes, with the separator of the platform, as one argument of a command.
 function quoted_path(path) result(out)
     character(len=*), intent(in) :: path    !! the path
-    character(len=:), allocatable :: out
+    character(len=len(path) + 2) :: out
     character(len=len(path)) :: native
     integer :: k
 

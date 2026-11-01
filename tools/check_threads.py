@@ -19,6 +19,7 @@ PARALLEL = [
     "fdoc_model",
     "fdoc_markdown",
     "fdoc_fypp",
+    "fdoc_shell",
     "fdoc_urls",
     "fdoc_docs",
     "fdoc_site",
