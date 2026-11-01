@@ -152,3 +152,4 @@ td.attributes { font-family: var(--mono); font-size: .84em; }
 .attr-target { --h: 325; } .attr-dimension { --h: 85; } .attr-contiguous { --h: 150; } .attr-volatile { --h: 345; }
 .attr-asynchronous { --h: 300; } .attr-save { --h: 60; } .attr-parameter { --h: 195; } .attr-protected { --h: 240; }
 .attr-codimension { --h: 105; }
+.graph text { stroke: none; }

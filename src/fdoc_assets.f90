@@ -133,7 +133,7 @@ subroutine asset_fdoc_css(b)
         //'ble { --h: 125; } .attr-value { --h: 45; }'//NL//'.attr-target { --h: 325; } .attr-dimension { --h: 85;' &
         //' } .attr-contiguous { --h: 150; } .attr-volatile { --h: 345; }'//NL//'.attr-asynchronous { --h: 300; } ' &
         //'.attr-save { --h: 60; } .attr-parameter { --h: 195; } .attr-protected { --h: 240; }'//NL//'.attr-codime' &
-        //'nsion { --h: 105; }'//NL//'')
+        //'nsion { --h: 105; }'//NL//'.graph text { stroke: none; }'//NL//'')
 end subroutine asset_fdoc_css
 
 !> The contents of `assets/fdoc.js`.

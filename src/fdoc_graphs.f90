@@ -25,6 +25,7 @@ integer, parameter :: NUM_RELATIONS = 4
 integer, parameter :: BATCH = 25             !! graphs for one `dot` process
 integer, parameter :: MAX_PROJECT_NODES = 400   !! larger graphs of a whole project are left out
 
+character(len=*), parameter :: EDGE_COLOUR = '#8a93a5'
 character(len=*), parameter :: EDGE_COLOURS(*) = [character(len=7) :: '#3657c9', '#1d7a55', '#a15c00', '#b3261e', &
                                                   '#6a4fb3', '#0b7285', '#a61e69', '#5c6f2d']
 
@@ -341,7 +342,7 @@ subroutine describe_graph(p, s, relation, forward, roots, marked, stamp, max_dep
         call add(b, 'digraph g {'//achar(10)//'rankdir='//direction//'; bgcolor="transparent"; concentrate=true;'//achar(10))
         call add(b, 'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fontcolor=white, ')
         call add(b, 'color=transparent, height=0.3, margin="0.1,0.04"];'//achar(10))
-        call add(b, 'edge [color="#8a93a5", arrowsize=0.7];'//achar(10))
+        call add(b, 'edge [color="'//EDGE_COLOUR//'", arrowsize=0.7];'//achar(10))
         call take(nodes, body)
         call add(b, body)
         call take(edges, body)
@@ -386,15 +387,13 @@ subroutine add_node(p, id, root, b)
         if (allocated(e%external_url)) colour = '#646d7e'
         call add(b, 'n'//trim(number(id))//' [label="')
         call quoted(name, b)
-        call add(b, '", tooltip="')
-        call quoted(name, b)
         call add(b, '", fillcolor="'//colour//'"')
         if (root) call add(b, ', penwidth=2, color="#f0a868"')
         if (len(url) > 0) then
             call add(b, ', URL="')
             if (.not. allocated(e%external_url)) call add(b, '../')
             call quoted(url, b)
-            call add(b, '", target="_top"')
+            call add(b, '"')
         end if
         call add(b, '];'//achar(10))
     end associate
@@ -535,7 +534,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
             cycle
         end if
         status = index(text, '<svg')
-        if (status > 0) set%graphs(k)%svg = text(status:)
+        if (status > 0) call slim_svg(text(status:), set%graphs(k)%svg)
     end do
     if (.not. allocated(s%graph_dir)) call execute_command_line("rm -rf '"//directory//"'")
 
@@ -606,6 +605,228 @@ contains
     end subroutine add_file
 
 end subroutine build_graphs
+
+!> The value of attribute `name` in `line`, or `''`.
+pure subroutine attribute(line, name, value)
+    character(len=*), intent(in) :: line                !! the element
+    character(len=*), intent(in) :: name                !! the attribute
+    character(len=:), allocatable, intent(out) :: value !! its value
+    integer :: at, close
+
+    value = ''
+    at = index(line, ' '//name//'="')
+    if (at == 0) return
+    at = at + len(name) + 3
+    close = index(line(at:), '"')
+    if (close > 0) value = line(at:at + close - 2)
+end subroutine attribute
+
+!> Append `text` with its numbers rounded to one decimal.
+pure subroutine rounded(text, b)
+    character(len=*), intent(in) :: text    !! the text
+    type(buffer_t), intent(inout) :: b      !! where it goes
+    integer :: i, j, k, tenths
+
+    i = 1
+    do while (i <= len(text))
+        if (scan(text(i:i), '0123456789') == 0) then
+            call add(b, text(i:i))
+            i = i + 1
+            cycle
+        end if
+        j = i + verify(text(i:)//' ', '0123456789') - 1
+        if (j >= len(text) .or. text(min(j, len(text)):min(j, len(text))) /= '.') then
+            call add(b, text(i:j - 1))
+            i = j
+            cycle
+        end if
+        k = j + verify(text(j + 1:)//' ', '0123456789')
+        tenths = 0
+        call number_value(text(i:j - 1), tenths)
+        tenths = tenths*10
+        if (k > j + 1) tenths = tenths + iachar(text(j + 1:j + 1)) - iachar('0')
+        if (k > j + 2) then
+            if (text(j + 2:j + 2) >= '5') tenths = tenths + 1
+        end if
+        call add(b, trim(number(tenths/10)))
+        if (mod(tenths, 10) /= 0) call add(b, '.'//achar(iachar('0') + mod(tenths, 10)))
+        i = k
+    end do
+end subroutine rounded
+
+!> The value of the digits `digits`.
+pure subroutine number_value(digits, value)
+    character(len=*), intent(in) :: digits  !! the digits
+    integer, intent(out) :: value           !! their value
+    integer :: k
+
+    value = 0
+    do k = 1, len(digits)
+        value = 10*value + iachar(digits(k:k)) - iachar('0')
+    end do
+end subroutine number_value
+
+!> The extent of the points in path data `d`.
+subroutine path_box(d, left, top, right, bottom)
+    character(len=*), intent(in) :: d   !! the path data
+    real, intent(out) :: left           !! the smallest x
+    real, intent(out) :: top            !! the smallest y
+    real, intent(out) :: right          !! the largest x
+    real, intent(out) :: bottom         !! the largest y
+    character(len=*), parameter :: DIGITS = '0123456789.-'
+    real :: value
+    logical :: is_x
+    integer :: i, j, ios
+
+    left = huge(left)
+    top = huge(top)
+    right = -huge(right)
+    bottom = -huge(bottom)
+    is_x = .true.
+    i = 1
+    do while (i <= len(d))
+        if (scan(d(i:i), DIGITS) == 0) then
+            i = i + 1
+            cycle
+        end if
+        j = i + verify(d(i:)//' ', DIGITS) - 2
+        read (d(i:j), *, iostat=ios) value
+        if (is_x) then
+            left = min(left, value)
+            right = max(right, value)
+        else
+            top = min(top, value)
+            bottom = max(bottom, value)
+        end if
+        is_x = .not. is_x
+        i = j + 1
+    end do
+end subroutine path_box
+
+!> Write a real with one decimal.
+subroutine real_text(value, b)
+    real, intent(in) :: value           !! the value
+    type(buffer_t), intent(inout) :: b  !! where it goes
+    character(len=24) :: text
+
+    write (text, '(f0.1)') value
+    if (text(1:1) == '.') text = '0'//text
+    if (text(1:2) == '-.') text = '-0'//text(2:)
+    call add(b, trim(text))
+end subroutine real_text
+
+!> Rewrite a drawing from `dot` to draw the same thing in fewer bytes: the boxes of nodes become
+!> rectangles, what most elements share goes on the group around them, and comments, ids and titles
+!> that nothing shows are left out. Coordinates keep one decimal, a tenth of a point.
+subroutine slim_svg(svg, out)
+    character(len=*), intent(in) :: svg                 !! the drawing
+    character(len=:), allocatable, intent(out) :: out   !! the result
+    type(string_t), allocatable :: lines(:)
+    character(len=:), allocatable :: fill, stroke, width, dash, data, x, y, size, href
+    type(buffer_t) :: b
+    logical :: dropped(0:16), in_link
+    real :: left, top, right, bottom
+    integer :: k, depth, at
+
+    lines = split_lines(svg)
+    depth = 0
+    dropped = .false.
+    in_link = .false.
+    do k = 1, size_of(lines)
+        associate (line => lines(k)%s)
+            if (starts_with(line, '<!--') .or. starts_with(line, '<title>')) then
+                cycle
+            else if (starts_with(line, '<g id="node') .or. starts_with(line, '<g id="edge')) then
+                depth = min(depth + 1, 16)
+                dropped(depth) = .true.
+            else if (starts_with(line, '<g id="a_')) then
+                depth = min(depth + 1, 16)
+                dropped(depth) = .true.
+                call attribute(line, 'xlink:href', href)
+                if (len(href) > 0) then
+                    call add(b, '<a href="'//href//'" fill="white" stroke="none">')
+                    in_link = .true.
+                else
+                    call add(b, '<a>')
+                end if
+            else if (starts_with(line, '<g ')) then
+                depth = min(depth + 1, 16)
+                dropped(depth) = .false.
+                at = index(line, 'transform=')
+                call add(b, '<g '//line(at:len(line) - 1)//' fill="none" stroke="'//EDGE_COLOUR// &
+                         '" font-family="Helvetica,sans-Serif" font-size="11" text-anchor="middle">')
+            else if (line == '</g>') then
+                if (.not. dropped(depth)) call add(b, line)
+                depth = max(depth - 1, 0)
+            else if (line == '</a>') then
+                in_link = .false.
+                call add(b, line)
+            else if (starts_with(line, '<path ')) then
+                call attribute(line, 'fill', fill)
+                call attribute(line, 'stroke', stroke)
+                call attribute(line, 'stroke-width', width)
+                call attribute(line, 'stroke-dasharray', dash)
+                call attribute(line, 'd', data)
+                if (fill /= 'none') then
+                    call path_box(data, left, top, right, bottom)
+                    call add(b, '<rect fill="'//fill//'"')
+                    if (stroke /= 'none' .or. .not. in_link) call add(b, ' stroke="'//stroke//'"')
+                    if (len(width) > 0) call add(b, ' stroke-width="'//width//'"')
+                    call add(b, ' rx="7.2" x="')
+                    call real_text(left, b)
+                    call add(b, '" y="')
+                    call real_text(top, b)
+                    call add(b, '" width="')
+                    call real_text(right - left, b)
+                    call add(b, '" height="')
+                    call real_text(bottom - top, b)
+                    call add(b, '"/>')
+                else
+                    call add(b, '<path')
+                    if (stroke /= EDGE_COLOUR) call add(b, ' stroke="'//stroke//'"')
+                    if (len(width) > 0) call add(b, ' stroke-width="'//width//'"')
+                    if (len(dash) > 0) call add(b, ' stroke-dasharray="'//dash//'"')
+                    call add(b, ' d="')
+                    call rounded(data, b)
+                    call add(b, '"/>')
+                end if
+            else if (starts_with(line, '<polygon ')) then
+                call attribute(line, 'fill', fill)
+                call attribute(line, 'stroke', stroke)
+                if (fill == 'none' .and. stroke == 'none') cycle
+                call attribute(line, 'points', data)
+                call add(b, '<polygon fill="'//fill//'"')
+                if (stroke /= EDGE_COLOUR) call add(b, ' stroke="'//stroke//'"')
+                call add(b, ' points="')
+                call rounded(data, b)
+                call add(b, '"/>')
+            else if (starts_with(line, '<text ')) then
+                call attribute(line, 'x', x)
+                call attribute(line, 'y', y)
+                call attribute(line, 'font-size', size)
+                call attribute(line, 'fill', fill)
+                call add(b, '<text x="')
+                call rounded(x, b)
+                call add(b, '" y="')
+                call rounded(y, b)
+                call add(b, '"')
+                if (size /= '11.00') call add(b, ' font-size="'//size//'"')
+                if (fill /= 'white' .or. .not. in_link) call add(b, ' fill="'//fill//'"')
+                call add(b, line(index(line, '>'):))
+            else
+                call add(b, line)
+                if (k < 3) call add(b, achar(10))
+            end if
+        end associate
+    end do
+    call take(b, out)
+end subroutine slim_svg
+
+!> The number of strings in `lines`.
+pure integer function size_of(lines)
+    type(string_t), intent(in) :: lines(:)  !! the strings
+    size_of = size(lines)
+end function size_of
 
 !> The file of graph `k`.
 pure function file_name(directory, k, suffix) result(path)

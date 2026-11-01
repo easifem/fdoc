@@ -239,8 +239,8 @@ nesting, for example).
 - **Reached.** Module, type, file and interface graphs have the same nodes as FORD's on bspline-fortran
   and json-fortran, and call graphs nearly so; `dot` takes batches of 25 files, with no process per
   graph. Unlike FORD, project-wide graphs of more than 400 nodes are left out, and graphs too large
-  for `graph_maxnodes` are not turned into tables. Graphs are embedded, so pages with large call
-  graphs stay heavy: json-fortran's site is 85 MB, like FORD's.
+  for `graph_maxnodes` are not turned into tables. Graphs are embedded, and rewritten after `dot` to
+  take half the space with the same drawing: json-fortran's site is 29 MB, against 80 MB with FORD.
 
 ### M8. Preprocessing
 
