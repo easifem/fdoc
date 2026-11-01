@@ -9,7 +9,7 @@ use fdoc_fypp, only: fypp_process
 use fdoc_util
 use fdoc_settings, only: settings_t
 use fdoc_progress, only: warn
-use fdoc_shell, only: quoted, quoted_path, temporary_directory
+use fdoc_shell, only: quoted, quoted_path, temporary_directory, run_command
 implicit none
 private
 
@@ -178,9 +178,8 @@ subroutine preprocess(s, path, text)
     output = join_path(directory, 'fdoc-'//trim(tag)//'.out')
     errors = join_path(directory, 'fdoc-'//trim(tag)//'.err')
     command = preprocessor_command(s, path)
-    call execute_command_line(command//' > '//quoted_path(output)//' 2> '//quoted_path(errors), exitstat=exit_code, &
-                              cmdstat=stat)
-    if (stat == 0 .and. exit_code == 0) then
+    call run_command(command//' > '//quoted_path(output)//' 2> '//quoted_path(errors), exit_code)
+    if (exit_code == 0) then
         call read_file(output, result, stat, msg)
         if (stat == 0) call move_alloc(result, text)
     else

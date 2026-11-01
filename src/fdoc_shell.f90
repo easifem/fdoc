@@ -7,9 +7,21 @@ implicit none
 private
 
 public :: is_windows, quoted, quoted_path, make_directory, remove_directory, copy_file, copy_path
-public :: program_exists, temporary_directory
+public :: program_exists, temporary_directory, run_command
 
 contains
+
+!> Run `command` and wait for it. Without `cmdstat`, a program can stop with an error if the command
+!> is not found, which some shells report with status 127.
+subroutine run_command(command, stat)
+    character(len=*), intent(in) :: command !! the command
+    integer, intent(out) :: stat            !! nonzero on failure
+    integer :: exit_status, command_status
+
+    exit_status = 0
+    call execute_command_line(command, exitstat=exit_status, cmdstat=command_status)
+    stat = merge(exit_status, command_status, command_status == 0)
+end subroutine run_command
 
 !> True on Windows, which sets the variable `OS` to this value.
 logical function is_windows()
@@ -54,9 +66,9 @@ subroutine make_directory(path, stat)
     integer, intent(out) :: stat            !! nonzero on failure
 
     if (is_windows()) then
-        call execute_command_line('if not exist '//quoted_path(path)//' mkdir '//quoted_path(path), exitstat=stat)
+        call run_command('if not exist '//quoted_path(path)//' mkdir '//quoted_path(path), stat)
     else
-        call execute_command_line('mkdir -p '//quoted_path(path), exitstat=stat)
+        call run_command('mkdir -p '//quoted_path(path), stat)
     end if
 end subroutine make_directory
 
@@ -66,9 +78,9 @@ subroutine remove_directory(path)
     integer :: stat
 
     if (is_windows()) then
-        call execute_command_line('if exist '//quoted_path(path)//' rmdir /s /q '//quoted_path(path), exitstat=stat)
+        call run_command('if exist '//quoted_path(path)//' rmdir /s /q '//quoted_path(path), stat)
     else
-        call execute_command_line('rm -rf '//quoted_path(path), exitstat=stat)
+        call run_command('rm -rf '//quoted_path(path), stat)
     end if
 end subroutine remove_directory
 
@@ -79,9 +91,9 @@ subroutine copy_file(from, to, stat)
     integer, intent(out) :: stat            !! nonzero on failure
 
     if (is_windows()) then
-        call execute_command_line('copy /y '//quoted_path(from)//' '//quoted_path(to)//' >nul', exitstat=stat)
+        call run_command('copy /y '//quoted_path(from)//' '//quoted_path(to)//' >nul', stat)
     else
-        call execute_command_line('cp '//quoted_path(from)//' '//quoted_path(to), exitstat=stat)
+        call run_command('cp '//quoted_path(from)//' '//quoted_path(to), stat)
     end if
 end subroutine copy_file
 
@@ -94,9 +106,9 @@ subroutine copy_path(from, to, stat)
     if (.not. is_directory(from)) then
         call copy_file(from, to, stat)
     else if (is_windows()) then
-        call execute_command_line('xcopy '//quoted_path(from)//' '//quoted_path(to)//' /e /i /y /q >nul', exitstat=stat)
+        call run_command('xcopy '//quoted_path(from)//' '//quoted_path(to)//' /e /i /y /q >nul', stat)
     else
-        call execute_command_line('cp -R '//quoted_path(from)//' '//quoted_path(to), exitstat=stat)
+        call run_command('cp -R '//quoted_path(from)//' '//quoted_path(to), stat)
     end if
 end subroutine copy_path
 
@@ -106,9 +118,9 @@ logical function program_exists(name)
     integer :: stat
 
     if (is_windows()) then
-        call execute_command_line('where '//name//' >nul 2>nul', exitstat=stat)
+        call run_command('where '//name//' >nul 2>nul', stat)
     else
-        call execute_command_line('command -v '//name//' > /dev/null 2>&1', exitstat=stat)
+        call run_command('command -v '//name//' > /dev/null 2>&1', stat)
     end if
     program_exists = stat == 0
 end function program_exists
