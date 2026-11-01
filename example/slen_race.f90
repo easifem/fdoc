@@ -1,5 +1,5 @@
 module slen_race_module
-!! Shows a gfortran 15 problem in valid code: the length of a deferred-length function result is
+!! Shows a gfortran 15 and 16 problem in valid code, best seen at `-O0`: the length of a deferred-length function result is
 !! kept by the caller in static storage (`slen.N`, see `nm` on the object file), which threads share.
 !!
 !! An `intent(out)` deferred-length argument has no such variable. No compiler option or `recursive`

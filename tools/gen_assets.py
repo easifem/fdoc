@@ -4,18 +4,31 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-WIDTH = 96
+WIDTH = 110
 
 
 def literal(text: str):
-    """The Fortran expression for ``text``, as lines of a concatenation"""
-    chunks = [text[i : i + WIDTH] for i in range(0, len(text), WIDTH)]
+    """The Fortran expression for ``text``, as lines of a concatenation short enough for the standard"""
     lines = []
-    for chunk in chunks:
-        parts = []
-        for piece in chunk.split("\n"):
-            parts.append("'" + piece.replace("'", "''") + "'")
-        lines.append("//NL//".join(parts))
+    line = ""
+    quoted = False
+    for character in text:
+        if character == "\n":
+            if quoted:
+                line += "'"
+                quoted = False
+            line += ("//" if line else "") + "NL"
+        else:
+            if not quoted:
+                line += ("//" if line else "") + "'"
+                quoted = True
+            line += "''" if character == "'" else character
+        if len(line.encode("utf-8")) >= WIDTH:
+            lines.append(line + ("'" if quoted else ""))
+            line = ""
+            quoted = False
+    if line:
+        lines.append(line + ("'" if quoted else ""))
     return lines
 
 

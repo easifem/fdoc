@@ -1926,11 +1926,13 @@ subroutine write_entity_page(site, id, directory, stat)
     integer, intent(in) :: id                   !! the entity
     character(len=*), intent(in) :: directory   !! the directory of the site
     integer, intent(out) :: stat                !! nonzero on failure
-    character(len=:), allocatable :: html, url
+    character(len=:), allocatable :: html, url, errmsg
 
     call entity_page(site, id, html)
     call entity_url(site%p%list, id, url)
-    call file_write(directory//'/'//url, html, stat)
+    !$omp critical (file_io)
+    call write_file(directory//'/'//url, html, stat, errmsg)
+    !$omp end critical (file_io)
 end subroutine write_entity_page
 
 !> Write the whole site.
@@ -1975,7 +1977,8 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
 
     directory = s%output_dir
     call execute_command_line("mkdir -p '"//directory//"' && cd '"//directory// &
-                              "' && mkdir -p css js lists module proc type interface program blockdata namelist sourcefile search page", &
+                              "' && mkdir -p css js lists module proc type interface program blockdata "// &
+                              "namelist sourcefile search page", &
                               exitstat=stat)
     if (stat /= 0) then
         errmsg = 'could not create '//directory

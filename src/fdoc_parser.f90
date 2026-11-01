@@ -933,7 +933,9 @@ subroutine apply_attributes(list, id)
             end associate
         end do
         do k = 1, size(u%more%pending)
-            if (u%more%pending(k)%value == 'public' .and. len(u%more%pending(k)%name) > 0) call push(u%more%public_list, u%more%pending(k)%name)
+            if (u%more%pending(k)%value == 'public' .and. len(u%more%pending(k)%name) > 0) then
+                call push(u%more%public_list, u%more%pending(k)%name)
+            end if
         end do
         do c = 1, size(u%children)
             child = u%children(c)

@@ -31,8 +31,9 @@ module fdoc_fypp
 !! DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
 !! IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 !! OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+use ffmt_io, only: read_file
 use fdoc_buffer, only: buffer_t, add, take
-use fdoc_util, only: string_t, name_index_t, index_find, index_set, file_read
+use fdoc_util, only: string_t, name_index_t, index_find, index_set
 implicit none
 private
 
@@ -1092,10 +1093,12 @@ end subroutine close_block
 recursive subroutine parse_file(c, path)
     type(fypp_t), intent(inout) :: c        !! the state
     character(len=*), intent(in) :: path    !! the file
-    character(len=:), allocatable :: text
+    character(len=:), allocatable :: text, errmsg
     integer :: stat
 
-    call file_read(path, text, stat)
+    !$omp critical (file_io)
+    call read_file(path, text, stat, errmsg)
+    !$omp end critical (file_io)
     if (stat /= 0) then
         call fail(c, 'cannot read '//path)
         return

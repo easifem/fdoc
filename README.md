@@ -13,7 +13,7 @@ fdoc is in early development and has only been tested on macOS with gfortran. Se
 
 ## Getting started
 
-You need [gfortran](https://gcc.gnu.org/fortran/) 15 and [fpm](https://fpm.fortran-lang.org). [Graphviz](https://graphviz.org) is needed only for graphs.
+You need [gfortran](https://gcc.gnu.org/fortran/) 16 and [fpm](https://fpm.fortran-lang.org). [Graphviz](https://graphviz.org) is needed only for graphs.
 
 The easiest way to get all of these is [pixi](https://pixi.sh), which installs them for this repository:
 
@@ -124,9 +124,9 @@ Time to generate each project's documentation, using the project's own settings:
 | [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.3 s | 222× | 8.2 s | 0.2 s | 55× |
 | [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 50× | 6.8 s | 0.2 s | 38× |
 | [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 123× | 9.0 s | 0.1 s | 75× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.2 s | 143× | 25.3 s | 0.7 s | 38× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.4 s | 131× | 25.3 s | 0.9 s | 29× |
 
-Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 3.4 s against FORD's 690 s (200×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (50×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
+Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 3.8 s against FORD's 690 s (181×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (50×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
 
 Peak memory and the size of the site, with graphs:
 
@@ -135,11 +135,11 @@ Peak memory and the size of the site, with graphs:
 | fformat | 134 MB | 32 MB | 17 MB | 5 MB |
 | bspline-fortran | 175 MB | 32 MB | 17 MB | 5 MB |
 | rklib | 318 MB | 67 MB | 25 MB | 10 MB |
-| json-fortran | 310 MB | 82 MB | 83 MB | 30 MB |
-| Fortran-Astrodynamics-Toolkit | 197 MB | 49 MB | 31 MB | 9 MB |
-| qt-fortran | 425 MB | 131 MB | 100 MB | 33 MB |
+| json-fortran | 310 MB | 83 MB | 83 MB | 30 MB |
+| Fortran-Astrodynamics-Toolkit | 197 MB | 45 MB | 31 MB | 9 MB |
+| qt-fortran | 425 MB | 116 MB | 100 MB | 33 MB |
 
-Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
+Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 16.2, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
 
 The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Graphs take most of fdoc's time, and on projects with deep call chains, such as json-fortran, they limit the speedup.
 
@@ -169,6 +169,7 @@ pixi run test            # run the tests
 pixi run doc             # generate fdoc's own documentation in ./doc
 pixi run check-docs      # check that every routine and argument is documented
 pixi run check-threads   # check that code running in parallel is thread-safe
+pixi run check-standard  # check that the code is standard Fortran, with no extensions
 pixi run check-links doc # check the links of a generated site
 pixi run gen-assets      # regenerate src/fdoc_assets.f90 after changing assets/
 ```
@@ -184,11 +185,11 @@ pixi run compare markdown path/to/ford.md ...   # conversion of doc comments
 
 Every routine has an `!>` block and every argument an inline `!!`, which `check-docs` enforces.
 
-Code that runs in parallel must not call functions returning `character(len=:), allocatable`. gfortran 15 keeps the length of such a result in static storage, which threads share, so this gives wrong results in valid code. `example/slen_race.f90` shows the problem. Use an `intent(out)` argument, or a result with an explicit length, and `check-threads` will catch what gets through.
+Code that runs in parallel must not call functions returning `character(len=:), allocatable`. gfortran 15 and 16 keep the length of such a result in static storage, which threads share, so this gives wrong results in valid code. `example/slen_race.f90` shows the problem. Use an `intent(out)` argument, or a result with an explicit length, and `check-threads` will catch what gets through.
 
-Internal `read` and `write` statements are best kept out of busy parallel loops too. Each one takes a lock in libgfortran, and when the graph code used them, running it on several threads made it about ten times slower than running it on one. `int_text` turns an integer into text without the lock. Whole files also shouldn't go through functions in parallel code, as the temporary result can overflow a thread's stack.
+Internal `read` and `write` statements are best kept out of busy parallel loops too. Each one takes a lock in libgfortran, and on 10 threads a plain loop of them runs about 30 times slower than on one. `int_text` turns an integer into text without the lock. Whole files also shouldn't go through functions in parallel code, as the temporary result can overflow a thread's stack.
 
-Parallel code reads and writes files with `file_read` and `file_write`, which go through the C library. Fortran file I/O from several threads at once crashes in libgfortran about once in 60 runs of a large project, with a segfault in `check_for_recursive`. Anything else, such as `inquire`, goes inside `!$omp critical (file_io)`.
+File statements in parallel code go inside `!$omp critical (file_io)`. In libgfortran 16, file I/O from several threads at once can crash, even on separate units, with a segfault in `check_for_recursive`. `example/io_race.f90` shows the problem.
 
 ## Dependencies
 

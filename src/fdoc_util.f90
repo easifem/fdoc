@@ -1,6 +1,6 @@
 module fdoc_util
 !! String, date and path helpers shared by the rest of fdoc.
-use, intrinsic :: iso_c_binding, only: c_char, c_null_char, c_ptr, c_associated, c_null_ptr, c_size_t, c_f_pointer, c_int, c_long
+use, intrinsic :: iso_c_binding, only: c_char, c_null_char, c_ptr, c_associated, c_null_ptr, c_size_t, c_f_pointer
 use, intrinsic :: iso_fortran_env, only: int64
 use ffmt_strings, only: string_t, lowercase
 use ffmt_fs, only: absolute_path, join_path, parent_directory
@@ -9,7 +9,7 @@ private
 
 public :: string_t, lowercase
 public :: name_index_t, index_find, index_set
-public :: file_read, file_write
+public :: unique_tag
 public :: strip, starts_with, ends_with, split_lines, split_words, split_on, join, push, contains_string
 public :: parse_bool, parse_int, expand_vars, strftime, resolve_path, sort_strings
 public :: top_split, top_index, closing_paren, remove_blanks, starts_word, word_at, push_int
@@ -35,56 +35,6 @@ interface
         type(c_ptr), value :: p     !! the null-terminated string
         integer(c_size_t) :: n
     end function c_strlen
-    !> C `fopen`.
-    function c_fopen(path, mode) bind(c, name='fopen') result(stream)
-        import :: c_char, c_ptr
-        character(kind=c_char), intent(in) :: path(*)   !! the file
-        character(kind=c_char), intent(in) :: mode(*)   !! how to open it
-        type(c_ptr) :: stream
-    end function c_fopen
-
-    !> C `fclose`.
-    function c_fclose(stream) bind(c, name='fclose') result(status)
-        import :: c_ptr, c_int
-        type(c_ptr), value :: stream    !! the file
-        integer(c_int) :: status
-    end function c_fclose
-
-    !> C `fread`.
-    function c_fread(buffer, size, count, stream) bind(c, name='fread') result(done)
-        import :: c_char, c_ptr, c_size_t
-        character(kind=c_char), intent(out) :: buffer(*)    !! where the bytes go
-        integer(c_size_t), value :: size                    !! the size of an item
-        integer(c_size_t), value :: count                   !! how many items
-        type(c_ptr), value :: stream                        !! the file
-        integer(c_size_t) :: done
-    end function c_fread
-
-    !> C `fwrite`.
-    function c_fwrite(buffer, size, count, stream) bind(c, name='fwrite') result(done)
-        import :: c_char, c_ptr, c_size_t
-        character(kind=c_char), intent(in) :: buffer(*)     !! the bytes
-        integer(c_size_t), value :: size                    !! the size of an item
-        integer(c_size_t), value :: count                   !! how many items
-        type(c_ptr), value :: stream                        !! the file
-        integer(c_size_t) :: done
-    end function c_fwrite
-
-    !> C `fseek`.
-    function c_fseek(stream, offset, whence) bind(c, name='fseek') result(status)
-        import :: c_ptr, c_long, c_int
-        type(c_ptr), value :: stream        !! the file
-        integer(c_long), value :: offset    !! where to go
-        integer(c_int), value :: whence     !! what `offset` is from
-        integer(c_int) :: status
-    end function c_fseek
-
-    !> C `ftell`.
-    function c_ftell(stream) bind(c, name='ftell') result(position)
-        import :: c_ptr, c_long
-        type(c_ptr), value :: stream        !! the file
-        integer(c_long) :: position
-    end function c_ftell
 end interface
 
 
@@ -98,48 +48,17 @@ end type name_index_t
 
 contains
 
-!> Read all of file `path`, through the C library. Unlike Fortran's `open`, `read` and `write`, this can
-!> be used from parallel code: several threads doing file I/O in Fortran crash in libgfortran, about once
-!> in 60 runs of a large project, with a segmentation fault in `check_for_recursive`.
-subroutine file_read(path, text, stat)
-    character(len=*), intent(in) :: path                !! the file
-    character(len=:), allocatable, intent(out) :: text  !! its contents, or `''`
-    integer, intent(out) :: stat                        !! nonzero on failure
-    integer(c_int), parameter :: SEEK_SET = 0, SEEK_END = 2
-    type(c_ptr) :: stream
-    integer(c_long) :: size
-    integer(c_int) :: status
+!> A number, as text, that another run at the same time is very unlikely to get, for temporary names.
+subroutine unique_tag(tag)
+    character(len=*), intent(out) :: tag    !! the number
+    integer(int64) :: clock
+    real :: random
 
-    stat = 1
-    text = ''
-    stream = c_fopen(path//c_null_char, 'rb'//c_null_char)
-    if (.not. c_associated(stream)) return
-    status = c_fseek(stream, 0_c_long, SEEK_END)
-    size = c_ftell(stream)
-    status = c_fseek(stream, 0_c_long, SEEK_SET)
-    if (size > 0) then
-        deallocate (text)
-        allocate (character(len=size) :: text)
-        if (c_fread(text, 1_c_size_t, int(size, c_size_t), stream) == size) stat = 0
-    else if (size == 0) then
-        stat = 0
-    end if
-    status = c_fclose(stream)
-end subroutine file_read
-
-!> Replace the contents of file `path`, through the C library, so that this can be used from parallel code.
-subroutine file_write(path, text, stat)
-    character(len=*), intent(in) :: path    !! the file
-    character(len=*), intent(in) :: text    !! the new contents
-    integer, intent(out) :: stat            !! nonzero on failure
-    type(c_ptr) :: stream
-
-    stat = 1
-    stream = c_fopen(path//c_null_char, 'wb'//c_null_char)
-    if (.not. c_associated(stream)) return
-    if (c_fwrite(text, 1_c_size_t, len(text, c_size_t), stream) == len(text)) stat = 0
-    if (c_fclose(stream) /= 0) stat = 1
-end subroutine file_write
+    call random_init(repeatable=.false., image_distinct=.true.)
+    call random_number(random)
+    call system_clock(clock)
+    write (tag, '(i0,a,i0)') mod(clock, 1000000000_int64), '-', int(random*1.0e9)
+end subroutine unique_tag
 
 !> The hash of `name`, FNV-1a, as a position in `1:size`, where `size` is a power of 2.
 pure integer function name_hash(name, size)

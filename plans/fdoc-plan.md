@@ -7,6 +7,15 @@ its output, not only to the build. Code must not depend on a Unix shell or POSIX
 unless a tested alternative exists for each platform. It has only been tested on macOS so far; what
 stands in the way is listed in M9.
 
+**Requirement: portable, standard Fortran.** fdoc must be able to build with other compilers, such as
+ifx, though only gfortran is tested for now. Compiler extensions are not used, which `pixi run
+check-standard` checks with `-std=f2018`. C library routines are used only for what has no Fortran
+equivalent: sleeping (`usleep`), detecting a terminal (`isatty`), resolving paths (`realpath`, with
+`free` and `strlen`) and listing directories (`opendir`, `readdir`, `closedir`, in fformat).
+
+**Requirement: test in the pixi env.** The pixi env is what users run, so results count only from
+that configuration, with the exact compiler and runtime in `pixi.lock`.
+
 Goal: `fdoc ford.md` takes the same project file, flags and doc comments as FORD and produces a
 clean, modern HTML site, fast. It runs from a single Fortran binary with no Python at runtime.
 
@@ -24,7 +33,7 @@ All commands run in the pixi env and everything builds with fpm: `pixi run fpm b
 | Same parse on json-fortran | 18 ms |
 | Parallel parse with fformat 1.0.1 | **Not thread-safe**: heap corruption and wrong results, even with serial reads |
 | Parallel read + parse with fformat 1.0.2 | Correct: 40 runs of 8,969 files at 1–10 threads, plus debug and guard-page allocator runs |
-| gfortran 15.3 deferred-length function results under threads | **Compiler defect**: wrong lengths in valid code (`example/slen_race.f90`) |
+| gfortran 15.3 and 16.2 deferred-length function results under threads | **Compiler defect**: wrong lengths in valid code (`example/slen_race.f90`) |
 | Parse scaling (before the cause was known, so indicative only) | 2.9 s at 1 thread, 1.6 s at 2, 1.1 s at 4, ~1.5 s at 8+ (machine has 4 performance cores) |
 | Parallel writes (4,000 files) | Correct at 1–8 threads; speedup stops at 3–4 |
 
@@ -265,6 +274,10 @@ to Fypp's. A `preprocessor:` of `fypp` uses it. Deferred until a project needs t
 predefined variables such as `_LINE_`, and any Python beyond the expressions and functions it lists.
 What is not supported stops with an error naming it, and the file is read as it is, with a warning.
 
+- Measured on macOS arm64 with `example/io_race.f90`: Fortran file I/O from several threads, on
+  separate units, crashes in `check_for_recursive` with libgfortran 16.2, which is what the pixi env
+  uses (51 of 949 runs). File statements in parallel code go inside `!$omp critical (file_io)`.
+
 ### M9. Parity and handover
 
 - Full corpus runs clean; publish benchmark table.
@@ -279,8 +292,8 @@ What is not supported stops with an error naming it, and the file is read as it 
     `[ -d ... ]`, `command -v dot`, single quotes, and `/dev/null` (`fdoc_site`, `fdoc_graphs`,
     `fdoc_output`, `fdoc_project`, `fdoc_input`). Replace these with file operations in Fortran, or
     through the C library, rather than one command per platform.
-  - POSIX functions: `realpath`, `getpid`, `usleep` and `isatty` in fdoc, and `opendir`, `readdir`,
-    `closedir` and `getcwd` in fformat, need Windows equivalents.
+  - POSIX functions: `realpath`, `usleep` and `isatty` in fdoc, and `opendir`, `readdir`, `closedir`
+    and `getcwd` in fformat, need Windows equivalents.
   - Paths: backslashes, drive letters and case-insensitive names, in settings, `exclude` and URLs.
   - Text: CRLF line endings, and UTF-8 paths.
   - `execute_command_line(wait=.false.)` is expected to run in turn on Windows. Check that, and the

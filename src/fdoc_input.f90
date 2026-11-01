@@ -14,14 +14,6 @@ private
 
 public :: find_sources, load_source, expand_includes, is_fixed_form, needs_fypp, runs_command
 
-interface
-    !> C `getpid`.
-    function c_getpid() bind(c, name='getpid') result(pid)
-        import :: c_int
-        integer(c_int) :: pid
-    end function c_getpid
-end interface
-
 integer, parameter :: MAX_INCLUDE_DEPTH = 32
 
 contains
@@ -125,11 +117,10 @@ subroutine load_source(s, path, raw, text, stat, errmsg)
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
 
-    call file_read(path, raw, stat)
-    if (stat /= 0) then
-        errmsg = 'cannot read the file'
-        return
-    end if
+    !$omp critical (file_io)
+    call read_file(path, raw, stat, errmsg)
+    !$omp end critical (file_io)
+    if (stat /= 0) return
     text = raw
     if (needs_fypp(s, path)) then
         call fypp_source(s, path, text)
@@ -185,7 +176,7 @@ subroutine preprocess(s, path, text)
     allocate (character(len=n) :: directory)
     if (n > 0) call get_environment_variable('TMPDIR', directory)
     if (n == 0) directory = '/tmp'
-    write (tag, '(i0)') c_getpid()
+    call unique_tag(tag)
     output = join_path(directory, 'fdoc-'//trim(tag)//'.out')
     errors = join_path(directory, 'fdoc-'//trim(tag)//'.err')
     command = preprocessor_command(s, path)

@@ -33,12 +33,6 @@ character(len=*), parameter :: EDGE_COLOURS(*) = [character(len=7) :: '#3657c9',
                                                   '#6a4fb3', '#0b7285', '#a61e69', '#5c6f2d']
 
 interface
-    !> The identifier of this process.
-    function c_getpid() bind(c, name='getpid') result(pid)
-        import :: c_int
-        integer(c_int) :: pid
-    end function c_getpid
-
     !> Sleep for a while.
     function c_usleep(microseconds) bind(c, name='usleep') result(status)
         import :: c_int
@@ -471,6 +465,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     type(dot_file_t), allocatable :: files(:)
     integer, allocatable :: marked(:), roots(:)
     character(len=:), allocatable :: directory, text
+    character(len=32) :: tag
     logical :: any_wanted
     logical, allocatable :: found(:)
     integer :: k, n, stamp, depth, nodes, status, count_files
@@ -530,7 +525,8 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
 
     n = count_files
     if (n == 0) return
-    directory = s%output_dir//'/.graphs-'//trim(adjustl(number(int(c_getpid()))))
+    call unique_tag(tag)
+    directory = s%output_dir//'/.graphs-'//trim(tag)
     if (allocated(s%graph_dir)) directory = s%graph_dir
     call execute_command_line("rm -rf '"//directory//"' && mkdir -p '"//directory//"'", exitstat=status)
     do k = 1, n
@@ -538,7 +534,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
         if (stat /= 0) return
     end do
 
-    call run_batches(directory, n, max(1, s%parallel))
+    call run_batches(directory, trim(tag), n, max(1, s%parallel))
 
     deallocate (set%graphs)
     allocate (set%graphs(n))
@@ -978,11 +974,13 @@ subroutine load_graph(path, svg, found)
     character(len=*), intent(in) :: path                !! the file
     character(len=:), allocatable, intent(out) :: svg   !! the slimmed drawing
     logical, intent(out) :: found                       !! whether the file could be read
-    character(len=:), allocatable :: text
+    character(len=:), allocatable :: text, errmsg
     integer :: at, status
 
     svg = ''
-    call file_read(path, text, status)
+    !$omp critical (file_io)
+    call read_file(path, text, status, errmsg)
+    !$omp end critical (file_io)
     found = status == 0
     if (.not. found) return
     at = index(text, '<svg')
@@ -994,8 +992,9 @@ end subroutine load_graph
 !> commands are started without waiting, and each writes a file in `directory` when it ends. Where
 !> commands cannot be started without waiting, as on Windows, they run in turn with the same result.
 !> A batch whose first graph has gone counts as ended, as another run has replaced the directory.
-subroutine run_batches(directory, n, threads)
+subroutine run_batches(directory, tag, n, threads)
     character(len=*), intent(in) :: directory   !! the directory
+    character(len=*), intent(in) :: tag         !! what makes the names of this run's files unique
     integer, intent(in) :: n                    !! how many graphs there are
     integer, intent(in) :: threads              !! how many processes to run at once
     integer :: b, batches, started, finished, active
@@ -1014,19 +1013,19 @@ subroutine run_batches(directory, n, threads)
             started = started + 1
             running(started) = .true.
             active = active + 1
-            call remove_file(trim(batch_file(directory, started, 'done')))
-            call start_dot(directory, started, n)
+            call remove_file(trim(batch_file(directory, tag, started, 'done')))
+            call start_dot(directory, tag, started, n)
         end do
         do b = 1, started
             if (.not. running(b)) cycle
-            inquire (file=trim(batch_file(directory, b, 'done')), exist=ended)
+            inquire (file=trim(batch_file(directory, tag, b, 'done')), exist=ended)
             inquire (file=trim(file_name(directory, (b - 1)*BATCH + 1, '')), exist=present)
             if (present .and. .not. ended) cycle
             running(b) = .false.
             active = active - 1
             finished = finished + 1
-            call remove_file(trim(batch_file(directory, b, 'done')))
-            call remove_file(trim(batch_file(directory, b, 'err')))
+            call remove_file(trim(batch_file(directory, tag, b, 'done')))
+            call remove_file(trim(batch_file(directory, tag, b, 'err')))
             call progress_tick(min(n, b*BATCH) - (b - 1)*BATCH)
         end do
         status = c_usleep(POLL_MICROSECONDS)
@@ -1036,8 +1035,9 @@ end subroutine run_batches
 
 !> Start batch `which` of `n` graphs. The command works in both `sh` and `cmd.exe`, and ends by
 !> writing its file whether or not `dot` succeeds.
-subroutine start_dot(directory, which, n)
+subroutine start_dot(directory, tag, which, n)
     character(len=*), intent(in) :: directory   !! the directory
+    character(len=*), intent(in) :: tag         !! what makes the names of this run's files unique
     integer, intent(in) :: which                !! the batch
     integer, intent(in) :: n                    !! how many graphs there are
     type(buffer_t) :: b
@@ -1045,12 +1045,12 @@ subroutine start_dot(directory, which, n)
     character(len=:), allocatable :: done, errmsg
     integer :: k, status
 
-    done = trim(batch_file(directory, which, 'done'))
+    done = trim(batch_file(directory, tag, which, 'done'))
     call add(b, 'dot -Tsvg -O')
     do k = (which - 1)*BATCH + 1, min(n, which*BATCH)
         call add(b, ' "'//trim(file_name(directory, k, ''))//'"')
     end do
-    call add(b, ' 2> "'//trim(batch_file(directory, which, 'err'))//'" && echo ok> "'//done)
+    call add(b, ' 2> "'//trim(batch_file(directory, tag, which, 'err'))//'" && echo ok> "'//done)
     call add(b, '" || echo failed> "'//done//'"')
     call take(b, command)
     call execute_command_line(command, wait=.false., cmdstat=status)
@@ -1058,14 +1058,14 @@ subroutine start_dot(directory, which, n)
 end subroutine start_dot
 
 !> The file of batch `which` with extension `suffix`.
-function batch_file(directory, which, suffix) result(path)
+pure function batch_file(directory, tag, which, suffix) result(path)
     character(len=*), intent(in) :: directory   !! the directory
+    character(len=*), intent(in) :: tag         !! what makes the names of this run's files unique
     integer, intent(in) :: which                !! the batch
     character(len=*), intent(in) :: suffix      !! the extension
-    character(len=len(directory) + 30 + len(suffix)) :: path
+    character(len=len(directory) + len(tag) + 16 + len(suffix)) :: path
 
-    path = directory//'/b'//trim(adjustl(number(which)))//'-'//trim(adjustl(number(int(c_getpid()))))// &
-           '.'//suffix
+    path = directory//'/b'//trim(adjustl(number(which)))//'-'//tag//'.'//suffix
 end function batch_file
 
 !> Delete a file, if it can be.

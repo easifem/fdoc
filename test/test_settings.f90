@@ -4,7 +4,8 @@ use omp_lib, only: omp_get_num_procs
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_input, only: needs_fypp
 use fdoc_settings, only: settings_t, new_settings, set_option, check_settings, is_option
-use fdoc_util, only: name_index_t, index_find, index_set, file_read, file_write, string_t, resolve_path, expand_vars, split_lines, split_words, strip
+use fdoc_util, only: name_index_t, index_find, index_set, unique_tag, string_t, resolve_path, expand_vars, &
+                     split_lines, split_words, strip
 implicit none
 private
 
@@ -28,7 +29,7 @@ subroutine collect_settings(testsuite)
                 new_unittest("threads default to every core", test_threads), &
                 new_unittest("Fypp files are recognized", test_fypp), &
                 new_unittest("name index", test_name_index), &
-                new_unittest("reading and writing files", test_files), &
+                new_unittest("unique tags", test_unique_tag), &
                 new_unittest("line splitting", test_lines) &
                 ]
 end subroutine collect_settings
@@ -54,32 +55,15 @@ subroutine test_fypp(error)
     call check(error, .not. needs_fypp(s, 'a.f90'), 'other files are read as usual')
 end subroutine test_fypp
 
-!> Checks: files written and read back, with all bytes kept, and failures reported.
-subroutine test_files(error)
+!> Checks: tags for temporary names differ.
+subroutine test_unique_tag(error)
     type(error_type), allocatable, intent(out) :: error  !! the failure, if any
-    character(len=*), parameter :: PATH = 'build/test_file_io.txt'
-    character(len=*), parameter :: TEXT = 'a'//achar(10)//achar(13)//achar(0)//'b'
-    character(len=:), allocatable :: back
-    integer :: stat
+    character(len=32) :: first, second
 
-    call file_write(PATH, TEXT, stat)
-    call check(error, stat, 0)
-    if (allocated(error)) return
-    call file_read(PATH, back, stat)
-    call check(error, stat, 0)
-    if (allocated(error)) return
-    call check(error, back == TEXT .and. len(back) == len(TEXT), 'the bytes come back')
-    if (allocated(error)) return
-    call file_write(PATH, '', stat)
-    call file_read(PATH, back, stat)
-    call check(error, stat == 0 .and. len(back) == 0, 'an empty file')
-    if (allocated(error)) return
-    call file_read('build/no/such/file', back, stat)
-    call check(error, stat /= 0 .and. len(back) == 0, 'a missing file')
-    if (allocated(error)) return
-    call file_write('build/no/such/file', 'x', stat)
-    call check(error, stat /= 0, 'an unwritable file')
-end subroutine test_files
+    call unique_tag(first)
+    call unique_tag(second)
+    call check(error, len_trim(first) > 0 .and. first /= second)
+end subroutine test_unique_tag
 
 !> Checks: the hash table, as it grows.
 subroutine test_name_index(error)

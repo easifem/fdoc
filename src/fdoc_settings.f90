@@ -24,7 +24,8 @@ character(len=*), parameter :: PATH_OPTIONS = &
 character(len=*), parameter :: LOGICAL_OPTIONS = &
     ' coloured_edges dbg doxygen externalize fixed_length_limit force graph hide_undoc incl_src lower preprocess'// &
     ' print_creation_date proc_internals quiet search show_proc_parent source warn '
-character(len=*), parameter :: INTEGER_OPTIONS = ' graph_maxdepth graph_maxnodes graph_project_maxnodes max_frontpage_items parallel '
+character(len=*), parameter :: INTEGER_OPTIONS = &
+    ' graph_maxdepth graph_maxnodes graph_project_maxnodes max_frontpage_items parallel '
 character(len=*), parameter :: LIST_OPTIONS = &
     ' copy_subdir display exclude exclude_dir extensions extra_vartypes fixed_extensions fpp_extensions'// &
     ' html_template_dir include macro md_extensions src_dir '
