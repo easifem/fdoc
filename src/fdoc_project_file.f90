@@ -178,6 +178,11 @@ subroutine load_project(path, directory, s, body, stat, errmsg)
         errmsg = 'no project file: give one, or add an [extra.fdoc] table to fpm.toml'
         return
     end if
+    if (ends_with(file, 'fpm.toml')) then
+        stat = 1
+        errmsg = file//' has no [extra.fdoc] or [extra.ford] table: give the project file instead'
+        return
+    end if
     call parse_metadata(text, meta)
     body = join(meta%body, achar(10))
     do k = 1, size(meta%items)

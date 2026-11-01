@@ -25,7 +25,8 @@ subroutine collect_project_file(testsuite)
                 new_unittest("empty values", test_empty_value), &
                 new_unittest("no metadata", test_no_metadata), &
                 new_unittest("keys are lowercased", test_case), &
-                new_unittest("settings in fpm.toml", test_fpm_table) &
+                new_unittest("settings in fpm.toml", test_fpm_table), &
+                new_unittest("fpm.toml without a table", test_fpm_no_table) &
                 ]
 end subroutine collect_project_file
 
@@ -104,6 +105,22 @@ subroutine test_case(error)
     if (allocated(error)) return
     call check(error, m%items(1)%values(1)%s, 'Mixed Value')
 end subroutine test_case
+
+!> Checks: an `fpm.toml` given as the project file must have settings in it.
+subroutine test_fpm_no_table(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    character(len=*), parameter :: DIRECTORY = 'build/test_project_file_empty'
+    type(settings_t) :: s
+    character(len=:), allocatable :: body, msg
+    integer :: stat
+
+    call execute_command_line('mkdir -p '//DIRECTORY)
+    call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL, stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call load_project(DIRECTORY//'/fpm.toml', DIRECTORY, s, body, stat, msg)
+    call check(error, stat /= 0, 'no settings is an error')
+end subroutine test_fpm_no_table
 
 !> Checks: settings in fpm.toml.
 subroutine test_fpm_table(error)
