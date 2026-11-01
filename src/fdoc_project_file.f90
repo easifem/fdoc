@@ -5,16 +5,18 @@ module fdoc_project_file
 !! with values continued on lines indented by four or more blanks. Metadata ends at the first blank
 !! line, at an end marker, or at a line that fits neither form. The rest of the file is the text of
 !! the front page. An `[extra.ford]` table in `fpm.toml` next to the project file replaces its
-!! metadata, as in FORD; the text of the project file is then used whole.
-use iso_fortran_env, only: error_unit
+!! metadata, as in FORD; the text of the project file is then used whole. An `[extra.fdoc]` table does
+!! the same and comes first, and can give the front page: its text in `front_page`, or the Markdown
+!! file that holds it in `front_page_file`, relative to `fpm.toml`.
 use tomlf, only: toml_table, toml_array, toml_keyval, toml_key, toml_value, toml_error, toml_load, toml_loads, &
                  get_value, len
 use tomlf_constants, only: toml_type
 use ffmt_io, only: read_file
-use ffmt_fs, only: join_path
+use ffmt_fs, only: join_path, parent_directory
 use ffmt_strings, only: to_s
 use fdoc_util
 use fdoc_settings, only: settings_t, new_settings, set_option, is_option
+use fdoc_progress, only: warn
 implicit none
 private
 
@@ -133,26 +135,47 @@ logical function match_key(line, key, value)
     match_key = .true.
 end function match_key
 
-!> Read the settings and front page text of the project in file `path`.
+!> Read the settings and front page text of the project. Settings come from an `[extra.fdoc]` or
+!> `[extra.ford]` table in `fpm.toml` if there is one, and otherwise from the metadata of the project
+!> file. With no `path` the project file is `ford.md`, if it exists: `[extra.fdoc]` does not need one,
+!> as the text of the front page can be in its `front_page`, or the file named by `front_page_file`.
 subroutine load_project(path, directory, s, body, stat, errmsg)
-    character(len=*), intent(in) :: path                !! the project file
+    character(len=*), intent(in) :: path                !! the project file, or `''`
     character(len=*), intent(in) :: directory           !! its directory
     type(settings_t), intent(out) :: s                  !! the settings
     character(len=:), allocatable, intent(out) :: body  !! the front page text
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
     type(metadata_t) :: meta
-    character(len=:), allocatable :: text
-    logical :: found
+    character(len=:), allocatable :: text, file, front
+    logical :: found, exists
     integer :: k
 
     s = new_settings()
-    call read_file(path, text, stat, errmsg)
-    if (stat /= 0) return
-    call load_fpm_settings(join_path(directory, 'fpm.toml'), s, found, stat, errmsg)
+    stat = 0
+    file = path
+    if (len(file) == 0) then
+        inquire (file=join_path(directory, 'ford.md'), exist=exists)
+        if (exists) file = join_path(directory, 'ford.md')
+    end if
+    text = ''
+    if (len(file) > 0) then
+        call read_file(file, text, stat, errmsg)
+        if (stat /= 0) return
+    end if
+    call load_fpm_settings(join_path(directory, 'fpm.toml'), s, found, front, stat, errmsg)
     if (stat /= 0) return
     if (found) then
-        body = text
+        if (allocated(front)) then
+            body = front
+        else
+            body = text
+        end if
+        return
+    end if
+    if (len(file) == 0) then
+        stat = 1
+        errmsg = 'no project file: give one, or add an [extra.fdoc] table to fpm.toml'
         return
     end if
     call parse_metadata(text, meta)
@@ -160,28 +183,30 @@ subroutine load_project(path, directory, s, body, stat, errmsg)
     do k = 1, size(meta%items)
         associate (item => meta%items(k))
             if (.not. is_option(item%key)) then
-                write (error_unit, '(a)') "Warning: In '"//path//"': Ignoring unknown Ford metadata key '"//item%key//"'"
+                call warn("In '"//file//"': Ignoring unknown Ford metadata key '"//item%key//"'")
                 cycle
             end if
             call set_option(s, item%key, item%values, stat, errmsg)
             if (stat /= 0) then
-                errmsg = "Error parsing settings from '"//path//"': "//errmsg
+                errmsg = "Error parsing settings from '"//file//"': "//errmsg
                 return
             end if
         end associate
     end do
 end subroutine load_project
 
-!> Read the `[extra.ford]` table of `fpm.toml` file `path`, if there is one.
-subroutine load_fpm_settings(path, s, found, stat, errmsg)
+!> Read the `[extra.fdoc]` or `[extra.ford]` table of `fpm.toml` file `path`, if there is one.
+subroutine load_fpm_settings(path, s, found, front, stat, errmsg)
     character(len=*), intent(in) :: path                !! the file
     type(settings_t), intent(inout) :: s                !! the settings
-    logical, intent(out) :: found                       !! true if the table exists
+    logical, intent(out) :: found                       !! true if a table exists
+    character(len=:), allocatable, intent(out) :: front !! its `front_page`, if it has one
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
     type(toml_table), allocatable :: top
     type(toml_table), pointer :: extra, table
     type(toml_error), allocatable :: error
+    character(len=:), allocatable :: file
     logical :: exists
 
     stat = 0
@@ -196,9 +221,16 @@ subroutine load_fpm_settings(path, s, found, stat, errmsg)
     end if
     call get_value(top, 'extra', extra, requested=.false.)
     if (.not. associated(extra)) return
-    call get_value(extra, 'ford', table, requested=.false.)
+    call get_value(extra, 'fdoc', table, requested=.false.)
+    if (.not. associated(table)) call get_value(extra, 'ford', table, requested=.false.)
     if (.not. associated(table)) return
     found = .true.
+    call get_value(table, 'front_page', front)
+    call get_value(table, 'front_page_file', file)
+    if (allocated(file)) then
+        call read_file(join_path(parent_directory(path), file), front, stat, errmsg)
+        if (stat /= 0) return
+    end if
     call apply_table(table, s, stat, errmsg)
 end subroutine load_fpm_settings
 
@@ -236,8 +268,9 @@ subroutine apply_table(table, s, stat, errmsg)
     call table%get_keys(keys)
     do k = 1, size(keys)
         key = keys(k)%key
+        if (key == 'front_page' .or. key == 'front_page_file') cycle
         if (.not. is_option(key)) then
-            write (error_unit, '(a)') "Warning: Ignoring unknown Ford option '"//key//"'"
+            call warn("Ignoring unknown Ford option '"//key//"'")
             cycle
         end if
         call table%get(key, v)

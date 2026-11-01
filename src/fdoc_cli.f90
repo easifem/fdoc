@@ -37,9 +37,10 @@ contains
 function usage() result(text)
     character(len=:), allocatable :: text
     character, parameter :: NL = achar(10)
-    text = 'usage: fdoc [options] project_file'//NL//NL// &
+    text = 'usage: fdoc [options] [project_file]'//NL//NL// &
            'Document a program or library written in modern Fortran. Command line options override'//NL// &
-           'those in the project file.'//NL//NL// &
+           'those in the project file. Without one, settings come from an [extra.fdoc] or'//NL// &
+           '[extra.ford] table in fpm.toml, or from ford.md.'//NL//NL// &
            '  -d, --src_dir DIR        directory of source files (repeatable; default ./src)'//NL// &
            '  -p, --page_dir DIR       directory of static pages'//NL// &
            '  -o, --output_dir DIR     output directory (default ./doc)'//NL// &
@@ -146,9 +147,7 @@ subroutine parse_args(args, parsed, stat, errmsg)
         end select
         if (stat /= 0) return
     end do
-    if (parsed%action == ACTION_RUN .or. parsed%action == ACTION_DUMP .or. parsed%action == ACTION_DUMP_LINKS) then
-        if (.not. allocated(parsed%project_file)) call fail('the project file is required')
-    end if
+    if (.not. allocated(parsed%project_file)) parsed%project_file = ''
 
 contains
 

@@ -1,7 +1,9 @@
 module test_project_file
 !! Project file metadata, which must split exactly as FORD splits it.
 use testdrive, only: new_unittest, unittest_type, error_type, check
-use fdoc_project_file, only: parse_metadata, metadata_t
+use fdoc_project_file, only: parse_metadata, metadata_t, load_project
+use fdoc_settings, only: settings_t
+use ffmt_io, only: write_file
 use fdoc_util, only: join
 implicit none
 private
@@ -22,7 +24,8 @@ subroutine collect_project_file(testsuite)
                 new_unittest("repeated keys", test_repeated), &
                 new_unittest("empty values", test_empty_value), &
                 new_unittest("no metadata", test_no_metadata), &
-                new_unittest("keys are lowercased", test_case) &
+                new_unittest("keys are lowercased", test_case), &
+                new_unittest("settings in fpm.toml", test_fpm_table) &
                 ]
 end subroutine collect_project_file
 
@@ -101,5 +104,34 @@ subroutine test_case(error)
     if (allocated(error)) return
     call check(error, m%items(1)%values(1)%s, 'Mixed Value')
 end subroutine test_case
+
+!> Checks: settings in fpm.toml.
+subroutine test_fpm_table(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    character(len=*), parameter :: DIRECTORY = 'build/test_project_file'
+    type(settings_t) :: s
+    character(len=:), allocatable :: body, msg
+    integer :: stat
+
+    call execute_command_line('mkdir -p '//DIRECTORY)
+    call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL//'[extra.fdoc]'//NL//'project = "Mine"'//NL// &
+                    'front_page = "Hello"'//NL//'[extra.ford]'//NL//'project = "Not this"'//NL, stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call load_project('', DIRECTORY, s, body, stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call check(error, s%project, 'Mine', 'fdoc comes first')
+    if (allocated(error)) return
+    call check(error, body, 'Hello')
+    if (allocated(error)) return
+
+    call write_file(DIRECTORY//'/front.md', 'From a file', stat, msg)
+    call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL//'[extra.fdoc]'//NL//'front_page_file = "front.md"'//NL, stat, msg)
+    call load_project('', DIRECTORY, s, body, stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call check(error, body, 'From a file')
+end subroutine test_fpm_table
 
 end module test_project_file

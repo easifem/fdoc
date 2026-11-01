@@ -78,8 +78,8 @@ subroutine test_errors(error)
     call parse_args([string_t('-d')], a, stat, msg)
     call check(error, stat /= 0)
     if (allocated(error)) return
-    call parse_args([string_t('-w')], a, stat, msg)
-    call check(error, stat /= 0, 'a project file is required')
+    call parse_args([string_t('p'), string_t('q')], a, stat, msg)
+    call check(error, stat /= 0, 'only one project file')
 end subroutine test_errors
 
 !> Checks: version needs no project file.

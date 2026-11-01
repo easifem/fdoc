@@ -57,7 +57,8 @@ integer function run(args) result(status)
         return
     end if
 
-    directory = parent_directory(parsed%project_file)
+    directory = '.'
+    if (len(parsed%project_file) > 0) directory = parent_directory(parsed%project_file)
     call load_project(parsed%project_file, directory, s, body, stat, errmsg)
     if (stat == 0) call check_settings(s, stat, errmsg)
     if (stat == 0 .and. allocated(parsed%config)) call apply_toml_string(parsed%config, s, stat, errmsg)
