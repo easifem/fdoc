@@ -58,7 +58,7 @@ h2 { font-size: 1.3rem; margin: 2.4rem 0 .8rem; padding-bottom: .3rem; border-bo
 .crumbs { color: var(--muted); font-size: .88rem; margin-bottom: .3rem; }
 .kind { color: var(--muted); font-weight: 400; font-size: .62em; margin-right: .35rem; }
 .meta { display: flex; flex-wrap: wrap; gap: .3rem 1rem; color: var(--muted); font-size: .88rem; margin: .4rem 0 1.1rem; }
-.lead { font-size: 1.1rem; color: var(--muted); margin: .2rem 0 1.4rem; }
+.lead { font-size: 1.05rem; color: var(--muted); margin: .1rem 0 .4rem; }
 .lead p { margin: 0; }
 code, pre, .sig { font-family: var(--mono); font-size: .875em; }
 :not(pre) > code { background: var(--bg-code); padding: .1em .3em; border-radius: 4px; }
@@ -96,10 +96,10 @@ details.source { margin: 1rem 0; } details.source summary { cursor: pointer; col
   border-radius: 5px; padding: 0 .45rem; }
 .listing td:first-child { font-family: var(--mono); font-size: .9em; white-space: nowrap; }
 .listing td p { margin: 0; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .9rem; margin: 1.2rem 0; }
-.card { border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; color: var(--text); }
+.grid { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0 1.2rem; }
+.card { border: 1px solid var(--line); border-radius: 999px; padding: .05rem .65rem; color: var(--text); font-size: .84rem; white-space: nowrap; }
 .card:hover { border-color: var(--accent); text-decoration: none; }
-.card b { display: block; font-size: 1.4rem; } .card span { color: var(--muted); font-size: .88rem; }
+.card b { margin-right: .3rem; font-weight: 650; } .card span { color: var(--muted); }
 pre.source { padding-left: 0; counter-reset: line; line-height: 1.45; }
 .ln { display: inline-block; width: 3.6em; margin-right: 1em; text-align: right; color: var(--muted); opacity: .6; user-select: none; }
 .ln::before { counter-increment: line; content: counter(line); }
