@@ -134,10 +134,13 @@ aside.tree ul ul { margin-left: .8rem; }
   width: 1.6rem; height: 1.6rem; cursor: pointer; margin-left: .2rem; }
 .arguments td.name, .arguments td.type { width: auto; }
 td.attributes { font-family: var(--mono); font-size: .84em; }
-td.default { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; }
+td.default { font-family: var(--mono); font-size: .84em; min-width: 11rem; max-width: 15rem; overflow-wrap: anywhere; }
+@media (min-width: 1400px) {
+  .arguments td.type { white-space: nowrap; }
+}
 @media (min-width: 1100px) {
-  .arguments td.name, .arguments td.type, .arguments td.attributes { white-space: nowrap; }
-  .arguments td:last-child { min-width: 14rem; }
+  .arguments td.name, .arguments td.attributes { white-space: nowrap; }
+  .arguments td:last-child { min-width: 12rem; }
   .inner:has(.arguments) { max-width: 72rem; }
   .inner:has(.arguments) > .doc, .inner:has(.arguments) > .sig { max-width: 54rem; }
   main { overflow-x: auto; }

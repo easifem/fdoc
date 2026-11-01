@@ -119,22 +119,23 @@ subroutine asset_fdoc_css(b)
         //'ackground: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 5px;'//NL//'  ' &
         //'width: 1.6rem; height: 1.6rem; cursor: pointer; margin-left: .2rem; }'//NL//'.arguments td.name, .argum' &
         //'ents td.type { width: auto; }'//NL//'td.attributes { font-family: var(--mono); font-size: .84em; }'//NL//'td.d' &
-        //'efault { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; }'//NL//'@media (min-wi' &
-        //'dth: 1100px) {'//NL//'  .arguments td.name, .arguments td.type, .arguments td.attributes { white-space:' &
-        //' nowrap; }'//NL//'  .arguments td:last-child { min-width: 14rem; }'//NL//'  .inner:has(.arguments) { max-width' &
-        //': 72rem; }'//NL//'  .inner:has(.arguments) > .doc, .inner:has(.arguments) > .sig { max-width: 54rem; }'//NL//'' &
-        //'  main { overflow-x: auto; }'//NL//'}'//NL//'.attr { --h: 220; --s: 12%; display: inline-block; margin: 0 .25r' &
-        //'em .15rem 0; padding: 0 .4rem; border-radius: 4px;'//NL//'  font: 600 .74rem/1.55 var(--mono); color: h' &
-        //'sl(var(--h), var(--s), var(--attr-l));'//NL//'  background: hsla(var(--h), var(--s), var(--attr-l), .12' &
-        //'); border: 1px solid hsla(var(--h), var(--s), var(--attr-l), .35); }'//NL//'.attr-in, .attr-out, .attr-' &
-        //'inout, .attr-optional, .attr-pointer, .attr-allocatable, .attr-value, .attr-target,'//NL//'.attr-dimens' &
-        //'ion, .attr-contiguous, .attr-volatile, .attr-asynchronous, .attr-save, .attr-parameter,'//NL//'.attr-pr' &
-        //'otected, .attr-codimension, .attr-private { --s: 62%; }'//NL//'.attr-in { --h: 210; } .attr-out { --h: ' &
-        //'25; } .attr-inout { --h: 275; }'//NL//'.attr-optional { --h: 180; } .attr-pointer { --h: 0; } .attr-all' &
-        //'ocatable { --h: 125; } .attr-value { --h: 45; }'//NL//'.attr-target { --h: 325; } .attr-dimension { --h' &
-        //': 85; } .attr-contiguous { --h: 150; } .attr-volatile { --h: 345; }'//NL//'.attr-asynchronous { --h: 30' &
-        //'0; } .attr-save { --h: 60; } .attr-parameter { --h: 195; } .attr-protected { --h: 240; }'//NL//'.attr-c' &
-        //'odimension { --h: 105; }'//NL//'.graph text { stroke: none; }'//NL//'.attr-private { --h: 15; --s: 40%; }'//NL//'')
+        //'efault { font-family: var(--mono); font-size: .84em; min-width: 11rem; max-width: 15rem; overflo' &
+        //'w-wrap: anywhere; }'//NL//'@media (min-width: 1400px) {'//NL//'  .arguments td.type { white-space: nowrap; }'//NL//'}' &
+        //''//NL//'@media (min-width: 1100px) {'//NL//'  .arguments td.name, .arguments td.attributes { white-space: nowr' &
+        //'ap; }'//NL//'  .arguments td:last-child { min-width: 12rem; }'//NL//'  .inner:has(.arguments) { max-width: 72r' &
+        //'em; }'//NL//'  .inner:has(.arguments) > .doc, .inner:has(.arguments) > .sig { max-width: 54rem; }'//NL//'  mai' &
+        //'n { overflow-x: auto; }'//NL//'}'//NL//'.attr { --h: 220; --s: 12%; display: inline-block; margin: 0 .25rem .1' &
+        //'5rem 0; padding: 0 .4rem; border-radius: 4px;'//NL//'  font: 600 .74rem/1.55 var(--mono); color: hsl(va' &
+        //'r(--h), var(--s), var(--attr-l));'//NL//'  background: hsla(var(--h), var(--s), var(--attr-l), .12); bo' &
+        //'rder: 1px solid hsla(var(--h), var(--s), var(--attr-l), .35); }'//NL//'.attr-in, .attr-out, .attr-inout' &
+        //', .attr-optional, .attr-pointer, .attr-allocatable, .attr-value, .attr-target,'//NL//'.attr-dimension, ' &
+        //'.attr-contiguous, .attr-volatile, .attr-asynchronous, .attr-save, .attr-parameter,'//NL//'.attr-protect' &
+        //'ed, .attr-codimension, .attr-private { --s: 62%; }'//NL//'.attr-in { --h: 210; } .attr-out { --h: 25; }' &
+        //' .attr-inout { --h: 275; }'//NL//'.attr-optional { --h: 180; } .attr-pointer { --h: 0; } .attr-allocata' &
+        //'ble { --h: 125; } .attr-value { --h: 45; }'//NL//'.attr-target { --h: 325; } .attr-dimension { --h: 85;' &
+        //' } .attr-contiguous { --h: 150; } .attr-volatile { --h: 345; }'//NL//'.attr-asynchronous { --h: 300; } ' &
+        //'.attr-save { --h: 60; } .attr-parameter { --h: 195; } .attr-protected { --h: 240; }'//NL//'.attr-codime' &
+        //'nsion { --h: 105; }'//NL//'.graph text { stroke: none; }'//NL//'.attr-private { --h: 15; --s: 40%; }'//NL//'')
 end subroutine asset_fdoc_css
 
 !> The contents of `assets/fdoc.js`.
