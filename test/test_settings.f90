@@ -2,6 +2,7 @@ module test_settings
 !! Conversion of options from text, and their checks.
 use omp_lib, only: omp_get_num_procs
 use testdrive, only: new_unittest, unittest_type, error_type, check
+use fdoc_input, only: needs_fypp
 use fdoc_settings, only: settings_t, new_settings, set_option, check_settings, is_option
 use fdoc_util, only: string_t, resolve_path, expand_vars, split_lines, split_words, strip
 implicit none
@@ -25,9 +26,31 @@ subroutine collect_settings(testsuite)
                 new_unittest("paths", test_paths), &
                 new_unittest("project graph limit", test_project_nodes), &
                 new_unittest("threads default to every core", test_threads), &
+                new_unittest("Fypp is not run", test_fypp), &
                 new_unittest("line splitting", test_lines) &
                 ]
 end subroutine collect_settings
+
+!> Checks: files that would go through Fypp are found, and other preprocessors are left alone.
+subroutine test_fypp(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(settings_t) :: s
+    character(len=:), allocatable :: msg
+    integer :: stat
+
+    s = new_settings()
+    call set_option(s, 'fpp_extensions', [string_t('fypp')], stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call check(error, .not. needs_fypp(s, 'a.fypp'), 'the default preprocessor is not Fypp')
+    if (allocated(error)) return
+    call set_option(s, 'preprocessor', [string_t('fypp')], stat, msg)
+    call check(error, stat, 0)
+    if (allocated(error)) return
+    call check(error, needs_fypp(s, 'a.fypp'))
+    if (allocated(error)) return
+    call check(error, .not. needs_fypp(s, 'a.f90'), 'other files are read as usual')
+end subroutine test_fypp
 
 !> Checks: `parallel` uses every core unless it is set.
 subroutine test_threads(error)

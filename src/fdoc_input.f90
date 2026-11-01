@@ -11,7 +11,7 @@ use fdoc_progress, only: warn
 implicit none
 private
 
-public :: find_sources, load_source, expand_includes, is_fixed_form
+public :: find_sources, load_source, expand_includes, is_fixed_form, needs_fypp
 
 interface
     !> C `getpid`.
@@ -39,8 +39,16 @@ logical function is_fixed_form(s, path)
     is_fixed_form = contains_string(s%fixed_extensions, extension_of(path))
 end function is_fixed_form
 
-!> The source files of the project, sorted, without those excluded. Fixed-form files are left out
-!> with a warning, as they are not supported yet.
+!> True if `path` would go through Fypp, which is Python, and so is not run.
+logical function needs_fypp(s, path)
+    type(settings_t), intent(in) :: s       !! the settings
+    character(len=*), intent(in) :: path    !! the file
+    needs_fypp = s%preprocess .and. starts_word(s%preprocessor, 'fypp') .and. &
+                 contains_string(s%fpp_extensions, extension_of(path))
+end function needs_fypp
+
+!> The source files of the project, sorted, without those excluded. Fixed-form and Fypp files are left
+!> out with a warning, as they are not supported yet.
 subroutine find_sources(s, files)
     type(settings_t), intent(in) :: s                       !! the settings
     type(string_t), allocatable, intent(out) :: files(:)    !! paths of the files
@@ -66,6 +74,10 @@ subroutine find_sources(s, files)
                 .not. contains_string(s%extensions, extension_of(found(k)%s))) then
                 skipped = skipped + 1
                 call warn('skipping fixed-form file (not supported yet): '//found(k)%s)
+                keep = .false.
+            end if
+            if (keep .and. needs_fypp(s, found(k)%s)) then
+                call warn('skipping Fypp file (not supported yet): '//found(k)%s)
                 keep = .false.
             end if
             if (keep) call push(files, found(k)%s)

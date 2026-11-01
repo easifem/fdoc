@@ -253,6 +253,13 @@ nesting, for example).
 add fixed-form lexing to fformat if practical, otherwise a fixed→free pass in `fdoc_fixed`; either
 way doc comments and line numbers must survive.
 
+**Fypp is deferred too.** fdoc does not call external Python programs, and `fypp` is one. Files that
+would go through a `preprocessor:` of `fypp` are skipped with a warning naming them, so a project like
+stdlib is documented only in part for now. The future work item is to read Fypp sources in Fortran,
+either a Fortran implementation of the parts of Fypp that real projects use, or a pass that expands
+its directives; either way `#:def`, `#:for`, `#:if` and macro calls such as `${...}$` must work, as
+stdlib depends on them, and doc comments and line numbers must survive.
+
 ### M9. Parity and handover
 
 - Full corpus runs clean; publish benchmark table.
@@ -281,6 +288,7 @@ Targets, not results. `pixi run bench` tracks them from M2 on.
 - `html_template_dir` is not supported, because there are no Jinja templates.
 - `md_extensions` beyond the built-ins can't load Python extensions; they warn and are skipped.
 - `preprocessor: pcpp` runs through gfortran.
+- `preprocessor: fypp` is not run, as it is Python: those files are skipped with a warning (see M8).
 - Generated HTML differs in markup, so user CSS that targets FORD's classes needs rewriting.
 
 ## 8. Risks
@@ -289,7 +297,7 @@ Targets, not results. `pixi run bench` tracks them from M2 on.
 |---|---|
 | Markdown dialect edge cases are the largest source of visible bugs | Differential tests against Python-Markdown on the real corpus from day one |
 | Corpus is mostly one author's style | Add third-party projects (stdlib, fpm, toml-f) at M2 |
-| Fypp sources: fformat tokenizes them but they aren't valid Fortran | Match FORD: require `preprocessor:`; test with stdlib |
+| Fypp sources aren't valid Fortran, and Fypp is Python | Skip them with a warning; reading them in Fortran is future work (see M8) |
 | Scaling past 4 threads is unknown; earlier numbers were affected by the defect | Reuse buffers in parallel stages; measure at M4 |
 | gfortran-only behavior | Only gfortran is supported through the pixi env for v1 |
 | Windows: `win-64` is in `pixi.toml`, but `ffmt_fs` binds POSIX `opendir`/`readdir`, untested there | Test at M0. If it fails, drop `win-64` until v1 or fix upstream |
