@@ -68,13 +68,17 @@ subroutine progress_start(name, steps)
     if (live) call draw()
 end subroutine progress_start
 
-!> Count one step. This can be called from any thread.
-subroutine progress_tick()
+!> Count a step, or `steps` of them. This can be called from any thread.
+subroutine progress_tick(steps)
+    integer, intent(in), optional :: steps  !! how many steps
     integer(int64) :: now
+    integer :: amount
 
     if (.not. enabled) return
+    amount = 1
+    if (present(steps)) amount = steps
     !$omp atomic
-    done = done + 1
+    done = done + amount
     if (.not. live .or. omp_get_thread_num() /= 0) return
     call system_clock(now)
     if ((now - last_draw)*1000 < REDRAW_MILLISECONDS*rate) return

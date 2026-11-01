@@ -81,7 +81,7 @@ integer function run(args) result(status)
         status = 1
         return
     end if
-    call progress_start('Connecting entities', 0)
+    call progress_start('Connecting entities', p%list%n)
     call correlate(p, s)
     call link_project(p)
     call prune(p, s)

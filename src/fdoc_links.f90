@@ -4,6 +4,7 @@ use json_module, only: json_core, json_value
 use fdoc_util
 use fdoc_model
 use fdoc_project, only: project_t, find_symbol
+use fdoc_progress, only: progress_tick
 implicit none
 private
 
@@ -18,6 +19,7 @@ subroutine link_project(p)
 
     n = p%list%n
     do k = 1, n
+        call progress_tick()
         if (allocated(p%list%box(k)%e%external_url)) cycle
         select case (p%list%box(k)%e%kind)
         case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)

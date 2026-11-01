@@ -471,13 +471,14 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
         return
     end if
 
-    call progress_start('Finding dependencies', 0)
+    call progress_start('Finding dependencies', size(members))
     call build_relations(p, relations)
     allocate (marked(p%list%n), files(0))
     count_files = 0
     marked = 0
     stamp = 0
     do k = 1, size(members)
+        call progress_tick()
         associate (id => members(k))
             if (.not. graphs_wanted(p, s, id, depth, nodes)) cycle
             select case (p%list%box(id)%e%kind)
@@ -637,11 +638,11 @@ subroutine run_batches(directory, n, threads)
     integer :: b, batches
 
     batches = (n + BATCH - 1)/BATCH
-    call progress_start('Laying out graphs', batches)
+    call progress_start('Laying out graphs', n)
     !$omp parallel do schedule(dynamic) num_threads(threads) default(shared) private(b)
     do b = 1, batches
         call run_dot(directory, (b - 1)*BATCH + 1, min(n, b*BATCH))
-        call progress_tick()
+        call progress_tick(min(n, b*BATCH) - (b - 1)*BATCH)
     end do
     !$omp end parallel do
     call progress_finish()
