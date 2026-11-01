@@ -2,6 +2,7 @@ module fdoc_graphs
 !! Dependency graphs: which modules use which, what procedures call, how types extend each other and
 !! how files depend on each other. Graphs are written in Graphviz's language and laid out by `dot`, in
 !! batches of files, so that a process does not have to start for each graph.
+use iso_c_binding, only: c_int
 use iso_fortran_env, only: int64
 use ffmt_io, only: read_file, write_file
 use fdoc_util
@@ -24,10 +25,26 @@ integer, parameter :: NUM_RELATIONS = 4
 
 integer, parameter :: BATCH = 25             !! graphs for one `dot` process
 integer, parameter :: MAX_PROJECT_NODES = 400   !! larger graphs of a whole project are left out
+integer(c_int), parameter :: POLL_MICROSECONDS = 2000   !! how often to look for finished batches
 
 character(len=*), parameter :: EDGE_COLOUR = '#8a93a5'
 character(len=*), parameter :: EDGE_COLOURS(*) = [character(len=7) :: '#3657c9', '#1d7a55', '#a15c00', '#b3261e', &
                                                   '#6a4fb3', '#0b7285', '#a61e69', '#5c6f2d']
+
+interface
+    !> The identifier of this process.
+    function c_getpid() bind(c, name='getpid') result(pid)
+        import :: c_int
+        integer(c_int) :: pid
+    end function c_getpid
+
+    !> Sleep for a while.
+    function c_usleep(microseconds) bind(c, name='usleep') result(status)
+        import :: c_int
+        integer(c_int), value :: microseconds   !! how long to sleep
+        integer(c_int) :: status
+    end function c_usleep
+end interface
 
 type :: int_list_t
     !! A list of entities.
@@ -511,7 +528,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
 
     n = count_files
     if (n == 0) return
-    directory = s%output_dir//'/.graphs'
+    directory = s%output_dir//'/.graphs-'//trim(adjustl(number(int(c_getpid()))))
     if (allocated(s%graph_dir)) directory = s%graph_dir
     call execute_command_line("rm -rf '"//directory//"' && mkdir -p '"//directory//"'", exitstat=status)
     do k = 1, n
@@ -850,40 +867,92 @@ pure function pack_blanks(text) result(out)
     out = text(:stop_at - 1)//adjustl(text(stop_at:))
 end function pack_blanks
 
-!> Lay out `n` graphs, in batches. The directory is an argument with a plain length because a
-!> deferred-length string does not work when it is shared with a parallel region.
+!> Lay out `n` graphs, in batches, running up to `threads` processes at once. This uses a single
+!> thread, as `execute_command_line` runs only one waiting command at a time on some systems. The
+!> commands are started without waiting, and each writes a file in `directory` when it ends. Where
+!> commands cannot be started without waiting, as on Windows, they run in turn with the same result.
+!> A batch whose first graph has gone counts as ended, as another run has replaced the directory.
 subroutine run_batches(directory, n, threads)
     character(len=*), intent(in) :: directory   !! the directory
     integer, intent(in) :: n                    !! how many graphs there are
-    integer, intent(in) :: threads              !! how many threads to use
-    integer :: b, batches
+    integer, intent(in) :: threads              !! how many processes to run at once
+    integer :: b, batches, started, finished, active
+    integer(c_int) :: status
+    logical :: ended, present
+    logical, allocatable :: running(:)
 
     batches = (n + BATCH - 1)/BATCH
+    allocate (running(batches), source=.false.)
+    started = 0
+    finished = 0
+    active = 0
     call progress_start('Laying out graphs', n)
-    !$omp parallel do schedule(dynamic) num_threads(threads) default(shared) private(b)
-    do b = 1, batches
-        call run_dot(directory, (b - 1)*BATCH + 1, min(n, b*BATCH))
-        call progress_tick(min(n, b*BATCH) - (b - 1)*BATCH)
+    do while (finished < batches)
+        do while (started < batches .and. active < threads)
+            started = started + 1
+            running(started) = .true.
+            active = active + 1
+            call remove_file(trim(batch_file(directory, started, 'done')))
+            call start_dot(directory, started, n)
+        end do
+        do b = 1, started
+            if (.not. running(b)) cycle
+            inquire (file=trim(batch_file(directory, b, 'done')), exist=ended)
+            inquire (file=trim(file_name(directory, (b - 1)*BATCH + 1, '')), exist=present)
+            if (present .and. .not. ended) cycle
+            running(b) = .false.
+            active = active - 1
+            finished = finished + 1
+            call remove_file(trim(batch_file(directory, b, 'done')))
+            call remove_file(trim(batch_file(directory, b, 'err')))
+            call progress_tick(min(n, b*BATCH) - (b - 1)*BATCH)
+        end do
+        status = c_usleep(POLL_MICROSECONDS)
     end do
-    !$omp end parallel do
     call progress_finish()
 end subroutine run_batches
 
-!> Lay out graphs `first` to `last`.
-subroutine run_dot(directory, first, last)
+!> Start batch `which` of `n` graphs. The command works in both `sh` and `cmd.exe`, and ends by
+!> writing its file whether or not `dot` succeeds.
+subroutine start_dot(directory, which, n)
     character(len=*), intent(in) :: directory   !! the directory
-    integer, intent(in) :: first                !! the first graph
-    integer, intent(in) :: last                 !! the last graph
+    integer, intent(in) :: which                !! the batch
+    integer, intent(in) :: n                    !! how many graphs there are
     type(buffer_t) :: b
     character(len=:), allocatable :: command
+    character(len=:), allocatable :: done, errmsg
     integer :: k, status
 
-    call add(b, "cd '"//directory//"' && dot -Tsvg -O")
-    do k = first, last
-        call add(b, ' g'//trim(number(k))//'.gv')
+    done = trim(batch_file(directory, which, 'done'))
+    call add(b, 'dot -Tsvg -O')
+    do k = (which - 1)*BATCH + 1, min(n, which*BATCH)
+        call add(b, ' "'//trim(file_name(directory, k, ''))//'"')
     end do
+    call add(b, ' 2> "'//trim(batch_file(directory, which, 'err'))//'" && echo ok> "'//done)
+    call add(b, '" || echo failed> "'//done//'"')
     call take(b, command)
-    call execute_command_line(command//' 2> /dev/null', exitstat=status)
-end subroutine run_dot
+    call execute_command_line(command, wait=.false., cmdstat=status)
+    if (status > 0) call write_file(done, 'failed', status, errmsg)
+end subroutine start_dot
+
+!> The file of batch `which` with extension `suffix`.
+function batch_file(directory, which, suffix) result(path)
+    character(len=*), intent(in) :: directory   !! the directory
+    integer, intent(in) :: which                !! the batch
+    character(len=*), intent(in) :: suffix      !! the extension
+    character(len=len(directory) + 30 + len(suffix)) :: path
+
+    path = directory//'/b'//trim(adjustl(number(which)))//'-'//trim(adjustl(number(int(c_getpid()))))// &
+           '.'//suffix
+end function batch_file
+
+!> Delete a file, if it can be.
+subroutine remove_file(path)
+    character(len=*), intent(in) :: path    !! the file
+    integer :: unit, status
+
+    open (newunit=unit, file=path, status='old', iostat=status)
+    if (status == 0) close (unit, status='delete', iostat=status)
+end subroutine remove_file
 
 end module fdoc_graphs

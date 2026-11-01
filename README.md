@@ -2,7 +2,7 @@
 
 A documentation generator for modern Fortran, written in modern Fortran.
 
-fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 10 to 70 times faster.
+fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 20 to 100 times faster.
 
 * **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
 * **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, so existing links keep working.
@@ -117,12 +117,12 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.05 s | 1.15 s | 24× | 3.10 s | 0.10 s | 31× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.75 s | 0.74 s | 31× | 6.51 s | 0.16 s | 41× |
-| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.26 s | 0.92 s | 68× | 8.23 s | 0.45 s | 18× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.49 s | 6.14 s | 11× | 6.79 s | 0.22 s | 31× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.33 s | 1.64 s | 37× | 8.97 s | 0.30 s | 30× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 6.59 s | 48× | 25.27 s | 0.75 s | 34× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.05 s | 0.61 s | 44× | 3.10 s | 0.10 s | 31× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.75 s | 0.46 s | 49× | 6.51 s | 0.16 s | 41× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.26 s | 0.67 s | 92× | 8.23 s | 0.45 s | 18× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.49 s | 3.22 s | 20× | 6.79 s | 0.22 s | 31× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.33 s | 0.88 s | 69× | 8.97 s | 0.30 s | 30× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 3.14 s | 100× | 25.27 s | 0.75 s | 34× |
 
 Peak memory and the size of the site, with graphs:
 
@@ -137,7 +137,7 @@ Peak memory and the size of the site, with graphs:
 
 Measured on an Apple M5 with 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
 
-The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Most of the remaining time in fdoc is `dot` laying out graphs. On projects with deep call chains, such as json-fortran, that is what limits the speedup.
+The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Graphs take most of fdoc's time, and on projects with deep call chains, such as json-fortran, they limit the speedup.
 
 To run them yourself:
 
@@ -152,7 +152,7 @@ pixi run bench path/to/ford.md ...
 3. **Parsing** runs in parallel. [fformat](https://github.com/jacobwilliams/fformat) splits each file into tokens and statements and works out its structure, and fdoc reads the declarations and doc comments from those.
 4. **Linking** connects names across the project: `use` statements, inheritance, interfaces, bindings and calls.
 5. **Markdown** is converted to HTML in parallel, by a converter that follows the dialect of Python-Markdown.
-6. **Graphs** are built and given to `dot` in batches, so that it doesn't start once for each graph, and the SVG is then rewritten to take half the space.
+6. **Graphs** are built and given to `dot` in batches, so that it doesn't start once for each graph. Several batches run at once, and the SVG is then rewritten to take half the space.
 7. **Pages** are rendered in parallel and written out.
 
 ## Development
