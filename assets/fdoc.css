@@ -43,6 +43,7 @@ aside.side ul { list-style: none; margin: 0; padding: 0; }
 aside.side li a { display: block; padding: .12rem .5rem; margin-left: -.5rem; border-radius: 5px; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 aside.side li a:hover { background: var(--bg-soft); text-decoration: none; }
+aside.side li a.more { color: var(--muted); }
 main { padding: 2rem 2.5rem 4rem; min-width: 0; }
 main > .inner { max-width: 54rem; }
 h1, h2, h3, h4 { line-height: 1.25; font-weight: 650; }
@@ -108,3 +109,15 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
   main { padding: 1.25rem 1rem 3rem; }
 }
 @media print { header.top, aside.side, .theme, .copy { display: none; } .layout { display: block; } }
+.search { position: relative; flex: 0 1 15rem; }
+.search input { width: 100%; height: 2rem; padding: 0 .6rem; color: var(--text); background: var(--bg-soft);
+  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: .88rem; }
+.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.search .results { display: none; position: absolute; top: 2.4rem; right: 0; width: min(30rem, 90vw); max-height: 70vh;
+  overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.results a, .search-page a { display: block; padding: .45rem .7rem; color: var(--text); border-bottom: 1px solid var(--line); }
+.results a:hover, .results a.on, .search-page a:hover { background: var(--accent-soft); text-decoration: none; }
+.results b, .search-page b { font-family: var(--mono); font-size: .88rem; font-weight: 600; }
+.results small, .search-page small { display: block; color: var(--muted); }
+aside.tree ul ul { margin-left: .8rem; }

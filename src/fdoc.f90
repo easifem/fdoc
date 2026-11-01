@@ -13,6 +13,7 @@ use fdoc_links, only: link_project, dump_links
 use fdoc_markdown, only: markdown_to_html, markdown_options_t
 use fdoc_docs, only: base_options, render_documentation, render_text, collect_abbreviations
 use fdoc_site, only: assign_pages, write_site
+use fdoc_pages, only: load_pages, page_t
 use fdoc_progress, only: progress_enable, progress_start, progress_finish, progress_summary
 use json_module, only: json_core, json_value
 implicit none
@@ -29,6 +30,7 @@ integer function run(args) result(status)
     type(settings_t), target :: s
     type(project_t), target :: p
     type(markdown_options_t) :: options, front_options
+    type(page_t), allocatable :: static(:)
     character(len=:), allocatable :: errmsg, body, directory, front
     character(len=16) :: count_text
     integer :: stat, pages
@@ -95,7 +97,8 @@ integer function run(args) result(status)
     call base_options(s, '.', front_options)
     if (allocated(options%abbreviations)) front_options%abbreviations = options%abbreviations
     call render_text(p, front_options, 0, '', body, front)
-    call write_site(p, s, front, pages, stat, errmsg)
+    call load_pages(p, s, options, static)
+    call write_site(p, s, front, static, pages, stat, errmsg)
     if (stat == 0 .and. s%externalize) call write_modules(p, s, stat, errmsg)
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg

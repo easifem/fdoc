@@ -4,6 +4,7 @@ use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_cli, only: args_t, parse_args, ACTION_VERSION
 use fdoc_util, only: string_t
 use fdoc_progress, only: bar_text
+use fdoc_pages, only: page_file
 implicit none
 private
 
@@ -19,7 +20,8 @@ subroutine collect_cli(testsuite)
                 new_unittest("forms of option values", test_forms), &
                 new_unittest("errors", test_errors), &
                 new_unittest("version needs no project file", test_version), &
-                new_unittest("progress bar", test_bar) &
+                new_unittest("progress bar", test_bar), &
+                new_unittest("names of static pages", test_page_names) &
                 ]
 end subroutine collect_cli
 
@@ -108,5 +110,14 @@ subroutine test_bar(error)
     call bar_text(9, 4, 20, filled, unfilled, percent)
     call check(error, filled, 20, 'more steps than expected must not overflow the bar')
 end subroutine test_bar
+
+!> Checks: names of static pages.
+subroutine test_page_names(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+
+    call check(error, page_file('index.md'), 'index.html')
+    if (allocated(error)) return
+    call check(error, page_file('CI.yml.md'), 'CI.html')
+end subroutine test_page_names
 
 end module test_cli

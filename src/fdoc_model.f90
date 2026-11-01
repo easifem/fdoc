@@ -86,6 +86,8 @@ type, public :: entity_t
     character(len=:), allocatable :: external_url  !! where it is documented, if in another project
     character(len=:), allocatable :: page       !! the name of its page, unique in its directory, if it has one
     character(len=:), allocatable :: source_text !! the text of a file, as it is
+    integer :: source_first = 0                 !! where its code starts in the text of its file, if found
+    integer :: source_last = 0                  !! where its code ends
 
     ! containers
     type(use_t), allocatable :: uses(:)         !! its `use` statements

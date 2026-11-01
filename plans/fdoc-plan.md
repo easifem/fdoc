@@ -222,6 +222,10 @@ nesting, for example).
   optional, well under FORD's 7.1 MB for json-fortran.
 - `modules.json` export finalized and checked by loading it from a real FORD project and vice
   versa.
+- **Reached.** Static pages match FORD's file set on json-fortran's `pages/`, tried with `-p pages`
+  because no local project sets `page_dir`. The search index is 64 KB against FORD's 7.1 MB, is a
+  script so that it works from `file://`, and does not hold full text. FORD reads fdoc's
+  `modules.json` and fdoc reads FORD's; `http` projects were tried against a local server.
 
 ### M7. Graphs
 

@@ -8,6 +8,8 @@ use fdoc_buffer
 use fdoc_model
 use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t
+use fdoc_pages, only: page_t
+use json_module, only: json_core, json_value
 use fdoc_urls, only: entity_url, object_word, page_name, url_quote
 use fdoc_highlight, only: highlight_fortran
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
@@ -38,6 +40,7 @@ type :: site_t
     type(settings_t), pointer :: s => null()    !! the settings
     type(index_list_t), allocatable :: members(:)   !! the entities of each list page
     character(len=:), allocatable :: footer     !! the end of every page
+    type(page_t), pointer :: pages(:) => null() !! the static pages
 end type site_t
 
 contains
@@ -382,10 +385,195 @@ subroutine page_head(site, title, here, prefix, math, b)
             call add(b, '<a'//trim(merge(' class="here"', '             ', k == here))//' href="'//prefix//'lists/'// &
                      trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a>')
         end do
-        call add(b, '</nav>'//achar(10)//'<button class="theme" title="Change theme" aria-label="Change theme">&#9680;</button>')
+        if (size(site%pages) > 0) then
+            call add(b, '<a href="'//prefix//'page/index.html">')
+            call html_escape(site%pages(1)%title, b, .false.)
+            call add(b, '</a>')
+        end if
+        call add(b, '</nav>'//achar(10))
+        if (s%search) then
+            call add(b, '<div class="search"><input type="search" placeholder="Search (/)" aria-label="Search">')
+            call add(b, '<div class="results"></div></div>'//achar(10))
+        end if
+        call add(b, '<button class="theme" title="Change theme" aria-label="Change theme">&#9680;</button>')
         call add(b, achar(10)//'</header>'//achar(10)//'<div class="layout">'//achar(10))
     end associate
 end subroutine page_head
+
+!> Render static page `k`.
+subroutine static_page(site, k, html)
+    type(site_t), intent(in) :: site                    !! the site
+    integer, intent(in) :: k                            !! the page
+    character(len=:), allocatable, intent(out) :: html  !! the HTML
+    type(buffer_t) :: b
+    character(len=:), allocatable :: prefix
+    integer :: j
+
+    associate (page => site%pages(k))
+        prefix = repeat('../', page%depth + 1)
+        call page_head(site, page%title, 0, prefix, index(page%html, 'math/tex') > 0, b)
+        call add(b, '<aside class="side tree">'//achar(10)//'<ul>')
+        call page_links(site, 0, prefix, b)
+        call add(b, '</ul>'//achar(10)//'</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
+        if (page%parent > 0) then
+            call add(b, '<div class="crumbs">')
+            j = page%parent
+            call add(b, '<a href="'//prefix//'page/'//site%pages(j)%path//'">')
+            call html_escape(site%pages(j)%title, b, .false.)
+            call add(b, '</a></div>'//achar(10))
+        end if
+        call add(b, '<h1>')
+        call html_escape(page%title, b, .false.)
+        call add(b, '</h1>'//achar(10))
+        if (allocated(page%author) .or. allocated(page%date)) then
+            call add(b, '<div class="meta">')
+            if (allocated(page%author)) then
+                call add(b, '<span>')
+                call html_escape(page%author, b, .false.)
+                call add(b, '</span>')
+            end if
+            if (allocated(page%date)) then
+                call add(b, '<span>')
+                call html_escape(page%date, b, .false.)
+                call add(b, '</span>')
+            end if
+            call add(b, '</div>'//achar(10))
+        end if
+        call add(b, '<div class="doc">'//achar(10))
+        call add(b, page%html)
+        call add(b, achar(10)//'</div>'//achar(10))
+        call page_foot(site, b)
+    end associate
+    call take(b, html)
+end subroutine static_page
+
+!> Write the pages below page `parent`, or the top one if that is 0, as a tree of links.
+recursive subroutine page_links(site, parent, prefix, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: parent           !! the page
+    character(len=*), intent(in) :: prefix  !! from the current page to the root of the site
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    do k = 1, size(site%pages)
+        if (site%pages(k)%parent /= parent) cycle
+        call add(b, '<li><a href="'//prefix//'page/'//site%pages(k)%path//'">')
+        call html_escape(site%pages(k)%title, b, .false.)
+        call add(b, '</a>')
+        if (any(site%pages%parent == k)) then
+            call add(b, '<ul>')
+            call page_links(site, k, prefix, b)
+            call add(b, '</ul>')
+        end if
+        call add(b, '</li>')
+    end do
+end subroutine page_links
+
+!> Render the search results page.
+subroutine search_page(site, html)
+    type(site_t), intent(in) :: site                    !! the site
+    character(len=:), allocatable, intent(out) :: html  !! the HTML
+    type(buffer_t) :: b
+
+    call page_head(site, 'Search', 0, '', .false., b)
+    call add(b, '<aside class="side">'//achar(10))
+    call site_side(site, 0, '', .false., b)
+    call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<h1>Search</h1>'//achar(10))
+    call add(b, '<p class="search-count"></p><div class="search-page"></div>'//achar(10))
+    call page_foot(site, b)
+    call take(b, html)
+end subroutine search_page
+
+!> `html` as plain text of at most `limit` characters, with blanks collapsed.
+subroutine plain_text(html, limit, out)
+    character(len=*), intent(in) :: html                !! the HTML
+    integer, intent(in) :: limit                        !! the length wanted
+    character(len=:), allocatable, intent(out) :: out   !! the text
+    type(buffer_t) :: b
+    logical :: in_tag, blank
+    integer :: k
+
+    in_tag = .false.
+    blank = .false.
+    do k = 1, len(html)
+        associate (c => html(k:k))
+            if (c == '<') then
+                in_tag = .true.
+            else if (c == '>' .and. in_tag) then
+                in_tag = .false.
+            else if (.not. in_tag) then
+                if (c == ' ' .or. c == achar(10)) then
+                    blank = b%n > 0
+                else
+                    if (blank) call add(b, ' ')
+                    blank = .false.
+                    call add(b, c)
+                end if
+            end if
+        end associate
+        if (b%n >= limit) exit
+    end do
+    call take(b, out)
+end subroutine plain_text
+
+!> The search index, as a script: browsers do not let a page opened from a file read JSON.
+subroutine search_index(site, text)
+    type(site_t), intent(in) :: site                    !! the site
+    character(len=:), allocatable, intent(out) :: text  !! the script
+    type(json_core) :: json
+    type(json_value), pointer :: root
+    character(len=:), allocatable :: url, summary, json_text, word
+    integer :: k, which, j
+
+    call json%initialize(no_whitespace=.true.)
+    call json%create_array(root, '')
+    do which = 1, NUM_LISTS
+        do j = 1, size(site%members(which)%ids)
+            k = site%members(which)%ids(j)
+            associate (e => site%p%list%box(k)%e)
+                call entity_url(site%p%list, k, url)
+                summary = ''
+                if (allocated(e%summary)) call plain_text(e%summary, 140, summary)
+                word = trim(LIST_TITLE(which))
+                if (e%kind == E_SUBROUTINE) word = 'subroutine'
+                if (e%kind == E_FUNCTION) word = 'function'
+                if (e%kind == E_INTERFACE) word = 'interface'
+                if (e%kind == E_TYPE) word = 'type'
+                if (e%kind == E_MODULE) word = 'module'
+                if (e%kind == E_SUBMODULE) word = 'submodule'
+                if (e%kind == E_PROGRAM) word = 'program'
+                if (e%kind == E_FILE) word = 'file'
+                call add_entry(display_name(e), url, word, summary)
+            end associate
+        end do
+    end do
+    do k = 1, size(site%pages)
+        call plain_text(site%pages(k)%html, 140, summary)
+        call add_entry(site%pages(k)%title, 'page/'//site%pages(k)%path, 'page', summary)
+    end do
+    call json%serialize(root, json_text)
+    call json%destroy(root)
+    text = 'window.FDOC_INDEX='//json_text//';'//achar(10)
+
+contains
+
+    !> Add an entry.
+    subroutine add_entry(title, link, kind, description)
+        character(len=*), intent(in) :: title       !! what it is called
+        character(len=*), intent(in) :: link        !! where it is
+        character(len=*), intent(in) :: kind        !! what it is
+        character(len=*), intent(in) :: description !! a line about it
+        type(json_value), pointer :: item
+
+        call json%create_object(item, '')
+        call json%add(item, 't', title)
+        call json%add(item, 'u', link)
+        call json%add(item, 'k', kind)
+        call json%add(item, 's', description)
+        call json%add(root, item)
+    end subroutine add_entry
+
+end subroutine search_index
 
 !> Write the end of a page.
 subroutine page_foot(site, b)
@@ -715,20 +903,17 @@ subroutine calls_section(site, id, b)
 end subroutine calls_section
 
 !> Write the source of entity `id`, if `source` is set, from the text of its file.
-subroutine source_section(site, id, keyword, b)
+subroutine source_section(site, id, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the procedure or type
-    character(len=*), intent(in) :: keyword !! the word that opens it
     type(buffer_t), intent(inout) :: b      !! the HTML
-    integer :: first, last
 
     if (.not. wants_source(site, id)) return
     associate (e => site%p%list%box(id)%e)
-        call find_source(site%p%list%box(e%file)%e%source_text, keyword, lowercase(e%name), first, last)
-        if (first == 0) return
+        if (e%source_first == 0) return
         call add(b, '<h2 id="source">Source</h2>'//achar(10)//'<details class="source"><summary>Show the code</summary>')
         call add(b, '<pre><code>')
-        call highlight_fortran(site%p%list%box(e%file)%e%source_text(first:last), b, .false.)
+        call highlight_fortran(site%p%list%box(e%file)%e%source_text(e%source_first:e%source_last), b, .false.)
         call add(b, '</code></pre></details>'//achar(10))
     end associate
 end subroutine source_section
@@ -750,20 +935,53 @@ logical function wants_source(site, id)
     end associate
 end function wants_source
 
-!> Find the text of the construct `keyword name` in `text`, from its first line to its `end` line.
-subroutine find_source(text, keyword, name, first, last)
-    character(len=*), intent(in) :: text    !! the file
+!> Find the code of each procedure and type in the text of its file. Entities are in source order, so
+!> each search starts where the last one found something, and each file is read about once.
+subroutine locate_sources(site)
+    type(site_t), intent(inout) :: site     !! the site
+    character(len=:), allocatable :: low, keyword
+    integer :: k, file, cursor, first, last
+
+    file = 0
+    cursor = 1
+    do k = 1, site%p%list%n
+        associate (e => site%p%list%box(k)%e)
+            select case (e%kind)
+            case (E_SUBROUTINE); keyword = 'subroutine'
+            case (E_FUNCTION); keyword = 'function'
+            case (E_TYPE); keyword = 'type'
+            case default; cycle
+            end select
+            if (allocated(e%external_url) .or. .not. e%visible) cycle
+            if (.not. wants_source(site, k)) cycle
+            if (e%file /= file) then
+                file = e%file
+                low = lowercase(site%p%list%box(file)%e%source_text)
+                cursor = 1
+            end if
+            call find_source(low, cursor, keyword, lowercase(e%name), first, last)
+            if (first == 0 .and. cursor > 1) call find_source(low, 1, keyword, lowercase(e%name), first, last)
+            if (first == 0) cycle
+            e%source_first = first
+            e%source_last = last
+            cursor = first
+        end associate
+    end do
+end subroutine locate_sources
+
+!> Find the text of the construct `keyword name` in `low`, from its first line to its `end` line.
+subroutine find_source(low, start, keyword, name, first, last)
+    character(len=*), intent(in) :: low     !! the file, in lowercase
+    integer, intent(in) :: start            !! where to start
     character(len=*), intent(in) :: keyword !! `subroutine`, `function` or `type`
     character(len=*), intent(in) :: name    !! the name, in lowercase
     integer, intent(out) :: first           !! where it starts, or 0
     integer, intent(out) :: last            !! where it ends
-    character(len=len(text)) :: low
     integer :: i, j, stop_at, at, comment
 
     first = 0
     last = 0
-    low = lowercase(text)
-    i = 1
+    i = start
     do while (i <= len(low))
         j = index(low(i:), achar(10))
         stop_at = merge(len(low), i + j - 2, j == 0)
@@ -864,15 +1082,13 @@ subroutine entity_page(site, id, html)
         call side_group(site, 'Subroutines', subroutines, side)
         call side_group(site, 'Module procedures', implementations, side)
         call side_group(site, 'Bindings', bindings, side)
+        call page_outline(site, id, side)
         call take(side, text)
 
         call page_head(site, display_name(e), here, '../', uses_math(site, id), b)
         call add(b, '<aside class="side">'//achar(10))
-        if (len(text) > 0) then
-            call add(b, text)
-        else
-            call site_side(site, here, '../', b)
-        end if
+        if (len(text) > 0) call add(b, text)
+        call site_side(site, here, '../', .false., b)
         call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
         call entity_title(site, id, word, b)
 
@@ -1044,7 +1260,7 @@ subroutine procedure_body(site, id, b)
         end if
         call uses_section(site, id, b)
         call calls_section(site, id, b)
-        call source_section(site, id, merge('function  ', 'subroutine', e%kind == E_FUNCTION), b)
+        call source_section(site, id, b)
     end associate
 end subroutine procedure_body
 
@@ -1137,7 +1353,7 @@ subroutine type_body(site, id, variables, bindings, finals, b)
             end do
             call add(b, '</ul>'//achar(10))
         end if
-        call source_section(site, id, 'type', b)
+        call source_section(site, id, b)
     end associate
 end subroutine type_body
 
@@ -1168,11 +1384,37 @@ subroutine file_body(site, id, b)
     end associate
 end subroutine file_body
 
-!> Write the links to the list pages, for the sidebar of pages without an outline of their own.
-subroutine site_side(site, here, prefix, b)
+!> Write the sections of a procedure page, for the sidebar.
+subroutine page_outline(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (e => site%p%list%box(id)%e)
+        if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION .and. e%kind /= E_MODPROC) return
+        call add(b, '<h4>On this page</h4><ul>')
+        if (allocated(e%arg_ids)) then
+            if (size(e%arg_ids) > 0) call add(b, '<li><a href="#arguments">Arguments</a></li>')
+        end if
+        if (e%result > 0) call add(b, '<li><a href="#result">Result</a></li>')
+        if (allocated(e%uses)) then
+            if (size(e%uses) > 0) call add(b, '<li><a href="#uses">Uses</a></li>')
+        end if
+        if (allocated(e%call_ids)) then
+            if (size(e%call_ids) > 0) call add(b, '<li><a href="#calls">Calls</a></li>')
+        end if
+        if (e%source_first > 0) call add(b, '<li><a href="#source">Source</a></li>')
+        call add(b, '</ul>'//achar(10))
+    end associate
+end subroutine page_outline
+
+!> Write the links to the list pages, for the sidebar. To keep pages small only a list page holds a
+!> whole list: others show the first `max_frontpage_items` entries.
+subroutine site_side(site, here, prefix, full, b)
     type(site_t), intent(in) :: site            !! the site
     integer, intent(in) :: here                 !! the current list page, or 0
     character(len=*), intent(in) :: prefix      !! from the page to the root of the site
+    logical, intent(in) :: full                 !! true to show all of the current list
     type(buffer_t), intent(inout) :: b          !! the HTML
     character(len=:), allocatable :: url
     integer :: k, shown, limit
@@ -1182,7 +1424,8 @@ subroutine site_side(site, here, prefix, b)
         call add(b, '<h4><a href="'//prefix//'lists/'//trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a></h4>')
         if (k /= here .and. here /= 0) cycle
         call add(b, '<ul>')
-        limit = merge(size(site%members(k)%ids), min(site%s%max_frontpage_items, size(site%members(k)%ids)), k == here)
+        limit = min(site%s%max_frontpage_items, size(site%members(k)%ids))
+        if (full .and. k == here) limit = size(site%members(k)%ids)
         do shown = 1, limit
             associate (id => site%members(k)%ids(shown))
                 call entity_url(site%p%list, id, url)
@@ -1193,6 +1436,10 @@ subroutine site_side(site, here, prefix, b)
                 call add(b, '</a></li>')
             end associate
         end do
+        if (limit < size(site%members(k)%ids)) then
+            call add(b, '<li><a class="more" href="'//prefix//'lists/'//trim(LIST_FILE(k))//'.html">All '// &
+                     trim(number(size(site%members(k)%ids)))//'&hellip;</a></li>')
+        end if
         call add(b, '</ul>'//achar(10))
     end do
 end subroutine site_side
@@ -1208,7 +1455,7 @@ subroutine list_page(site, which, html)
 
     call page_head(site, trim(LIST_TITLE(which)), which, '../', .false., b)
     call add(b, '<aside class="side">'//achar(10))
-    call site_side(site, which, '../', b)
+    call site_side(site, which, '../', .true., b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
     call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
     call add(b, '<table class="listing">'//achar(10)//'<tbody>'//achar(10))
@@ -1240,7 +1487,7 @@ subroutine index_page(site, front, html)
     associate (s => site%s)
         call page_head(site, s%project, 0, '', index(front, 'math/tex') > 0, b)
         call add(b, '<aside class="side">'//achar(10))
-        call site_side(site, 0, '', b)
+        call site_side(site, 0, '', .false., b)
         call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<h1>')
         call html_escape(s%project, b, .false.)
         call add(b, '</h1>'//achar(10))
@@ -1340,11 +1587,39 @@ subroutine license_text(license, b)
     call add(b, '<a rel="license" href="'//url//'">'//name//'</a>')
 end subroutine license_text
 
+!> Create the directories of the static pages.
+subroutine page_directories(directory, pages)
+    character(len=*), intent(in) :: directory   !! the output directory
+    type(page_t), intent(in) :: pages(:)        !! the pages
+    integer :: k, at
+
+    do k = 1, size(pages)
+        at = index(pages(k)%path, '/', back=.true.)
+        if (at > 0) call execute_command_line("mkdir -p '"//directory//"/page/"//pages(k)%path(:at - 1)//"'")
+    end do
+end subroutine page_directories
+
+!> Copy the files and directories that static pages list.
+subroutine copy_page_files(s, directory, pages)
+    type(settings_t), intent(in) :: s           !! the settings
+    character(len=*), intent(in) :: directory   !! the output directory
+    type(page_t), intent(in) :: pages(:)        !! the pages
+    integer :: k, j
+
+    do k = 1, size(pages)
+        do j = 1, size(pages(k)%copies)
+            call execute_command_line("cp -R '"//s%page_dir//"/"//pages(k)%copies(j)%s//"' '"//directory//"/page/"// &
+                                      pages(k)%copies(j)%s//"'")
+        end do
+    end do
+end subroutine copy_page_files
+
 !> Write the whole site.
-subroutine write_site(p, s, front, count, stat, errmsg)
+subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     type(project_t), intent(inout), target :: p         !! the project
     type(settings_t), intent(in), target :: s           !! the settings
     character(len=*), intent(in) :: front               !! the project file's text as HTML
+    type(page_t), intent(in), target :: pages_in(:)     !! the static pages
     integer, intent(out) :: count                       !! how many pages were written
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg !! what is wrong
@@ -1353,19 +1628,22 @@ subroutine write_site(p, s, front, count, stat, errmsg)
     integer, allocatable :: ids(:)
     character(len=:), allocatable :: url, directory
     type(buffer_t) :: b
-    integer :: k, n
+    integer :: k, n, extra
 
     site%p => p
     site%s => s
+    site%pages => pages_in
     call collect_lists(site)
     call make_footer(s, site%footer)
+    call locate_sources(site)
 
     allocate (ids(0))
     do k = 1, p%list%n
         if (has_page(site, k)) call push_int(ids, k)
     end do
     n = size(ids)
-    allocate (pages(n + NUM_LISTS + 1), paths(n + NUM_LISTS + 1))
+    extra = size(pages_in) + 1
+    allocate (pages(n + NUM_LISTS + 1 + extra), paths(n + NUM_LISTS + 1 + extra))
     count = 0
 
     call progress_start('Rendering pages', n)
@@ -1385,15 +1663,22 @@ subroutine write_site(p, s, front, count, stat, errmsg)
     end do
     paths(n + NUM_LISTS + 1)%s = 'index.html'
     call index_page(site, front, pages(n + NUM_LISTS + 1)%s)
+    do k = 1, size(pages_in)
+        paths(n + NUM_LISTS + 1 + k)%s = 'page/'//pages_in(k)%path
+        call static_page(site, k, pages(n + NUM_LISTS + 1 + k)%s)
+    end do
+    paths(size(paths))%s = 'search.html'
+    if (s%search) call search_page(site, pages(size(paths))%s)
 
     directory = s%output_dir
     call execute_command_line("mkdir -p '"//directory//"' && cd '"//directory// &
-                              "' && mkdir -p css js lists module proc type interface program blockdata namelist sourcefile", &
+                              "' && mkdir -p css js lists module proc type interface program blockdata namelist sourcefile search page", &
                               exitstat=stat)
     if (stat /= 0) then
         errmsg = 'could not create '//directory
         return
     end if
+    call page_directories(directory, pages_in)
     call progress_start('Writing files', size(pages))
     do k = 1, size(pages)
         call progress_tick()
@@ -1411,6 +1696,12 @@ subroutine write_site(p, s, front, count, stat, errmsg)
     call take(b, url)
     call write_file(directory//'/js/fdoc.js', url, stat, errmsg)
     if (stat /= 0) return
+    if (s%search) then
+        call search_index(site, url)
+        call write_file(directory//'/search/index.js', url, stat, errmsg)
+        if (stat /= 0) return
+    end if
+    call copy_page_files(s, directory, pages_in)
     if (allocated(s%css)) call execute_command_line("cp '"//s%css//"' '"//directory//"/css/user.css'")
     if (allocated(s%favicon)) call execute_command_line("cp '"//s%favicon//"' '"//directory//"/favicon.png'")
     if (allocated(s%media_dir)) then
