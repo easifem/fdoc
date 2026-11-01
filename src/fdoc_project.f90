@@ -1,12 +1,12 @@
 module fdoc_project
 !! The whole project: loads and parses the files, merges them into one list of entities, and
 !! connects the entities with each other.
-use iso_fortran_env, only: error_unit
 use json_module, only: json_core, json_value
 use fdoc_util
 use fdoc_model
 use fdoc_settings, only: settings_t
 use fdoc_input, only: find_sources, load_source
+use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
 use fdoc_parser, only: parse_file
 implicit none
 private
@@ -74,20 +74,26 @@ subroutine load_project_sources(s, p, stat, errmsg)
         return
     end if
     allocate (texts(size(paths)), lists(size(paths)), raws(size(paths)))
+    call progress_start('Reading files', size(paths))
     do k = 1, size(paths)
         call load_source(s, paths(k)%s, raws(k)%s, texts(k)%s, ios, msg)
         if (ios /= 0) then
-            write (error_unit, '(a)') 'Warning: could not read '//paths(k)%s//': '//msg
+            call warn('could not read '//paths(k)%s//': '//msg)
             texts(k)%s = ''
             raws(k)%s = ''
         end if
+        call progress_tick()
     end do
+    call progress_finish()
 
+    call progress_start('Parsing files', size(paths))
     !$omp parallel do schedule(dynamic) num_threads(max(1, s%parallel)) default(shared)
     do k = 1, size(paths)
         call parse_file(paths(k)%s, texts(k)%s, s, lists(k))
+        call progress_tick()
     end do
     !$omp end parallel do
+    call progress_finish()
 
     do k = 1, size(lists)
         call move_alloc(raws(k)%s, lists(k)%box(1)%e%source_text)
@@ -192,7 +198,7 @@ subroutine load_external_project(p, s, url)
         call execute_command_line("curl -fsSL -o '"//fetched//"' '"//base//"modules.json'", exitstat=status)
         path = fetched
         if (status /= 0) then
-            write (error_unit, '(a)') "Could not open external URL '"//url//"'"
+            call warn("Could not open external URL '"//url//"'")
             return
         end if
     else
@@ -204,7 +210,7 @@ subroutine load_external_project(p, s, url)
     call json%load(path, root)
     if (json%failed()) then
         call json%clear_exceptions()
-        write (error_unit, '(a)') "Could not open external URL '"//url//"'"
+        call warn("Could not open external URL '"//url//"'")
         return
     end if
     call json%get_child(root, 'modules', modules, found)

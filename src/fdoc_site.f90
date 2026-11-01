@@ -2,7 +2,6 @@ module fdoc_site
 !! Writing the HTML site. Pages are rendered in parallel, each to text in memory, and written after, so
 !! nothing that renders a page calls a function returning a deferred-length string (see
 !! `example/slen_race.f90`).
-use iso_fortran_env, only: error_unit
 use ffmt_io, only: write_file
 use fdoc_util
 use fdoc_buffer
@@ -12,6 +11,7 @@ use fdoc_project, only: project_t
 use fdoc_urls, only: entity_url, object_word, page_name, url_quote
 use fdoc_highlight, only: highlight_fortran
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
+use fdoc_progress, only: progress_start, progress_tick, progress_finish
 implicit none
 private
 
@@ -1341,10 +1341,11 @@ subroutine license_text(license, b)
 end subroutine license_text
 
 !> Write the whole site.
-subroutine write_site(p, s, front, stat, errmsg)
+subroutine write_site(p, s, front, count, stat, errmsg)
     type(project_t), intent(inout), target :: p         !! the project
     type(settings_t), intent(in), target :: s           !! the settings
     character(len=*), intent(in) :: front               !! the project file's text as HTML
+    integer, intent(out) :: count                       !! how many pages were written
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg !! what is wrong
     type(site_t) :: site
@@ -1365,12 +1366,16 @@ subroutine write_site(p, s, front, stat, errmsg)
     end do
     n = size(ids)
     allocate (pages(n + NUM_LISTS + 1), paths(n + NUM_LISTS + 1))
+    count = 0
 
+    call progress_start('Rendering pages', n)
     !$omp parallel do schedule(dynamic) num_threads(max(1, s%parallel)) default(shared)
     do k = 1, n
         call entity_page(site, ids(k), pages(k)%s)
+        call progress_tick()
     end do
     !$omp end parallel do
+    call progress_finish()
     do k = 1, n
         call entity_url(p%list, ids(k), paths(k)%s)
     end do
@@ -1389,11 +1394,15 @@ subroutine write_site(p, s, front, stat, errmsg)
         errmsg = 'could not create '//directory
         return
     end if
+    call progress_start('Writing files', size(pages))
     do k = 1, size(pages)
+        call progress_tick()
         if (.not. allocated(pages(k)%s)) cycle
+        count = count + 1
         call write_file(directory//'/'//paths(k)%s, pages(k)%s, stat, errmsg)
         if (stat /= 0) return
     end do
+    call progress_finish()
     call asset_fdoc_css(b)
     call take(b, url)
     call write_file(directory//'/css/fdoc.css', url, stat, errmsg)

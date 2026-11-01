@@ -1,6 +1,5 @@
 module fdoc_input
 !! Finding, reading and preprocessing source files.
-use iso_fortran_env, only: error_unit
 use iso_c_binding, only: c_int
 use ffmt_fs, only: is_directory, parent_directory, join_path
 use ffmt_io, only: read_file
@@ -8,6 +7,7 @@ use ffmt_walk, only: collect_files
 use fregex, only: regex_t, regex, re_escape, match_t
 use fdoc_util
 use fdoc_settings, only: settings_t
+use fdoc_progress, only: warn
 implicit none
 private
 
@@ -65,7 +65,7 @@ subroutine find_sources(s, files)
             if (keep .and. contains_string(s%fixed_extensions, extension_of(found(k)%s)) .and. &
                 .not. contains_string(s%extensions, extension_of(found(k)%s))) then
                 skipped = skipped + 1
-                write (error_unit, '(a)') 'Warning: skipping fixed-form file (not supported yet): '//found(k)%s
+                call warn('skipping fixed-form file (not supported yet): '//found(k)%s)
                 keep = .false.
             end if
             if (keep) call push(files, found(k)%s)
@@ -155,7 +155,7 @@ subroutine preprocess(s, path, text)
         call read_file(output, result, stat, msg)
         if (stat == 0) call move_alloc(result, text)
     else
-        write (error_unit, '(a)') 'Warning: preprocessing failed, reverting to the file itself: '//command
+        call warn('preprocessing failed, reverting to the file itself: '//command)
     end if
     open (newunit=unit, file=output, status='old', iostat=stat)
     if (stat == 0) close (unit, status='delete')
@@ -182,7 +182,7 @@ recursive subroutine expand_includes(search, directory, text, depth)
         if (.not. include_name(lines(k)%s, name)) cycle
         found = locate(search, directory, name)
         if (len(found) == 0) then
-            write (error_unit, '(a)') 'Warning: Can not find include file "'//name//'"'
+            call warn('Can not find include file "'//name//'"')
             cycle
         end if
         call read_file(found, contents, stat, msg)

@@ -3,6 +3,7 @@ module test_cli
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_cli, only: args_t, parse_args, ACTION_VERSION
 use fdoc_util, only: string_t
+use fdoc_progress, only: bar_text
 implicit none
 private
 
@@ -17,7 +18,8 @@ subroutine collect_cli(testsuite)
                 new_unittest("project file and repeated options", test_repeat), &
                 new_unittest("forms of option values", test_forms), &
                 new_unittest("errors", test_errors), &
-                new_unittest("version needs no project file", test_version) &
+                new_unittest("version needs no project file", test_version), &
+                new_unittest("progress bar", test_bar) &
                 ]
 end subroutine collect_cli
 
@@ -90,5 +92,21 @@ subroutine test_version(error)
     if (allocated(error)) return
     call check(error, a%action, ACTION_VERSION)
 end subroutine test_version
+
+!> Checks: progress bar.
+subroutine test_bar(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    integer :: filled, unfilled, percent
+
+    call bar_text(1, 4, 20, filled, unfilled, percent)
+    call check(error, filled, 5)
+    if (allocated(error)) return
+    call check(error, unfilled, 15)
+    if (allocated(error)) return
+    call check(error, percent, 25)
+    if (allocated(error)) return
+    call bar_text(9, 4, 20, filled, unfilled, percent)
+    call check(error, filled, 20, 'more steps than expected must not overflow the bar')
+end subroutine test_bar
 
 end module test_cli

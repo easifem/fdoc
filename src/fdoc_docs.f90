@@ -6,6 +6,7 @@ use fdoc_settings, only: settings_t, map_entry_t
 use fdoc_project, only: project_t
 use fdoc_markdown, only: markdown_to_html, markdown_options_t, dedent
 use fdoc_urls, only: link_context_t, resolve_link
+use fdoc_progress, only: progress_start, progress_tick, progress_finish
 implicit none
 private
 
@@ -98,11 +99,14 @@ subroutine render_documentation(p, s, options)
     type(markdown_options_t), intent(in) :: options     !! the Markdown options
     integer :: k
 
+    call progress_start('Converting Markdown', p%list%n)
     !$omp parallel do schedule(dynamic, 16) num_threads(max(1, s%parallel)) default(shared)
     do k = 1, p%list%n
         call render_entity(p, options, k)
+        call progress_tick()
     end do
     !$omp end parallel do
+    call progress_finish()
 end subroutine render_documentation
 
 !> Render the documentation and summary of entity `id`.

@@ -9,11 +9,11 @@ module fdoc_markdown
 !!
 !! Documentation is rendered in parallel, so nothing here calls a function returning a deferred-length
 !! string (see `example/slen_race.f90`).
-use iso_fortran_env, only: error_unit
 use ffmt_io, only: read_file
 use fdoc_util
 use fdoc_buffer
 use fdoc_highlight, only: highlight_fortran
+use fdoc_progress, only: warn
 use fdoc_settings, only: map_entry_t
 implicit none
 private
@@ -212,7 +212,7 @@ recursive subroutine expand_file_includes(lines, options, depth)
         if (.not. starts_with(path, '/')) path = options%base_path//'/'//path
         call read_file(path, contents, stat, msg)
         if (stat /= 0) then
-            write (error_unit, '(a)') 'Warning: could not include '//path
+            call warn('could not include '//path)
             call push(out, lines(k)%s)
             cycle
         end if
@@ -2535,7 +2535,7 @@ subroutine ford_link(text, i, options, out, used)
     call options%resolver(options%resolver_data, name, entity, child, child_entity, url, label, found)
     used = close + 1
     if (.not. found) then
-        write (error_unit, '(a)') 'Warning: Could not substitute link '//text(i:i + close)//", '"//name//"' not found"
+        call warn('Could not substitute link '//text(i:i + close)//", '"//name//"' not found")
         call add(out, '<a>'//name//'</a>')
         return
     end if
