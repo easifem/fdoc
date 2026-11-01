@@ -4,7 +4,7 @@ use omp_lib, only: omp_get_num_procs
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_input, only: needs_fypp
 use fdoc_settings, only: settings_t, new_settings, set_option, check_settings, is_option
-use fdoc_util, only: string_t, resolve_path, expand_vars, split_lines, split_words, strip
+use fdoc_util, only: name_index_t, index_find, index_set, string_t, resolve_path, expand_vars, split_lines, split_words, strip
 implicit none
 private
 
@@ -27,6 +27,7 @@ subroutine collect_settings(testsuite)
                 new_unittest("project graph limit", test_project_nodes), &
                 new_unittest("threads default to every core", test_threads), &
                 new_unittest("Fypp files are recognized", test_fypp), &
+                new_unittest("name index", test_name_index), &
                 new_unittest("line splitting", test_lines) &
                 ]
 end subroutine collect_settings
@@ -51,6 +52,32 @@ subroutine test_fypp(error)
     if (allocated(error)) return
     call check(error, .not. needs_fypp(s, 'a.f90'), 'other files are read as usual')
 end subroutine test_fypp
+
+!> Checks: the hash table, as it grows.
+subroutine test_name_index(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(name_index_t) :: table
+    character(len=12) :: name
+    integer :: k
+
+    call check(error, index_find(table, 'none'), 0)
+    if (allocated(error)) return
+    do k = 1, 5000
+        write (name, '(a,i0)') 'n', k
+        call index_set(table, trim(name), k)
+    end do
+    do k = 1, 5000
+        write (name, '(a,i0)') 'n', k
+        call check(error, index_find(table, trim(name)), k)
+        if (allocated(error)) return
+    end do
+    call index_set(table, 'n7', 99)
+    call check(error, index_find(table, 'n7'), 99)
+    if (allocated(error)) return
+    call check(error, table%n, 5000, 'updating does not add a name')
+    if (allocated(error)) return
+    call check(error, index_find(table, 'n5001'), 0)
+end subroutine test_name_index
 
 !> Checks: `parallel` uses every core unless it is set.
 subroutine test_threads(error)

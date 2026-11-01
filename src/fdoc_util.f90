@@ -1,12 +1,14 @@
 module fdoc_util
 !! String, date and path helpers shared by the rest of fdoc.
 use, intrinsic :: iso_c_binding, only: c_char, c_null_char, c_ptr, c_associated, c_null_ptr, c_size_t, c_f_pointer
+use, intrinsic :: iso_fortran_env, only: int64
 use ffmt_strings, only: string_t, lowercase
 use ffmt_fs, only: absolute_path, join_path, parent_directory
 implicit none
 private
 
 public :: string_t, lowercase
+public :: name_index_t, index_find, index_set
 public :: strip, starts_with, ends_with, split_lines, split_words, split_on, join, push, contains_string
 public :: parse_bool, parse_int, expand_vars, strftime, resolve_path, sort_strings
 public :: top_split, top_index, closing_paren, remove_blanks, starts_word, word_at, push_int
@@ -34,7 +36,106 @@ interface
     end function c_strlen
 end interface
 
+
+type :: name_index_t
+    !! A hash table from names to positive integers, for lookups in long lists.
+    integer, allocatable :: slots(:)        !! each slot's entry, or 0
+    type(string_t), allocatable :: keys(:)  !! the names
+    integer, allocatable :: values(:)       !! their values
+    integer :: n = 0                        !! how many there are
+end type name_index_t
+
 contains
+
+!> The hash of `name`, FNV-1a, as a position in `1:size`, where `size` is a power of 2.
+pure integer function name_hash(name, size)
+    character(len=*), intent(in) :: name    !! the name
+    integer, intent(in) :: size             !! the number of slots
+    integer(int64) :: h
+    integer :: k
+
+    h = 2166136261_int64
+    do k = 1, len(name)
+        h = iand(ieor(h, int(iachar(name(k:k)), int64))*16777619_int64, 4294967295_int64)
+    end do
+    name_hash = int(iand(h, int(size - 1, int64))) + 1
+end function name_hash
+
+!> The value of `name` in `table`, or 0.
+pure integer function index_find(table, name) result(value)
+    type(name_index_t), intent(in) :: table !! the table
+    character(len=*), intent(in) :: name    !! the name
+    integer :: at, entry
+
+    value = 0
+    if (table%n == 0) return
+    at = name_hash(name, size(table%slots))
+    do
+        entry = table%slots(at)
+        if (entry == 0) return
+        if (len(table%keys(entry)%s) == len(name)) then
+            if (table%keys(entry)%s == name) then
+                value = table%values(entry)
+                return
+            end if
+        end if
+        at = merge(at + 1, 1, at < size(table%slots))
+    end do
+end function index_find
+
+!> Give `name` the value `value` in `table`.
+pure subroutine index_set(table, name, value)
+    type(name_index_t), intent(inout) :: table  !! the table
+    character(len=*), intent(in) :: name        !! the name
+    integer, intent(in) :: value                !! its value
+    type(string_t), allocatable :: keys(:)
+    integer, allocatable :: values(:)
+    integer :: at, entry, k
+
+    if (.not. allocated(table%slots)) then
+        allocate (table%slots(64), table%keys(32), table%values(32))
+        table%slots = 0
+    end if
+    at = name_hash(name, size(table%slots))
+    do
+        entry = table%slots(at)
+        if (entry == 0) exit
+        if (len(table%keys(entry)%s) == len(name)) then
+            if (table%keys(entry)%s == name) then
+                table%values(entry) = value
+                return
+            end if
+        end if
+        at = merge(at + 1, 1, at < size(table%slots))
+    end do
+    if (table%n == size(table%keys)) then
+        allocate (keys(2*table%n), values(2*table%n))
+        do k = 1, table%n
+            call move_alloc(table%keys(k)%s, keys(k)%s)
+        end do
+        values(1:table%n) = table%values(1:table%n)
+        call move_alloc(keys, table%keys)
+        call move_alloc(values, table%values)
+        deallocate (table%slots)
+        allocate (table%slots(4*table%n))
+        table%slots = 0
+        do k = 1, table%n
+            at = name_hash(table%keys(k)%s, size(table%slots))
+            do while (table%slots(at) /= 0)
+                at = merge(at + 1, 1, at < size(table%slots))
+            end do
+            table%slots(at) = k
+        end do
+        at = name_hash(name, size(table%slots))
+        do while (table%slots(at) /= 0)
+            at = merge(at + 1, 1, at < size(table%slots))
+        end do
+    end if
+    table%n = table%n + 1
+    table%keys(table%n)%s = name
+    table%values(table%n) = value
+    table%slots(at) = table%n
+end subroutine index_set
 
 !> Length of `s` without leading and trailing whitespace.
 pure integer function stripped_length(s)

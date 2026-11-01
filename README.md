@@ -123,10 +123,10 @@ Time to generate each project's documentation, using the project's own settings:
 | [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.2 s | 95× | 6.5 s | 0.1 s | 65× |
 | [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.3 s | 201× | 8.2 s | 0.2 s | 48× |
 | [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 52× | 6.8 s | 0.2 s | 34× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 116× | 9.0 s | 0.1 s | 64× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.3 s | 139× | 25.3 s | 0.7 s | 36× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 126× | 9.0 s | 0.1 s | 69× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.1 s | 151× | 25.3 s | 0.7 s | 39× |
 
-Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 4.7 s against FORD's 690 s (145×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (45×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
+Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 3.4 s against FORD's 690 s (200×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (45×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
 
 Peak memory and the size of the site, with graphs:
 

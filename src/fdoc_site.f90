@@ -56,16 +56,19 @@ contains
 !> `name`, then `name~2`.
 subroutine assign_pages(p)
     type(project_t), intent(inout) :: p     !! the project
-    character(len=:), allocatable :: url, key, name
-    type(string_t), allocatable :: keys(:)
-    integer, allocatable :: counts(:)
-    integer :: k, j, at
+    character(len=:), allocatable :: url, name
+    type(name_index_t) :: seen
+    integer :: k, count, at
 
-    allocate (keys(0), counts(0))
     do k = 1, p%list%n
         associate (e => p%list%box(k)%e)
             if (e%kind == E_NONE .or. .not. allocated(e%name)) cycle
             if (allocated(e%external_url)) cycle
+            ! these are parts of the page of what holds them
+            select case (e%kind)
+            case (E_VARIABLE, E_BOUNDPROC, E_COMMON, E_ENUM, E_FINAL)
+                cycle
+            end select
             if (e%kind == E_FILE) then
                 at = index(e%name, '/', back=.true.)
                 call page_name(e%name(at + 1:), name)
@@ -73,20 +76,12 @@ subroutine assign_pages(p)
             end if
             call entity_url(p%list, k, url)
             if (len(url) == 0 .or. index(url, '#') > 0) cycle
-            key = url
-            do j = 1, size(keys)
-                if (keys(j)%s == key) then
-                    counts(j) = counts(j) + 1
-                    call page_name(e%name, name)
-                    if (e%kind == E_FILE) name = e%page
-                    e%page = name//'~'//trim(number(counts(j)))
-                    key = ''
-                    exit
-                end if
-            end do
-            if (len(key) > 0) then
-                call push(keys, key)
-                call push_int(counts, 1)
+            count = index_find(seen, url) + 1
+            call index_set(seen, url, count)
+            if (count > 1) then
+                call page_name(e%name, name)
+                if (e%kind == E_FILE) name = e%page
+                e%page = name//'~'//trim(number(count))
             end if
         end associate
     end do

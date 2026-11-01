@@ -8,7 +8,7 @@ use fdoc_model
 implicit none
 private
 
-public :: page_name, object_word, entity_url, link_context_t, resolve_link, url_quote, is_shown
+public :: page_name, object_word, entity_url, link_context_t, resolve_link, url_quote, index_entity_names, is_shown
 
 type :: link_context_t
     !! Where a `[[name]]` link is being read.
@@ -229,6 +229,42 @@ integer function find_child(list, parent, name, entity) result(found)
     end associate
 end function find_child
 
+!> True if a link to `kind` can name it from anywhere in the project.
+elemental logical function top_level(kind)
+    integer, intent(in) :: kind     !! the kind of entity
+
+    select case (kind)
+    case (E_MODULE, E_SUBMODULE, E_TYPE, E_SUBROUTINE, E_FUNCTION, E_INTERFACE, E_PROGRAM, E_BLOCKDATA, E_FILE)
+        top_level = .true.
+    case default
+        top_level = .false.
+    end select
+end function top_level
+
+!> Index the entities that links can name from anywhere, for [[find_anywhere]].
+subroutine index_entity_names(list)
+    type(entity_list_t), intent(inout) :: list  !! the entities
+    integer, allocatable :: last(:)
+    integer :: k, first, at
+
+    allocate (list%next_named(list%n), last(list%n))
+    list%next_named = 0
+    do k = 1, list%n
+        associate (e => list%box(k)%e)
+            if (.not. top_level(e%kind) .or. .not. allocated(e%name)) cycle
+            at = merge(index(e%name, '/', back=.true.), 0, e%kind == E_FILE)
+            first = index_find(list%names, lowercase(e%name(at + 1:)))
+            if (first == 0) then
+                call index_set(list%names, lowercase(e%name(at + 1:)), k)
+                last(k) = k
+            else
+                list%next_named(last(first)) = k
+                last(first) = k
+            end if
+        end associate
+    end do
+end subroutine index_entity_names
+
 !> The entity named `name` at the top level of the project, or 0.
 integer function find_anywhere(list, name, entity) result(found)
     type(entity_list_t), intent(in) :: list !! the entities
@@ -237,15 +273,13 @@ integer function find_anywhere(list, name, entity) result(found)
     integer :: k
 
     found = 0
-    do k = 1, list%n
-        select case (list%box(k)%e%kind)
-        case (E_MODULE, E_SUBMODULE, E_TYPE, E_SUBROUTINE, E_FUNCTION, E_INTERFACE, E_PROGRAM, E_BLOCKDATA, E_NAMELIST, &
-              E_FILE)
-            if (matches(list, k, name, entity)) then
-                found = k
-                return
-            end if
-        end select
+    k = index_find(list%names, name)
+    do while (k > 0)
+        if (matches(list, k, name, entity)) then
+            found = k
+            return
+        end if
+        k = list%next_named(k)
     end do
 end function find_anywhere
 

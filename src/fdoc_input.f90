@@ -12,7 +12,7 @@ use fdoc_progress, only: warn
 implicit none
 private
 
-public :: find_sources, load_source, expand_includes, is_fixed_form, needs_fypp
+public :: find_sources, load_source, expand_includes, is_fixed_form, needs_fypp, runs_command
 
 interface
     !> C `getpid`.
@@ -47,6 +47,14 @@ logical function needs_fypp(s, path)
     needs_fypp = s%preprocess .and. starts_word(s%preprocessor, 'fypp') .and. &
                  contains_string(s%fpp_extensions, extension_of(path))
 end function needs_fypp
+
+!> True if reading `path` runs an external preprocessor.
+logical function runs_command(s, path)
+    type(settings_t), intent(in) :: s       !! the settings
+    character(len=*), intent(in) :: path    !! the file
+    runs_command = s%preprocess .and. contains_string(s%fpp_extensions, extension_of(path)) .and. &
+                   .not. needs_fypp(s, path)
+end function runs_command
 
 !> The source files of the project, sorted, without those excluded. Fixed-form files are left out
 !> with a warning, as they are not supported yet.
@@ -107,8 +115,8 @@ function glob_matches(pattern, path) result(matches)
     matches = compiled%fullmatch(path)
 end function glob_matches
 
-!> Read source file `path`, preprocessing it if its extension calls for that, with `include` lines
-!> replaced by the files they name.
+!> Read source file `path`, preprocessing it if its extension calls for that. Unless that runs an
+!> external command, this can be called from parallel code.
 subroutine load_source(s, path, raw, text, stat, errmsg)
     type(settings_t), intent(in) :: s                   !! the settings
     character(len=*), intent(in) :: path                !! the file
@@ -125,7 +133,6 @@ subroutine load_source(s, path, raw, text, stat, errmsg)
     else if (s%preprocess .and. contains_string(s%fpp_extensions, extension_of(path))) then
         call preprocess(s, path, text)
     end if
-    call expand_includes(s%include, parent_directory(path), text, 1)
 end subroutine load_source
 
 !> Replace `text` by the output of Fypp for `path`, or keep it if that fails.

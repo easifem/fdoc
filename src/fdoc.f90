@@ -13,6 +13,7 @@ use fdoc_links, only: link_project, dump_links
 use fdoc_markdown, only: markdown_to_html, markdown_options_t
 use fdoc_docs, only: base_options, render_documentation, render_text, collect_abbreviations
 use fdoc_site, only: assign_pages, write_site
+use fdoc_urls, only: index_entity_names
 use fdoc_pages, only: load_pages, page_t
 use fdoc_progress, only: progress_enable, progress_start, progress_finish, progress_summary, warn
 use json_module, only: json_core, json_value
@@ -95,6 +96,7 @@ integer function run(args) result(status)
     call assign_pages(p)
     call base_options(s, '..', options)
     call collect_abbreviations(p, options)
+    call index_entity_names(p%list)
     call render_documentation(p, s, options)
     call base_options(s, '.', front_options)
     if (allocated(options%abbreviations)) front_options%abbreviations = options%abbreviations

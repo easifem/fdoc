@@ -5,7 +5,8 @@ use json_module, only: json_core, json_value
 use fdoc_util
 use fdoc_model
 use fdoc_settings, only: settings_t
-use fdoc_input, only: find_sources, load_source
+use ffmt_fs, only: parent_directory
+use fdoc_input, only: find_sources, load_source, runs_command, expand_includes
 use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
 use fdoc_parser, only: parse_file
 implicit none
@@ -19,12 +20,20 @@ type, public :: symbol_t
     integer :: id = 0                       !! the entity
 end type symbol_t
 
+type :: symbol_list_t
+    !! Names, in the order they were added, with an index.
+    type(symbol_t), allocatable :: s(:)         !! storage; only `s(1:n)` is in use
+    integer :: n = 0                            !! how many there are
+    type(name_index_t) :: index                 !! the position of each name
+end type symbol_list_t
+
 type :: symbols_t
     !! The names a module makes public, by category.
-    type(symbol_t), allocatable :: procs(:)     !! procedures and interfaces
-    type(symbol_t), allocatable :: absints(:)   !! abstract interfaces
-    type(symbol_t), allocatable :: types(:)     !! derived types
-    type(symbol_t), allocatable :: vars(:)      !! variables
+    type(symbol_list_t) :: procs                !! procedures and interfaces
+    type(symbol_list_t) :: absints              !! abstract interfaces
+    type(symbol_list_t) :: types                !! derived types
+    type(symbol_list_t) :: vars                 !! variables
+    type(name_index_t) :: public_list           !! the names of the module's `public` statements
     integer :: state = 0                        !! 0 not computed, 1 being computed, 2 computed
 end type symbols_t
 
@@ -48,10 +57,10 @@ function public_symbols(p, which, category) result(symbols)
     type(symbol_t), allocatable :: symbols(:)
 
     select case (category)
-    case (1); symbols = p%pub(which)%procs
-    case (2); symbols = p%pub(which)%absints
-    case (3); symbols = p%pub(which)%types
-    case default; symbols = p%pub(which)%vars
+    case (1); symbols = p%pub(which)%procs%s(:p%pub(which)%procs%n)
+    case (2); symbols = p%pub(which)%absints%s(:p%pub(which)%absints%n)
+    case (3); symbols = p%pub(which)%types%s(:p%pub(which)%types%n)
+    case default; symbols = p%pub(which)%vars%s(:p%pub(which)%vars%n)
     end select
 end function public_symbols
 
@@ -63,8 +72,7 @@ subroutine load_project_sources(s, p, stat, errmsg)
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
     type(string_t), allocatable :: paths(:), texts(:), raws(:)
     type(entity_list_t), allocatable :: lists(:)
-    character(len=:), allocatable :: msg
-    integer :: k, ios
+    integer :: k
 
     stat = 0
     call find_sources(s, paths)
@@ -74,15 +82,17 @@ subroutine load_project_sources(s, p, stat, errmsg)
         return
     end if
     allocate (texts(size(paths)), lists(size(paths)), raws(size(paths)))
+    ! files that go through an external command share its temporary files, so they take turns
     call progress_start('Reading files', size(paths))
+    !$omp parallel do schedule(dynamic) num_threads(max(1, s%parallel)) default(shared) private(k)
     do k = 1, size(paths)
-        call load_source(s, paths(k)%s, raws(k)%s, texts(k)%s, ios, msg)
-        if (ios /= 0) then
-            call warn('could not read '//paths(k)%s//': '//msg)
-            texts(k)%s = ''
-            raws(k)%s = ''
-        end if
+        if (.not. runs_command(s, paths(k)%s)) call read_source(s, paths(k)%s, raws(k)%s, texts(k)%s)
         call progress_tick()
+    end do
+    !$omp end parallel do
+    do k = 1, size(paths)
+        if (runs_command(s, paths(k)%s)) call read_source(s, paths(k)%s, raws(k)%s, texts(k)%s)
+        call expand_includes(s%include, parent_directory(paths(k)%s), texts(k)%s, 1)
     end do
     call progress_finish()
 
@@ -100,6 +110,23 @@ subroutine load_project_sources(s, p, stat, errmsg)
         call merge_list(p, lists(k))
     end do
 end subroutine load_project_sources
+
+!> Read source file `path`, warning if that fails.
+subroutine read_source(s, path, raw, text)
+    type(settings_t), intent(in) :: s                   !! the settings
+    character(len=*), intent(in) :: path                !! the file
+    character(len=:), allocatable, intent(out) :: raw   !! the file as it is
+    character(len=:), allocatable, intent(out) :: text  !! the text to parse
+    character(len=:), allocatable :: msg
+    integer :: ios
+
+    call load_source(s, path, raw, text, ios, msg)
+    if (ios /= 0) then
+        call warn('could not read '//path//': '//msg)
+        text = ''
+        raw = ''
+    end if
+end subroutine read_source
 
 !> Move the entities of `from` to the end of `p%list`, adjusting their indices.
 subroutine merge_list(p, from)
@@ -316,17 +343,13 @@ end subroutine link_uses
 
 !> The position of `name` in `symbols`, or 0.
 pure integer function find_in(symbols, name)
-    type(symbol_t), intent(in) :: symbols(:)    !! the names
+    type(symbol_list_t), intent(in) :: symbols  !! the names
     character(len=*), intent(in) :: name        !! the name, in lowercase
-    integer :: k
+    integer :: at
 
     find_in = 0
-    do k = 1, size(symbols)
-        if (symbols(k)%name == name) then
-            find_in = symbols(k)%id
-            return
-        end if
-    end do
+    at = index_find(symbols%index, name)
+    if (at > 0) find_in = symbols%s(at)%id
 end function find_in
 
 !> True if entity `e` declares a name of category `category`: 1 procedures, 2 abstract interfaces,
@@ -425,7 +448,7 @@ pure integer function public_symbol(p, which, name, category) result(id)
     integer, intent(in) :: category         !! the category
 
     id = 0
-    if (.not. allocated(p%pub(which)%procs)) return
+    if (p%pub(which)%state == 0) return
     select case (category)
     case (1); id = find_in(p%pub(which)%procs, name)
     case (2); id = find_in(p%pub(which)%absints, name)
@@ -539,18 +562,29 @@ end subroutine set_constructor
 
 !> Add `name` for entity `id` to `list`, replacing any entity it has.
 subroutine add_symbol(list, name, id)
-    type(symbol_t), allocatable, intent(inout) :: list(:)   !! the names
-    character(len=*), intent(in) :: name                    !! the name
-    integer, intent(in) :: id                               !! the entity
-    integer :: k
+    type(symbol_list_t), intent(inout) :: list  !! the names
+    character(len=*), intent(in) :: name        !! the name
+    integer, intent(in) :: id                   !! the entity
+    type(symbol_t), allocatable :: grown(:)
+    integer :: k, at
 
-    do k = 1, size(list)
-        if (list(k)%name == name) then
-            list(k)%id = id
-            return
-        end if
-    end do
-    list = [list, symbol_t(name, id)]
+    at = index_find(list%index, name)
+    if (at > 0) then
+        list%s(at)%id = id
+        return
+    end if
+    if (list%n == size(list%s)) then
+        allocate (grown(2*list%n))
+        do k = 1, list%n
+            call move_alloc(list%s(k)%name, grown(k)%name)
+            grown(k)%id = list%s(k)%id
+        end do
+        call move_alloc(grown, list%s)
+    end if
+    list%n = list%n + 1
+    list%s(list%n)%name = name
+    list%s(list%n)%id = id
+    call index_set(list%index, name, list%n)
 end subroutine add_symbol
 
 !> The position in `p%modules` of the module named `name`, or 0.
@@ -577,7 +611,10 @@ recursive subroutine public_names(p, which)
     if (p%pub(which)%state /= 0) return
     p%pub(which)%state = 1
     id = p%modules(which)
-    allocate (p%pub(which)%procs(0), p%pub(which)%absints(0), p%pub(which)%types(0), p%pub(which)%vars(0))
+    allocate (p%pub(which)%procs%s(16), p%pub(which)%absints%s(16), p%pub(which)%types%s(16), p%pub(which)%vars%s(16))
+    do c = 1, size(p%list%box(id)%e%public_list)
+        call index_set(p%pub(which)%public_list, p%list%box(id)%e%public_list(c)%s, c)
+    end do
 
     associate (m => p%list%box(id)%e)
         do c = 1, size(m%children)
@@ -645,9 +682,14 @@ subroutine import_names(p, which, used, spec)
     integer, intent(in) :: used             !! position in `p%modules` of the used module
     character(len=*), intent(in) :: spec    !! what follows the module name
     type(rename_t), allocatable :: renames(:)
+    type(name_index_t) :: wanted
     logical :: only
+    integer :: k
 
     call read_use_spec(spec, only, renames)
+    do k = size(renames), 1, -1
+        call index_set(wanted, renames(k)%used, k)
+    end do
     call import_category(p%pub(used)%procs, p%pub(which)%procs)
     call import_category(p%pub(used)%absints, p%pub(which)%absints)
     call import_category(p%pub(used)%types, p%pub(which)%types)
@@ -657,33 +699,26 @@ contains
 
     !> Import the names of one category.
     subroutine import_category(from, to)
-        type(symbol_t), intent(in) :: from(:)               !! the used module's names
-        type(symbol_t), allocatable, intent(inout) :: to(:) !! the importing module's names
-        character(len=:), allocatable :: local
+        type(symbol_list_t), intent(in) :: from     !! the used module's names
+        type(symbol_list_t), intent(inout) :: to    !! the importing module's names
         integer :: k, j
 
-        do k = 1, size(from)
-            local = from(k)%name
-            if (only) then
-                local = ''
-                do j = 1, size(renames)
-                    if (renames(j)%used == from(k)%name) then
-                        local = renames(j)%local
-                        exit
-                    end if
-                end do
-                if (len(local) == 0) cycle
+        do k = 1, from%n
+            if (.not. only) then
+                if (is_public_here(from%s(k)%name)) call add_symbol(to, from%s(k)%name, from%s(k)%id)
+                cycle
             end if
-            if (is_public_here(local)) call add_symbol(to, local, from(k)%id)
+            j = index_find(wanted, from%s(k)%name)
+            if (j == 0) cycle
+            if (is_public_here(renames(j)%local)) call add_symbol(to, renames(j)%local, from%s(k)%id)
         end do
     end subroutine import_category
 
     !> True if the importing module makes `name` public.
     logical function is_public_here(name)
         character(len=*), intent(in) :: name    !! the name
-        associate (m => p%list%box(p%modules(which))%e)
-            is_public_here = m%permission == 'public' .or. contains_string(m%public_list, name)
-        end associate
+        is_public_here = p%list%box(p%modules(which))%e%permission == 'public' .or. &
+                         index_find(p%pub(which)%public_list, name) > 0
     end function is_public_here
 
 end subroutine import_names

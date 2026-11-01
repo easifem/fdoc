@@ -3,7 +3,7 @@ module fdoc_model
 !!
 !! Entities live in one list and refer to each other by index. Each is held through an allocatable, so
 !! that growing the list or merging one list into another moves entities and does not copy them.
-use fdoc_util, only: string_t, push, push_int
+use fdoc_util, only: string_t, push, push_int, name_index_t
 implicit none
 private
 
@@ -163,6 +163,8 @@ type, public :: entity_list_t
     !! A list of entities. Indices start at 1, and 0 means no entity.
     type(entity_box_t), allocatable :: box(:)   !! storage; only `box(1:n)` is in use
     integer :: n = 0                            !! number of entities
+    type(name_index_t) :: names                 !! the first entity of each lowercase name, once built
+    integer, allocatable :: next_named(:)       !! the next entity with the same name, or 0
 contains
     procedure :: add => list_add                !! add an entity
 end type entity_list_t
