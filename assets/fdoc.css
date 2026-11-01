@@ -134,6 +134,7 @@ aside.tree ul ul { margin-left: .8rem; }
   width: 1.6rem; height: 1.6rem; cursor: pointer; margin-left: .2rem; }
 .arguments td.name, .arguments td.type { width: auto; }
 td.attributes { font-family: var(--mono); font-size: .84em; }
+td.default { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; }
 @media (min-width: 1100px) {
   .arguments td.name, .arguments td.type, .arguments td.attributes { white-space: nowrap; }
   .arguments td:last-child { min-width: 14rem; }
@@ -146,10 +147,11 @@ td.attributes { font-family: var(--mono); font-size: .84em; }
   background: hsla(var(--h), var(--s), var(--attr-l), .12); border: 1px solid hsla(var(--h), var(--s), var(--attr-l), .35); }
 .attr-in, .attr-out, .attr-inout, .attr-optional, .attr-pointer, .attr-allocatable, .attr-value, .attr-target,
 .attr-dimension, .attr-contiguous, .attr-volatile, .attr-asynchronous, .attr-save, .attr-parameter,
-.attr-protected, .attr-codimension { --s: 62%; }
+.attr-protected, .attr-codimension, .attr-private { --s: 62%; }
 .attr-in { --h: 210; } .attr-out { --h: 25; } .attr-inout { --h: 275; }
 .attr-optional { --h: 180; } .attr-pointer { --h: 0; } .attr-allocatable { --h: 125; } .attr-value { --h: 45; }
 .attr-target { --h: 325; } .attr-dimension { --h: 85; } .attr-contiguous { --h: 150; } .attr-volatile { --h: 345; }
 .attr-asynchronous { --h: 300; } .attr-save { --h: 60; } .attr-parameter { --h: 195; } .attr-protected { --h: 240; }
 .attr-codimension { --h: 105; }
 .graph text { stroke: none; }
+.attr-private { --h: 15; --s: 40%; }

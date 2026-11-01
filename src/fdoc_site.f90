@@ -791,15 +791,27 @@ subroutine variable_table(site, ids, b)
     call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
 end subroutine variable_table
 
-!> Write a table of dummy arguments.
-subroutine argument_table(site, ids, b)
+!> Write a table of dummy arguments, or with `components` of the components of a type. Those have no
+!> intent, and may have a default value and a permission.
+subroutine argument_table(site, ids, components, b)
     type(site_t), intent(in) :: site        !! the site
-    integer, intent(in) :: ids(:)           !! the arguments
+    integer, intent(in) :: ids(:)           !! the arguments or components
+    logical, intent(in) :: components       !! true for components
     type(buffer_t), intent(inout) :: b      !! the HTML
+    logical :: defaults
     integer :: k
 
-    call add(b, '<table class="arguments">'//achar(10)//'<thead><tr><th>Name</th><th>Type</th><th>Intent</th>')
-    call add(b, '<th>Attributes</th><th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
+    defaults = .false.
+    if (components) then
+        do k = 1, size(ids)
+            if (allocated(site%p%list%box(ids(k))%e%initial)) defaults = .true.
+        end do
+    end if
+    call add(b, '<table class="arguments">'//achar(10)//'<thead><tr><th>Name</th><th>Type</th>')
+    if (.not. components) call add(b, '<th>Intent</th>')
+    call add(b, '<th>Attributes</th>')
+    if (defaults) call add(b, '<th>Default</th>')
+    call add(b, '<th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
     do k = 1, size(ids)
         associate (e => site%p%list%box(ids(k))%e)
             call add(b, '<tr id="')
@@ -809,13 +821,29 @@ subroutine argument_table(site, ids, b)
             call add(b, '</td><td class="type">')
             if (e%kind == E_VARIABLE) then
                 call write_type(site, e, b)
-                call add(b, '</td><td>')
-                if (allocated(e%intent)) then
-                    if (len(e%intent) > 0) call badge(e%intent, b)
+                call add(b, '</td>')
+                if (.not. components) then
+                    call add(b, '<td>')
+                    if (allocated(e%intent)) then
+                        if (len(e%intent) > 0) call badge(e%intent, b)
+                    end if
+                    call add(b, '</td>')
                 end if
-                call add(b, '</td><td class="attributes">')
+                call add(b, '<td class="attributes">')
+                if (components .and. allocated(e%permission)) then
+                    if (e%permission /= 'public') call badge(e%permission, b)
+                end if
                 call argument_attributes(e, b)
-                call add(b, '</td><td>')
+                call add(b, '</td>')
+                if (defaults) then
+                    call add(b, '<td class="default">')
+                    if (allocated(e%initial)) then
+                        if (e%points) call add(b, '=&gt; ')
+                        call html_escape(e%initial, b, .false.)
+                    end if
+                    call add(b, '</td>')
+                end if
+                call add(b, '<td>')
                 if (allocated(e%html)) call add(b, e%html)
             else
                 ! a dummy procedure with an interface
@@ -1164,7 +1192,11 @@ subroutine entity_page(site, id, html)
         if (e%iface == IFACE_EXPLICIT) word = 'interface'
         if (e%iface == IFACE_ABSTRACT) word = 'abstract interface'
 
-        call side_group(site, 'Variables', variables, side)
+        if (e%kind == E_TYPE) then
+            call side_group(site, 'Components', variables, side)
+        else
+            call side_group(site, 'Variables', variables, side)
+        end if
         call side_group(site, 'Interfaces', interfaces, side)
         call side_group(site, 'Abstract interfaces', abstracts, side)
         call side_group(site, 'Types', types, side)
@@ -1336,7 +1368,7 @@ subroutine procedure_body(site, id, b)
         if (allocated(e%arg_ids)) then
             if (size(e%arg_ids) > 0) then
                 call add(b, '<h2 id="arguments">Arguments</h2>'//achar(10))
-                call argument_table(site, e%arg_ids, b)
+                call argument_table(site, e%arg_ids, .false., b)
             end if
         end if
         if (e%result > 0) then
@@ -1403,7 +1435,7 @@ subroutine type_body(site, id, variables, bindings, finals, b)
         end if
         if (size(variables) > 0) then
             call add(b, '<h2 id="components">Components</h2>'//achar(10))
-            call variable_table(site, variables, b)
+            call argument_table(site, variables, .true., b)
         end if
         if (e%constructor > 0) then
             call add(b, '<h2 id="constructor">Constructor</h2>'//achar(10))
