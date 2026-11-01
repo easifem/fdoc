@@ -6,9 +6,9 @@ use fdoc_settings, only: settings_t, set_option
 implicit none
 private
 
-public :: parse_args, apply_args, usage, VERSION
+public :: parse_args, apply_args, usage
 
-character(len=*), parameter :: VERSION = '0.0.1'
+character(len=*), parameter, public :: VERSION = '0.0.1'
 
 integer, parameter, public :: ACTION_RUN = 0       !! generate the documentation
 integer, parameter, public :: ACTION_HELP = 1      !! print the usage

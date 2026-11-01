@@ -15,12 +15,12 @@ use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
 implicit none
 private
 
-public :: graph_t, graph_set_t, build_graphs, REL_USES, REL_CALLS, REL_INHERITS, REL_FILES
+public :: graph_t, graph_set_t, build_graphs
 
-integer, parameter :: REL_USES = 1       !! modules used
-integer, parameter :: REL_CALLS = 2      !! procedures called
-integer, parameter :: REL_INHERITS = 3   !! types extended
-integer, parameter :: REL_FILES = 4      !! files depended on
+integer, parameter, public :: REL_USES = 1       !! modules used
+integer, parameter, public :: REL_CALLS = 2      !! procedures called
+integer, parameter, public :: REL_INHERITS = 3   !! types extended
+integer, parameter, public :: REL_FILES = 4      !! files depended on
 integer, parameter :: NUM_RELATIONS = 4
 
 integer, parameter :: BATCH = 25             !! graphs for one `dot` process
