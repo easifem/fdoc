@@ -9,7 +9,6 @@ module fdoc_markdown
 !!
 !! Documentation is rendered in parallel, so nothing here calls a function returning a deferred-length
 !! string (see `example/slen_race.f90`).
-use ffmt_io, only: read_file
 use fdoc_util
 use fdoc_buffer
 use fdoc_highlight, only: highlight_fortran
@@ -192,7 +191,7 @@ recursive subroutine expand_file_includes(lines, options, depth)
     type(markdown_options_t), intent(in) :: options         !! what rendering depends on
     integer, intent(in) :: depth                            !! how many includes deep this is
     type(string_t), allocatable :: out(:), included(:)
-    character(len=:), allocatable :: contents, msg, path, before, after
+    character(len=:), allocatable :: contents, path, before, after
     integer :: k, a, b, stat, j
 
     if (depth > 16) return
@@ -210,7 +209,7 @@ recursive subroutine expand_file_includes(lines, options, depth)
         ! not `join_path`, which returns a deferred-length string
         path = strip(lines(k)%s(a + 2:a + b))
         if (.not. starts_with(path, '/')) path = options%base_path//'/'//path
-        call read_file(path, contents, stat, msg)
+        call file_read(path, contents, stat)
         if (stat /= 0) then
             call warn('could not include '//path)
             call push(out, lines(k)%s)

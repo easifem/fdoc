@@ -51,7 +51,7 @@ subroutine link_submodule(p, id)
 
     parent = p%list%box(id)%e%parent_submodule_id
     if (parent == 0) parent = p%list%box(id)%e%ancestor_id
-    if (parent > 0) call push_int(p%list%box(parent)%e%descendants, id)
+    if (parent > 0) call push_int(p%list%box(parent)%e%more%descendants, id)
 end subroutine link_submodule
 
 !> Connect a separate module procedure with its interface, and copy what it does not repeat.
@@ -78,8 +78,8 @@ subroutine link_implementation(p, id)
     if (p%list%box(id)%e%kind /= E_MODPROC) return
     associate (e => p%list%box(id)%e, base => p%list%box(found)%e)
         if (allocated(base%attribs)) e%attribs = base%attribs
-        if (allocated(base%args)) e%args = base%args
-        if (allocated(base%arg_ids)) e%arg_ids = base%arg_ids
+        if (allocated(base%more%args)) e%more%args = base%more%args
+        if (allocated(base%more%arg_ids)) e%more%arg_ids = base%more%arg_ids
         e%result = base%result
     end associate
 end subroutine link_implementation
@@ -90,10 +90,10 @@ subroutine link_module_procedures(p, id)
     integer, intent(in) :: id               !! the interface
     integer :: k, found
 
-    allocate (p%list%box(id)%e%modproc_ids(size(p%list%box(id)%e%modprocs)))
-    do k = 1, size(p%list%box(id)%e%modprocs)
-        found = find_symbol(p, p%list%box(id)%e%parent, lowercase(p%list%box(id)%e%modprocs(k)%s), 1)
-        p%list%box(id)%e%modproc_ids(k) = found
+    allocate (p%list%box(id)%e%more%modproc_ids(size(p%list%box(id)%e%more%modprocs)))
+    do k = 1, size(p%list%box(id)%e%more%modprocs)
+        found = find_symbol(p, p%list%box(id)%e%parent, lowercase(p%list%box(id)%e%more%modprocs(k)%s), 1)
+        p%list%box(id)%e%more%modproc_ids(k) = found
     end do
 end subroutine link_module_procedures
 
@@ -105,22 +105,22 @@ subroutine link_binding(p, id)
 
     parent = p%list%box(id)%e%parent
     associate (b => p%list%box(id)%e)
-        allocate (b%binding_ids(size(b%bindings)))
-        b%binding_ids = 0
-        if (allocated(b%proto_text)) then
-            b%proto_id = find_symbol(p, parent, lowercase(b%proto_text), 1)
-            if (b%proto_id == 0) b%proto_id = find_symbol(p, parent, lowercase(b%proto_text), 2)
+        allocate (b%more%binding_ids(size(b%more%bindings)))
+        b%more%binding_ids = 0
+        if (allocated(b%more%proto_text)) then
+            b%proto_id = find_symbol(p, parent, lowercase(b%more%proto_text), 1)
+            if (b%proto_id == 0) b%proto_id = find_symbol(p, parent, lowercase(b%more%proto_text), 2)
         end if
-        do k = 1, size(b%bindings)
+        do k = 1, size(b%more%bindings)
             if (b%generic) then
-                found = type_binding(p, parent, lowercase(b%bindings(k)%s))
+                found = type_binding(p, parent, lowercase(b%more%bindings(k)%s))
             else if (b%deferred) then
                 found = 0
             else
-                found = find_symbol(p, parent, lowercase(b%bindings(k)%s), 1)
+                found = find_symbol(p, parent, lowercase(b%more%bindings(k)%s), 1)
                 if (found > 0) p%list%box(found)%e%bound_to = parent
             end if
-            b%binding_ids(k) = found
+            b%more%binding_ids(k) = found
         end do
     end associate
 end subroutine link_binding
@@ -152,11 +152,11 @@ integer function type_member(p, id, name, kind) result(found)
                 return
             end if
         end do
-        if (.not. allocated(e%inherited)) return
-        do k = 1, size(e%inherited)
-            if (p%list%box(e%inherited(k))%e%kind /= kind) cycle
-            if (lowercase(p%list%box(e%inherited(k))%e%name) == name) then
-                found = e%inherited(k)
+        if (.not. allocated(e%more%inherited)) return
+        do k = 1, size(e%more%inherited)
+            if (p%list%box(e%more%inherited(k))%e%kind /= kind) cycle
+            if (lowercase(p%list%box(e%more%inherited(k))%e%name) == name) then
+                found = e%more%inherited(k)
                 return
             end if
         end do
@@ -197,10 +197,10 @@ subroutine link_calls(p, id)
     type(string_t), allocatable :: parts(:)
     integer :: k, item, context, j
 
-    allocate (p%list%box(id)%e%call_ids(0), p%list%box(id)%e%unknown_calls(0))
-    if (.not. allocated(p%list%box(id)%e%calls)) return
-    do k = 1, size(p%list%box(id)%e%calls)
-        parts = split_on(p%list%box(id)%e%calls(k)%s, '%')
+    allocate (p%list%box(id)%e%call_ids(0), p%list%box(id)%e%more%unknown_calls(0))
+    if (.not. allocated(p%list%box(id)%e%more%calls)) return
+    do k = 1, size(p%list%box(id)%e%more%calls)
+        parts = split_on(p%list%box(id)%e%more%calls(k)%s, '%')
         context = id
         do j = 1, size(parts) - 1
             context = context_of(p, label_item(p, context, parts(j)%s))
@@ -209,7 +209,7 @@ subroutine link_calls(p, id)
         item = 0
         if (context > 0) item = label_item(p, context, parts(size(parts))%s)
         if (item == 0) then
-            call push(p%list%box(id)%e%unknown_calls, parts(size(parts))%s)
+            call push(p%list%box(id)%e%more%unknown_calls, parts(size(parts))%s)
         else if (p%list%box(item)%e%kind /= E_VARIABLE .and. p%list%box(item)%e%kind /= E_TYPE) then
             call push_int(p%list%box(id)%e%call_ids, item)
         end if
@@ -230,10 +230,10 @@ integer function label_item(p, context, label) result(item)
     end if
     ! the arguments of a separate module procedure are those of its interface
     associate (e => p%list%box(context)%e)
-        if (allocated(e%arg_ids)) then
-            do k = 1, size(e%arg_ids)
-                if (lowercase(p%list%box(e%arg_ids(k))%e%name) == label) then
-                    item = e%arg_ids(k)
+        if (allocated(e%more%arg_ids)) then
+            do k = 1, size(e%more%arg_ids)
+                if (lowercase(p%list%box(e%more%arg_ids(k))%e%name) == label) then
+                    item = e%more%arg_ids(k)
                     return
                 end if
             end do
@@ -313,7 +313,7 @@ function dump_links(p) result(text)
             select case (e%kind)
             case (E_MODULE, E_SUBMODULE, E_PROGRAM, E_SUBROUTINE, E_FUNCTION, E_MODPROC, E_INTERFACE, E_BOUNDPROC, E_TYPE)
                 if (allocated(e%external_url) .or. .not. allocated(e%name)) cycle
-                if (e%kind == E_BOUNDPROC .and. .not. allocated(e%binding_ids)) cycle
+                if (e%kind == E_BOUNDPROC .and. .not. allocated(e%more%binding_ids)) cycle
                 if (e%kind == E_TYPE) then
                     call json%create_object(node, qualified_name(p, k)//'#type')
                 else
@@ -351,9 +351,9 @@ subroutine add_links(json, node, p, id)
 
     associate (e => p%list%box(id)%e)
         allocate (names(0))
-        if (allocated(e%uses) .and. e%kind /= E_BOUNDPROC) then
-            do k = 1, size(e%uses)
-                call push(names, e%uses(k)%module)
+        if (allocated(e%more%uses) .and. e%kind /= E_BOUNDPROC) then
+            do k = 1, size(e%more%uses)
+                call push(names, e%more%uses(k)%module)
             end do
             call add_list('uses', names)
         end if
@@ -362,15 +362,15 @@ subroutine add_links(json, node, p, id)
             do k = 1, size(e%call_ids)
                 call push(names, lowercase(p%list%box(e%call_ids(k))%e%name))
             end do
-            if (allocated(e%unknown_calls)) then
-                do k = 1, size(e%unknown_calls)
-                    call push(names, e%unknown_calls(k)%s)
+            if (allocated(e%more%unknown_calls)) then
+                do k = 1, size(e%more%unknown_calls)
+                    call push(names, e%more%unknown_calls(k)%s)
                 end do
             end if
             call add_list('calls', names)
         end if
-        if (allocated(e%binding_ids)) call add_ids('bindings', e%binding_ids, e%bindings)
-        if (allocated(e%modproc_ids)) call add_ids('modprocs', e%modproc_ids, e%modprocs)
+        if (allocated(e%more%binding_ids)) call add_ids('bindings', e%more%binding_ids, e%more%bindings)
+        if (allocated(e%more%modproc_ids)) call add_ids('modprocs', e%more%modproc_ids, e%more%modprocs)
         if (e%kind == E_SUBMODULE) then
             if (e%ancestor_id > 0) call json%add(node, 'ancestor', lowercase(p%list%box(e%ancestor_id)%e%name))
         end if

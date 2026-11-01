@@ -105,9 +105,9 @@ subroutine build_relations(p, relations)
     do k = 1, p%list%n
         associate (e => p%list%box(k)%e)
             if (e%kind == E_NONE) cycle
-            if (allocated(e%uses)) then
-                do j = 1, size(e%uses)
-                    if (e%uses(j)%target > 0) call connect(relations(REL_USES), k, e%uses(j)%target)
+            if (allocated(e%more%uses)) then
+                do j = 1, size(e%more%uses)
+                    if (e%more%uses(j)%target > 0) call connect(relations(REL_USES), k, e%more%uses(j)%target)
                 end do
             end if
             if (e%kind == E_SUBMODULE) then
@@ -121,10 +121,10 @@ subroutine build_relations(p, relations)
                 seen_stamp = seen_stamp + 1
                 call visible_calls(p, k, k, seen, seen_stamp, relations(REL_CALLS))
             end if
-            if (allocated(e%modproc_ids)) then
-                do j = 1, size(e%modproc_ids)
-                    if (e%modproc_ids(j) == 0) cycle
-                    if (p%list%box(e%modproc_ids(j))%e%visible) call connect(relations(REL_CALLS), k, e%modproc_ids(j))
+            if (allocated(e%more%modproc_ids)) then
+                do j = 1, size(e%more%modproc_ids)
+                    if (e%more%modproc_ids(j) == 0) cycle
+                    if (p%list%box(e%more%modproc_ids(j))%e%visible) call connect(relations(REL_CALLS), k, e%more%modproc_ids(j))
                 end do
             end if
             if (e%kind == E_INTERFACE) then
@@ -143,9 +143,9 @@ subroutine build_relations(p, relations)
                     end associate
                 end do
             end if
-            if (e%file > 0 .and. allocated(e%uses)) then
-                do j = 1, size(e%uses)
-                    target = e%uses(j)%target
+            if (e%file > 0 .and. allocated(e%more%uses)) then
+                do j = 1, size(e%more%uses)
+                    target = e%more%uses(j)%target
                     if (target == 0) cycle
                     target = p%list%box(target)%e%file
                     if (target > 0 .and. target /= e%file) call connect(relations(REL_FILES), e%file, target)
@@ -178,13 +178,13 @@ logical function is_simple_binding(p, id)
 
     is_simple_binding = .false.
     associate (e => p%list%box(id)%e)
-        if (e%kind /= E_BOUNDPROC .or. .not. allocated(e%binding_ids)) return
-        if (size(e%binding_ids) /= 1) return
+        if (e%kind /= E_BOUNDPROC .or. .not. allocated(e%more%binding_ids)) return
+        if (size(e%more%binding_ids) /= 1) return
         if (e%deferred) then
             is_simple_binding = .true.
-        else if (e%binding_ids(1) > 0) then
-            is_simple_binding = p%list%box(e%binding_ids(1))%e%kind /= E_BOUNDPROC .and. &
-                                p%list%box(e%binding_ids(1))%e%visible
+        else if (e%more%binding_ids(1) > 0) then
+            is_simple_binding = p%list%box(e%more%binding_ids(1))%e%kind /= E_BOUNDPROC .and. &
+                                p%list%box(e%more%binding_ids(1))%e%visible
         end if
     end associate
 end function is_simple_binding
@@ -205,9 +205,9 @@ recursive subroutine visible_calls(p, id, from, seen, stamp, relation)
                 call visit(e%call_ids(j))
             end do
         end if
-        if (allocated(e%binding_ids)) then
-            do j = 1, size(e%binding_ids)
-                if (e%binding_ids(j) > 0) call visit(e%binding_ids(j))
+        if (allocated(e%more%binding_ids)) then
+            do j = 1, size(e%more%binding_ids)
+                if (e%more%binding_ids(j) > 0) call visit(e%more%binding_ids(j))
             end do
         end if
     end associate
@@ -978,11 +978,11 @@ subroutine load_graph(path, svg, found)
     character(len=*), intent(in) :: path                !! the file
     character(len=:), allocatable, intent(out) :: svg   !! the slimmed drawing
     logical, intent(out) :: found                       !! whether the file could be read
-    character(len=:), allocatable :: text, errmsg
+    character(len=:), allocatable :: text
     integer :: at, status
 
     svg = ''
-    call read_file(path, text, status, errmsg)
+    call file_read(path, text, status)
     found = status == 0
     if (.not. found) return
     at = index(text, '<svg')

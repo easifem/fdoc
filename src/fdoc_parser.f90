@@ -221,7 +221,7 @@ pure function leading_text(v, j) result(text)
     end do
 end function leading_text
 
-!> Add the procedures that a statement refers to to `e%calls`.
+!> Add the procedures that a statement refers to to `e%more%calls`.
 subroutine statement_calls(src, item, v, info, e, associations, level)
     type(source_t), intent(in) :: src                   !! the source
     integer, intent(in) :: item                         !! the statement
@@ -323,7 +323,7 @@ function chain_start(v, j) result(first)
     end do
 end function chain_start
 
-!> Add the reference ending at name `j` to `e%calls`, unless it is intrinsic or already there.
+!> Add the reference ending at name `j` to `e%more%calls`, unless it is intrinsic or already there.
 subroutine add_call(v, j, e, associations)
     type(statement_view_t), intent(in) :: v     !! the statement
     integer, intent(in) :: j                    !! the last name
@@ -334,12 +334,12 @@ subroutine add_call(v, j, e, associations)
     logical :: start
 
     if (is_intrinsic(v%low(v%lo(j):v%hi(j)))) return
-    if (.not. allocated(e%calls)) allocate (e%calls(0))
-    do k = 1, size(e%calls)
-        if (ends_with(e%calls(k)%s, v%low(v%lo(j):v%hi(j)))) then
-            if (e%calls(k)%s == v%low(v%lo(j):v%hi(j))) return
-            a = len(e%calls(k)%s) - (v%hi(j) - v%lo(j) + 1)
-            if (e%calls(k)%s(a:a) == '%') return
+    if (.not. allocated(e%more%calls)) allocate (e%more%calls(0))
+    do k = 1, size(e%more%calls)
+        if (ends_with(e%more%calls(k)%s, v%low(v%lo(j):v%hi(j)))) then
+            if (e%more%calls(k)%s == v%low(v%lo(j):v%hi(j))) return
+            a = len(e%more%calls(k)%s) - (v%hi(j) - v%lo(j) + 1)
+            if (e%more%calls(k)%s(a:a) == '%') return
         end if
     end do
 
@@ -362,7 +362,7 @@ subroutine add_call(v, j, e, associations)
             chain = chain//'%'//v%low(v%lo(k):v%hi(k))
         end if
     end do
-    call push(e%calls, chain)
+    call push(e%more%calls, chain)
 end subroutine add_call
 
 !> Add the names of an `associate` statement to `associations`.
@@ -731,7 +731,7 @@ subroutine open_unit(list, parent, construct, line, item, src, doc, s, id)
             words = strip(line(index(low, 'interface') + 9:))
             e%name = words
             e%generic = len(words) > 0
-            allocate (e%modprocs(0))
+            allocate (e%more%modprocs(0))
         end associate
     case (C_TYPE)
         id = list%add(E_TYPE, parent)
@@ -750,8 +750,8 @@ subroutine open_unit(list, parent, construct, line, item, src, doc, s, id)
         e%line = src%tokens%tok(src%stmts%s(item)%first)%line
         if (.not. allocated(e%child_permission)) e%child_permission = e%permission
         if (.not. allocated(e%attribs)) allocate (e%attribs(0))
-        if (.not. allocated(e%uses)) allocate (e%uses(0))
-        allocate (e%pending(0), e%parameters(0), e%public_list(0))
+        if (.not. allocated(e%more%uses)) allocate (e%more%uses(0))
+        allocate (e%more%pending(0), e%more%parameters(0), e%more%public_list(0))
         if (.not. allocated(e%meta)) then
             if (allocated(doc%lines)) then
                 call set_doc(e, s, doc%lines)
@@ -789,10 +789,10 @@ subroutine read_submodule(e, line)
     inside = lowercase(remove_blanks(line(open + 1:close - 1)))
     colon = index(inside, ':')
     if (colon > 0) then
-        e%ancestor = inside(:colon - 1)
-        e%parent_submodule = inside(colon + 1:)
+        e%more%ancestor = inside(:colon - 1)
+        e%more%parent_submodule = inside(colon + 1:)
     else
-        e%ancestor = inside
+        e%more%ancestor = inside
     end if
 end subroutine read_submodule
 
@@ -814,7 +814,7 @@ subroutine read_type_statement(e, line)
                 low = lowercase(parts(k)%s)
                 if (starts_with(remove_blanks(low), 'extends(')) then
                     base = parts(k)%s(index(parts(k)%s, '(') + 1:)
-                    e%extends = strip(base(:len(base) - 1))
+                    e%more%extends = strip(base(:len(base) - 1))
                 else if (low == 'public' .or. low == 'private') then
                     e%permission = low
                 else
@@ -826,7 +826,7 @@ subroutine read_type_statement(e, line)
     end if
     open = index(rest, '(')
     if (open > 0) then
-        e%parameters_list = top_split(rest(open + 1:len(rest) - 1), ',')
+        e%more%parameters_list = top_split(rest(open + 1:len(rest) - 1), ',')
         e%name = strip(rest(:open - 1))
     else
         e%name = rest
@@ -853,14 +853,14 @@ subroutine open_procedure(list, parent, line, doc, s, id)
         e%name = h%name
         e%permission = inherited_permission(list, parent)
         call move_alloc(h%attribs, e%attribs)
-        call move_alloc(h%args, e%args)
-        allocate (e%arg_ids(size(e%args)))
-        e%arg_ids = 0
+        call move_alloc(h%args, e%more%args)
+        allocate (e%more%arg_ids(size(e%more%args)))
+        e%more%arg_ids = 0
         e%is_module = contains_string(e%attribs, 'module')
-        if (allocated(h%bind_c)) e%bind_c = h%bind_c
+        if (allocated(h%bind_c)) e%more%bind_c = h%bind_c
         if (h%is_function) then
-            e%result_name = h%name
-            if (allocated(h%result_name)) e%result_name = h%result_name
+            e%more%result_name = h%name
+            if (allocated(h%result_name)) e%more%result_name = h%result_name
         end if
     end associate
     if (.not. h%is_function) return
@@ -868,7 +868,7 @@ subroutine open_procedure(list, parent, line, doc, s, id)
     if (.not. t%ok) return
     var = list%add(E_VARIABLE, id)
     associate (v => list%box(var)%e)
-        v%name = list%box(id)%e%result_name
+        v%name = list%box(id)%e%more%result_name
         v%var_role = VAR_RESULT
         v%permission = 'public'
         allocate (v%attribs(0), v%doc(0), v%meta(0))
@@ -920,20 +920,20 @@ subroutine apply_attributes(list, id)
                 case (E_FUNCTION, E_SUBROUTINE, E_TYPE, E_INTERFACE, E_VARIABLE)
                     if (.not. allocated(e%name)) cycle
                     name = lowercase(e%name)
-                    do k = 1, size(u%pending)
-                        if (u%pending(k)%name == name) then
-                            call apply_one(e, u, u%pending(k)%value)
-                            u%pending(k)%name = ''
+                    do k = 1, size(u%more%pending)
+                        if (u%more%pending(k)%name == name) then
+                            call apply_one(e, u, u%more%pending(k)%value)
+                            u%more%pending(k)%name = ''
                         end if
                     end do
                     if (allocated(e%permission)) then
-                        if (e%permission == 'public') call push(u%public_list, name)
+                        if (e%permission == 'public') call push(u%more%public_list, name)
                     end if
                 end select
             end associate
         end do
-        do k = 1, size(u%pending)
-            if (u%pending(k)%value == 'public' .and. len(u%pending(k)%name) > 0) call push(u%public_list, u%pending(k)%name)
+        do k = 1, size(u%more%pending)
+            if (u%more%pending(k)%value == 'public' .and. len(u%more%pending(k)%name) > 0) call push(u%more%public_list, u%more%pending(k)%name)
         end do
         do c = 1, size(u%children)
             child = u%children(c)
@@ -963,8 +963,8 @@ subroutine apply_one(e, u, value)
         end if
         if (value == 'parameter') then
             call push(e%attribs, value)
-            do k = 1, size(u%parameters)
-                if (u%parameters(k)%name == lowercase(e%name)) e%initial = u%parameters(k)%value
+            do k = 1, size(u%more%parameters)
+                if (u%more%parameters(k)%name == lowercase(e%name)) e%initial = u%more%parameters(k)%value
             end do
             return
         end if
@@ -975,7 +975,7 @@ subroutine apply_one(e, u, value)
             return
         end if
     else if (starts_with(value, 'bind')) then
-        e%bind_c = value(6:len(value) - 1)
+        e%more%bind_c = value(6:len(value) - 1)
         return
     end if
     call push(e%attribs, value)
@@ -990,7 +990,7 @@ subroutine attach_arguments(list, id)
 
     associate (p => list%box(id)%e)
         if (p%kind == E_FUNCTION .and. p%result == 0) then
-            wanted = lowercase(p%result_name)
+            wanted = lowercase(p%more%result_name)
             do c = 1, size(p%children)
                 child = p%children(c)
                 if (list%box(child)%e%kind /= E_VARIABLE) cycle
@@ -1000,28 +1000,28 @@ subroutine attach_arguments(list, id)
                     exit
                 end if
             end do
-            if (p%result == 0) p%result = implicit_variable(list, id, p%result_name, VAR_RESULT)
+            if (p%result == 0) p%result = implicit_variable(list, id, p%more%result_name, VAR_RESULT)
         end if
         call doxygen_params(list, id)
-        do a = 1, size(p%args)
-            wanted = lowercase(p%args(a)%s)
+        do a = 1, size(p%more%args)
+            wanted = lowercase(p%more%args(a)%s)
             do c = 1, size(p%children)
                 child = p%children(c)
                 if (.not. allocated(list%box(child)%e%name)) cycle
                 if (list%box(child)%e%kind == E_VARIABLE) then
                     if (list%box(child)%e%var_role == VAR_PLAIN .and. lowercase(list%box(child)%e%name) == wanted) then
-                        p%arg_ids(a) = child
+                        p%more%arg_ids(a) = child
                         list%box(child)%e%var_role = VAR_ARGUMENT
                         exit
                     end if
                 else if (list%box(child)%e%iface == IFACE_EXPLICIT .and. lowercase(list%box(child)%e%name) == wanted) then
-                    p%arg_ids(a) = child
+                    p%more%arg_ids(a) = child
                     exit
                 end if
             end do
-            if (p%arg_ids(a) == 0) then
-                var = implicit_variable(list, id, p%args(a)%s, VAR_ARGUMENT)
-                p%arg_ids(a) = var
+            if (p%more%arg_ids(a) == 0) then
+                var = implicit_variable(list, id, p%more%args(a)%s, VAR_ARGUMENT)
+                p%more%arg_ids(a) = var
             end if
         end do
     end associate
@@ -1177,7 +1177,7 @@ subroutine read_use(u, line)
         name = lowercase(rest)
         spec = ''
     end if
-    u%uses = [u%uses, use_t(name, spec, 0)]
+    u%more%uses = [u%more%uses, use_t(name, spec, 0)]
 end subroutine read_use
 
 !> True if `low` starts with a word that gives attributes to names listed after it.
@@ -1226,7 +1226,7 @@ subroutine read_attribute_statement(u, line, low)
         rest = line(at:)
     end if
     if (attr == 'data' .or. attr == 'save' .and. len(strip(rest)) == 0) return
-    if (.not. allocated(u%pending)) return
+    if (.not. allocated(u%more%pending)) return
     rest = strip(rest)
     if (starts_with(rest, '::')) rest = strip(rest(3:))
     if (attr == 'parameter' .and. len(rest) > 1) rest = strip(rest(2:len(rest) - 1))
@@ -1238,16 +1238,16 @@ subroutine read_attribute_statement(u, line, low)
             if (at > 0) then
                 dims = name(at:)
                 name = strip(name(:at - 1))
-                u%pending = [u%pending, attribute_t(name, attr//dims)]
+                u%more%pending = [u%more%pending, attribute_t(name, attr//dims)]
                 cycle
             end if
         else if (attr == 'parameter') then
             parts = top_split(names(k)%s, '=')
             if (size(parts) < 2) cycle
             name = lowercase(parts(1)%s)
-            u%parameters = [u%parameters, attribute_t(name, parts(2)%s)]
+            u%more%parameters = [u%more%parameters, attribute_t(name, parts(2)%s)]
         end if
-        u%pending = [u%pending, attribute_t(name, attr)]
+        u%more%pending = [u%more%pending, attribute_t(name, attr)]
     end do
 end subroutine read_attribute_statement
 
@@ -1384,17 +1384,17 @@ subroutine read_binding(list, unit, line, doc, s)
             open = index(text, '=>')
             if (open > 0) then
                 b%name = strip(text(:open - 1))
-                b%bindings = top_split(text(open + 2:), ',')
+                b%more%bindings = top_split(text(open + 2:), ',')
             else
                 b%name = strip(text)
                 bindings = [string_t(b%name)]
-                call move_alloc(bindings, b%bindings)
+                call move_alloc(bindings, b%more%bindings)
             end if
             b%generic = generic
             b%deferred = deferred
             b%permission = permission
             b%attribs = kept
-            if (len(proto) > 0) b%proto_text = proto
+            if (len(proto) > 0) b%more%proto_text = proto
             if (allocated(doc%lines)) then
                 call set_doc(b, s, doc%lines)
             else
@@ -1436,7 +1436,7 @@ subroutine read_module_procedures(u, line)
     if (at > 0) rest = rest(at + 2:)
     names = top_split(rest, ',')
     do k = 1, size(names)
-        call push(u%modprocs, names(k)%s)
+        call push(u%more%modprocs, names(k)%s)
     end do
 end subroutine read_module_procedures
 
@@ -1464,7 +1464,7 @@ subroutine read_common(list, unit, line, doc, s)
         associate (c => list%box(id)%e)
             c%name = name
             c%permission = 'public'
-            c%args = top_split(rest(:a), ',')
+            c%more%args = top_split(rest(:a), ',')
             allocate (c%attribs(0))
             if (allocated(doc%lines)) then
                 call set_doc(c, s, doc%lines)
@@ -1486,8 +1486,8 @@ subroutine mark_common_members(list, id)
     do c = 1, size(list%box(id)%e%children)
         block = list%box(id)%e%children(c)
         if (list%box(block)%e%kind /= E_COMMON) cycle
-        do m = 1, size(list%box(block)%e%args)
-            member = lowercase(list%box(block)%e%args(m)%s)
+        do m = 1, size(list%box(block)%e%more%args)
+            member = lowercase(list%box(block)%e%more%args(m)%s)
             at = index(member, '(')
             if (at > 0) member = strip(member(:at - 1))
             do v = 1, size(list%box(id)%e%children)
@@ -1516,7 +1516,7 @@ subroutine read_namelist(list, unit, line, doc, s)
     associate (n => list%box(id)%e)
         n%name = strip(line(a + 1:b - 1))
         n%permission = inherited_permission(list, unit)
-        n%args = top_split(line(b + 1:), ',')
+        n%more%args = top_split(line(b + 1:), ',')
         allocate (n%attribs(0))
         if (allocated(doc%lines)) then
             call set_doc(n, s, doc%lines)

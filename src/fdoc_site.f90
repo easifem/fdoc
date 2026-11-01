@@ -243,9 +243,9 @@ subroutine children_of(site, id, want, ids)
             child = e%children(k)
             if (accepts(site%p%list%box(child)%e, want)) call push_int(ids, child)
         end do
-        if (allocated(e%inherited)) then
-            do k = 1, size(e%inherited)
-                child = e%inherited(k)
+        if (allocated(e%more%inherited)) then
+            do k = 1, size(e%more%inherited)
+                child = e%more%inherited(k)
                 if (accepts(site%p%list%box(child)%e, want) .and. contains_string(e%display, &
                                                                                   site%p%list%box(child)%e%permission)) then
                     call push_int(ids, child)
@@ -750,23 +750,23 @@ subroutine signature(site, id, b)
         case (E_MODPROC); call add(b, '<span class="k">module procedure</span> ')
         end select
         call html_escape(e%name, b, .false.)
-        if (allocated(e%args)) then
+        if (allocated(e%more%args)) then
             call add(b, '(')
-            call html_escape(join(e%args, ', '), b, .false.)
+            call html_escape(join(e%more%args, ', '), b, .false.)
             call add(b, ')')
         end if
         if (e%kind == E_FUNCTION) then
-            if (allocated(e%result_name)) then
-                if (lowercase(e%result_name) /= lowercase(e%name)) then
+            if (allocated(e%more%result_name)) then
+                if (lowercase(e%more%result_name) /= lowercase(e%name)) then
                     call add(b, ' <span class="k">result</span>(')
-                    call html_escape(e%result_name, b, .false.)
+                    call html_escape(e%more%result_name, b, .false.)
                     call add(b, ')')
                 end if
             end if
         end if
-        if (allocated(e%bind_c)) then
+        if (allocated(e%more%bind_c)) then
             call add(b, ' <span class="k">bind</span>(')
-            call html_escape(e%bind_c, b, .false.)
+            call html_escape(e%more%bind_c, b, .false.)
             call add(b, ')')
         end if
         call add(b, '</div>'//achar(10))
@@ -854,12 +854,12 @@ subroutine binding_table(site, ids, b)
             call add(b, '"><td class="name">')
             call html_escape(t%name, b, .false.)
             call add(b, '</td><td class="binds">')
-            if (allocated(t%proto_text)) then
-                call link_to(site, t%proto_id, t%proto_text, b)
-            else if (allocated(t%binding_ids) .and. .not. t%deferred) then
-                do j = 1, size(t%binding_ids)
+            if (allocated(t%more%proto_text)) then
+                call link_to(site, t%proto_id, t%more%proto_text, b)
+            else if (allocated(t%more%binding_ids) .and. .not. t%deferred) then
+                do j = 1, size(t%more%binding_ids)
                     if (j > 1) call add(b, ', ')
-                    call link_to(site, t%binding_ids(j), t%bindings(j)%s, b)
+                    call link_to(site, t%more%binding_ids(j), t%more%bindings(j)%s, b)
                 end do
             end if
             call add(b, '</td><td class="attributes">')
@@ -1010,12 +1010,12 @@ subroutine uses_section(site, id, b)
     integer :: k
 
     associate (e => site%p%list%box(id)%e)
-        if (.not. allocated(e%uses)) return
-        if (size(e%uses) == 0) return
+        if (.not. allocated(e%more%uses)) return
+        if (size(e%more%uses) == 0) return
         call add(b, '<h2 id="uses">Uses</h2>'//achar(10)//'<ul class="chips">')
-        do k = 1, size(e%uses)
+        do k = 1, size(e%more%uses)
             call add(b, '<li>')
-            call link_to(site, e%uses(k)%target, e%uses(k)%module, b)
+            call link_to(site, e%more%uses(k)%target, e%more%uses(k)%module, b)
             call add(b, '</li>')
         end do
         call add(b, '</ul>'//achar(10))
@@ -1312,9 +1312,9 @@ subroutine entity_page(site, id, html)
         case (E_TYPE)
             call type_body(site, id, variables, bindings, finals, b)
         case (E_NAMELIST)
-            if (allocated(e%args)) then
+            if (allocated(e%more%args)) then
                 call add(b, '<h2>Variables</h2>'//achar(10)//'<ul class="chips">')
-                call add_words(e%args, b)
+                call add_words(e%more%args, b)
                 call add(b, '</ul>'//achar(10))
             end if
         case (E_FILE)
@@ -1380,7 +1380,7 @@ subroutine common_sections(site, ids, b)
             call add(b, '</h3>'//achar(10))
             if (allocated(e%html)) call add(b, e%html)
             call add(b, '<ul class="chips">')
-            call add_words(e%args, b)
+            call add_words(e%more%args, b)
             call add(b, '</ul></div>'//achar(10))
         end associate
     end do
@@ -1431,15 +1431,15 @@ subroutine unit_body(site, id, b)
     associate (e => site%p%list%box(id)%e)
         if (e%kind == E_SUBMODULE) then
             call add(b, '<div class="meta"><span>submodule of ')
-            call link_to(site, e%ancestor_id, e%ancestor, b)
+            call link_to(site, e%ancestor_id, e%more%ancestor, b)
             call add(b, '</span></div>'//achar(10))
         end if
         call uses_section(site, id, b)
-        if (allocated(e%descendants)) then
+        if (allocated(e%more%descendants)) then
             call add(b, '<h2 id="submodules">Submodules</h2>'//achar(10)//'<ul class="chips">')
-            do k = 1, size(e%descendants)
+            do k = 1, size(e%more%descendants)
                 call add(b, '<li>')
-                call link_to(site, e%descendants(k), site%p%list%box(e%descendants(k))%e%name, b)
+                call link_to(site, e%more%descendants(k), site%p%list%box(e%more%descendants(k))%e%name, b)
                 call add(b, '</li>')
             end do
             call add(b, '</ul>'//achar(10))
@@ -1455,10 +1455,10 @@ subroutine procedure_body(site, id, b)
     type(buffer_t), intent(inout) :: b      !! the HTML
 
     associate (e => site%p%list%box(id)%e)
-        if (allocated(e%arg_ids)) then
-            if (size(e%arg_ids) > 0) then
+        if (allocated(e%more%arg_ids)) then
+            if (size(e%more%arg_ids) > 0) then
                 call add(b, '<h2 id="arguments">Arguments</h2>'//achar(10))
-                call argument_table(site, e%arg_ids, .false., b)
+                call argument_table(site, e%more%arg_ids, .false., b)
             end if
         end if
         if (e%result > 0) then
@@ -1486,18 +1486,18 @@ subroutine interface_body(site, id, b)
 
     associate (e => site%p%list%box(id)%e)
         call add(b, '<h2 id="procedures">Procedures</h2>'//achar(10))
-        do k = 1, size(e%modproc_ids)
-            if (e%modproc_ids(k) == 0) then
+        do k = 1, size(e%more%modproc_ids)
+            if (e%more%modproc_ids(k) == 0) then
                 call add(b, '<div class="item"><h3>')
-                call html_escape(e%modprocs(k)%s, b, .false.)
+                call html_escape(e%more%modprocs(k)%s, b, .false.)
                 call add(b, '</h3></div>'//achar(10))
             else
-                call summary_item(site, e%modproc_ids(k), b)
+                call summary_item(site, e%more%modproc_ids(k), b)
             end if
         end do
         do k = 1, size(e%children)
             if (site%p%list%box(e%children(k))%e%kind == E_NONE) cycle
-            if (allocated(site%p%list%box(e%children(k))%e%args)) call summary_item(site, e%children(k), b)
+            if (allocated(site%p%list%box(e%children(k))%e%more%args)) call summary_item(site, e%children(k), b)
         end do
     end associate
 end subroutine interface_body
@@ -1513,9 +1513,9 @@ subroutine type_body(site, id, variables, bindings, finals, b)
     integer :: k, j
 
     associate (e => site%p%list%box(id)%e)
-        if (allocated(e%extends)) then
+        if (allocated(e%more%extends)) then
             call add(b, '<div class="meta"><span>extends ')
-            call link_to(site, e%extends_id, e%extends, b)
+            call link_to(site, e%extends_id, e%more%extends, b)
             call add(b, '</span></div>'//achar(10))
         end if
         if (size(e%attribs) > 0) then
@@ -1584,12 +1584,12 @@ subroutine page_outline(site, id, b)
     associate (e => site%p%list%box(id)%e)
         if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION .and. e%kind /= E_MODPROC) return
         call add(b, '<h4>On this page</h4><ul>')
-        if (allocated(e%arg_ids)) then
-            if (size(e%arg_ids) > 0) call add(b, '<li><a href="#arguments">Arguments</a></li>')
+        if (allocated(e%more%arg_ids)) then
+            if (size(e%more%arg_ids) > 0) call add(b, '<li><a href="#arguments">Arguments</a></li>')
         end if
         if (e%result > 0) call add(b, '<li><a href="#result">Result</a></li>')
-        if (allocated(e%uses)) then
-            if (size(e%uses) > 0) call add(b, '<li><a href="#uses">Uses</a></li>')
+        if (allocated(e%more%uses)) then
+            if (size(e%more%uses) > 0) call add(b, '<li><a href="#uses">Uses</a></li>')
         end if
         if (allocated(e%call_ids)) then
             if (size(e%call_ids) > 0) call add(b, '<li><a href="#calls">Calls</a></li>')
@@ -1668,7 +1668,7 @@ subroutine list_columns(site, which, id, b)
         case (LIST_TYPES)
             call location(e%parent)
             call add(b, '<td class="link">')
-            if (allocated(e%extends)) call link_to(site, e%extends_id, e%extends, b)
+            if (allocated(e%more%extends)) call link_to(site, e%extends_id, e%more%extends, b)
             call add(b, '</td>')
         end select
     end associate
@@ -1888,6 +1888,51 @@ subroutine copy_page_files(s, directory, pages)
     end do
 end subroutine copy_page_files
 
+!> Render the pages of entities `ids` and write them, in parallel. A page is not kept once it is
+!> written, as together they can be larger than everything else in memory.
+subroutine write_entity_pages(site, ids, directory, count, stat, errmsg)
+    type(site_t), intent(in) :: site                    !! the site
+    integer, intent(in) :: ids(:)                       !! the entities
+    character(len=*), intent(in) :: directory           !! the directory of the site
+    integer, intent(out) :: count                       !! how many pages were written
+    integer, intent(out) :: stat                        !! nonzero on failure
+    character(len=:), allocatable, intent(out) :: errmsg !! what is wrong
+    integer, allocatable :: results(:)
+    integer :: k
+
+    allocate (results(size(ids)))
+    call progress_start('Rendering pages', size(ids))
+    !$omp parallel do schedule(dynamic) num_threads(max(1, site%s%parallel)) default(shared) private(k)
+    do k = 1, size(ids)
+        call write_entity_page(site, ids(k), directory, results(k))
+        call progress_tick()
+    end do
+    !$omp end parallel do
+    call progress_finish()
+    count = size(ids)
+    stat = 0
+    errmsg = ''
+    do k = 1, size(ids)
+        if (results(k) == 0) cycle
+        stat = results(k)
+        errmsg = 'could not write the page of '//site%p%list%box(ids(k))%e%name
+        return
+    end do
+end subroutine write_entity_pages
+
+!> Render the page of entity `id` and write it.
+subroutine write_entity_page(site, id, directory, stat)
+    type(site_t), intent(in) :: site            !! the site
+    integer, intent(in) :: id                   !! the entity
+    character(len=*), intent(in) :: directory   !! the directory of the site
+    integer, intent(out) :: stat                !! nonzero on failure
+    character(len=:), allocatable :: html, url
+
+    call entity_page(site, id, html)
+    call entity_url(site%p%list, id, url)
+    call file_write(directory//'/'//url, html, stat)
+end subroutine write_entity_page
+
 !> Write the whole site.
 subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     type(project_t), intent(inout), target :: p         !! the project
@@ -1928,17 +1973,19 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     allocate (pages(n + NUM_LISTS + 1 + extra), paths(n + NUM_LISTS + 1 + extra))
     count = 0
 
-    call progress_start('Rendering pages', n)
-    !$omp parallel do schedule(dynamic) num_threads(max(1, s%parallel)) default(shared)
-    do k = 1, n
-        call entity_page(site, ids(k), pages(k)%s)
-        call progress_tick()
-    end do
-    !$omp end parallel do
-    call progress_finish()
-    do k = 1, n
-        call entity_url(p%list, ids(k), paths(k)%s)
-    end do
+    directory = s%output_dir
+    call execute_command_line("mkdir -p '"//directory//"' && cd '"//directory// &
+                              "' && mkdir -p css js lists module proc type interface program blockdata namelist sourcefile search page", &
+                              exitstat=stat)
+    if (stat /= 0) then
+        errmsg = 'could not create '//directory
+        return
+    end if
+    call page_directories(directory, pages_in)
+
+    call write_entity_pages(site, ids, directory, count, stat, errmsg)
+    if (stat /= 0) return
+
     do k = 1, NUM_LISTS
         paths(n + k)%s = 'lists/'//trim(LIST_FILE(k))//'.html'
         if (size(site%members(k)%ids) > 0) call list_page(site, k, pages(n + k)%s)
@@ -1952,15 +1999,6 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     paths(size(paths))%s = 'search.html'
     if (s%search) call search_page(site, pages(size(paths))%s)
 
-    directory = s%output_dir
-    call execute_command_line("mkdir -p '"//directory//"' && cd '"//directory// &
-                              "' && mkdir -p css js lists module proc type interface program blockdata namelist sourcefile search page", &
-                              exitstat=stat)
-    if (stat /= 0) then
-        errmsg = 'could not create '//directory
-        return
-    end if
-    call page_directories(directory, pages_in)
     call progress_start('Writing files', size(pages))
     do k = 1, size(pages)
         call progress_tick()

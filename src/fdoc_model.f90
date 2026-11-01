@@ -65,9 +65,36 @@ type, public :: meta_t
     type(string_t), allocatable :: values(:)    !! the values
 end type meta_t
 
+type, public :: entity_more_t
+    !! What only some entities have. Most entities are variables, which share one of these, so an
+    !! entity takes half the memory; this makes up most of the memory used on large projects.
+    type(use_t), allocatable :: uses(:)         !! its `use` statements
+    type(attribute_t), allocatable :: pending(:)    !! attributes waiting to be applied
+    type(attribute_t), allocatable :: parameters(:) !! values from `parameter` statements
+    type(string_t), allocatable :: public_list(:)   !! names known to be public, in lowercase
+    character(len=:), allocatable :: ancestor       !! the ancestor module, in lowercase
+    character(len=:), allocatable :: parent_submodule  !! the parent submodule, in lowercase
+    integer, allocatable :: descendants(:)      !! the submodules directly below this entity
+    type(string_t), allocatable :: args(:)      !! dummy argument names as written
+    integer, allocatable :: arg_ids(:)          !! the entity of each argument
+    character(len=:), allocatable :: result_name    !! the result's name as written
+    character(len=:), allocatable :: bind_c     !! the text of `bind(...)`, if any
+    type(string_t), allocatable :: calls(:)     !! `%`-separated names of what it calls, in lowercase
+    type(string_t), allocatable :: unknown_calls(:) !! the names of calls that were not found
+    type(string_t), allocatable :: modprocs(:)  !! procedures listed by `module procedure`
+    integer, allocatable :: modproc_ids(:)      !! those procedures, once found
+    character(len=:), allocatable :: extends    !! the parent type's name as written, if any
+    type(string_t), allocatable :: parameters_list(:)   !! type parameter names
+    integer, allocatable :: inherited(:)        !! the components and bindings it inherits
+    type(string_t), allocatable :: bindings(:)  !! what it is bound to
+    character(len=:), allocatable :: proto_text !! the interface in `procedure(...)`, if any
+    integer, allocatable :: binding_ids(:)      !! what each of `bindings` is, once found
+end type entity_more_t
+
 type, public :: entity_t
     !! A file, program unit, procedure, type, variable or the like. Which components apply depends on
     !! `kind`.
+    type(entity_more_t), pointer :: more => null()  !! what only some entities have
     integer :: kind = E_NONE                    !! one of the `E_*` constants
     integer :: parent = 0                       !! the entity containing this one
     integer :: file = 0                         !! the file containing this entity
@@ -90,55 +117,34 @@ type, public :: entity_t
     integer :: source_last = 0                  !! where its code ends
 
     ! containers
-    type(use_t), allocatable :: uses(:)         !! its `use` statements
     logical :: in_contains = .false.            !! true after its `contains` statement
     character(len=:), allocatable :: child_permission  !! permission of what is declared from here on
-    type(attribute_t), allocatable :: pending(:)    !! attributes waiting to be applied
-    type(attribute_t), allocatable :: parameters(:) !! values from `parameter` statements
-    type(string_t), allocatable :: public_list(:)   !! names known to be public, in lowercase
 
     ! submodules
-    character(len=:), allocatable :: ancestor       !! the ancestor module, in lowercase
-    character(len=:), allocatable :: parent_submodule  !! the parent submodule, in lowercase
     integer :: ancestor_id = 0                  !! the ancestor module, once found
     integer :: parent_submodule_id = 0          !! the parent submodule, once found
-    integer, allocatable :: descendants(:)      !! the submodules directly below this entity
 
     ! procedures
-    type(string_t), allocatable :: args(:)      !! dummy argument names as written
-    integer, allocatable :: arg_ids(:)          !! the entity of each argument
     integer :: result = 0                       !! the result variable of a function
-    character(len=:), allocatable :: result_name    !! the result's name as written
-    character(len=:), allocatable :: bind_c     !! the text of `bind(...)`, if any
     logical :: is_module = .false.              !! has the `module` prefix
     integer :: iface = IFACE_NONE               !! one of the `IFACE_*` constants
-    type(string_t), allocatable :: calls(:)     !! `%`-separated names of what it calls, in lowercase
     integer, allocatable :: call_ids(:)         !! the procedures called, once found
-    type(string_t), allocatable :: unknown_calls(:) !! the names of calls that were not found
     integer :: implements = 0                   !! the interface of a separate module procedure, once found
     integer :: bound_to = 0                     !! a type that this procedure is bound to, once found
 
     ! interfaces
     logical :: abstract = .false.               !! an `abstract interface` block
     logical :: generic = .false.                !! a generic interface or binding
-    type(string_t), allocatable :: modprocs(:)  !! procedures listed by `module procedure`
-    integer, allocatable :: modproc_ids(:)      !! those procedures, once found
 
     ! types
-    character(len=:), allocatable :: extends    !! the parent type's name as written, if any
-    type(string_t), allocatable :: parameters_list(:)   !! type parameter names
     logical :: sequence = .false.               !! has a `sequence` statement
     integer :: extends_id = 0                   !! the parent type, once found
-    integer, allocatable :: inherited(:)        !! the components and bindings it inherits
     integer :: constructor = 0                  !! the procedure or interface named like it, once found
     integer :: inherit_state = 0                !! 0 not done, 1 in progress, 2 done
 
     ! bound procedures
     logical :: deferred = .false.               !! has the `deferred` attribute
-    type(string_t), allocatable :: bindings(:)  !! what it is bound to
-    character(len=:), allocatable :: proto_text !! the interface in `procedure(...)`, if any
     integer :: proto_id = 0                     !! the interface or type it refers to, once found
-    integer, allocatable :: binding_ids(:)      !! what each of `bindings` is, once found
 
     ! variables
     integer :: var_role = VAR_PLAIN             !! one of the `VAR_*` constants
@@ -169,6 +175,10 @@ contains
     procedure :: add => list_add                !! add an entity
 end type entity_list_t
 
+
+!> What all variables share. This is never written to.
+type(entity_more_t), target, save, public :: no_more
+
 contains
 
 !> Add an entity of kind `kind` inside `parent`, returning its index.
@@ -191,6 +201,11 @@ integer function list_add(self, kind, parent) result(id)
     id = self%n
     allocate (self%box(id)%e)
     self%box(id)%e%kind = kind
+    if (kind == E_VARIABLE) then
+        self%box(id)%e%more => no_more
+    else
+        allocate (self%box(id)%e%more)
+    end if
     self%box(id)%e%parent = parent
     allocate (self%box(id)%e%children(0))
     if (parent > 0) then

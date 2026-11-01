@@ -219,10 +219,10 @@ integer function find_child(list, parent, name, entity) result(found)
                 return
             end if
         end do
-        if (.not. allocated(e%inherited)) return
-        do k = 1, size(e%inherited)
-            if (matches(list, e%inherited(k), name, entity)) then
-                found = e%inherited(k)
+        if (.not. allocated(e%more%inherited)) return
+        do k = 1, size(e%more%inherited)
+            if (matches(list, e%more%inherited(k), name, entity)) then
+                found = e%more%inherited(k)
                 return
             end if
         end do

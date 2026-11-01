@@ -150,9 +150,9 @@ contains
                 call json%add(a, item)
             end associate
         end do
-        if (.not. allocated(p%list%box(id)%e%inherited)) return
-        do j = 1, size(p%list%box(id)%e%inherited)
-            child = p%list%box(id)%e%inherited(j)
+        if (.not. allocated(p%list%box(id)%e%more%inherited)) return
+        do j = 1, size(p%list%box(id)%e%more%inherited)
+            child = p%list%box(id)%e%more%inherited(j)
             if (.not. any(p%list%box(child)%e%kind == kinds)) cycle
             if (.not. contains_string(p%list%box(id)%e%display, p%list%box(child)%e%permission)) cycle
             call entity_json(json, p, child, '', 0, item)

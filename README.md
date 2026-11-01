@@ -119,25 +119,25 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.3 s | 93× | 3.1 s | 0.1 s | 62× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.2 s | 95× | 6.5 s | 0.1 s | 65× |
-| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.3 s | 201× | 8.2 s | 0.2 s | 48× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 52× | 6.8 s | 0.2 s | 34× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 126× | 9.0 s | 0.1 s | 69× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.1 s | 151× | 25.3 s | 0.7 s | 39× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.3 s | 93× | 3.1 s | <0.1 s | 78× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.3 s | 91× | 6.5 s | 0.1 s | 72× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.3 s | 222× | 8.2 s | 0.2 s | 55× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 50× | 6.8 s | 0.2 s | 38× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 123× | 9.0 s | 0.1 s | 75× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.2 s | 143× | 25.3 s | 0.7 s | 38× |
 
-Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 3.4 s against FORD's 690 s (200×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (45×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
+Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 3.4 s against FORD's 690 s (200×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (50×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
 
 Peak memory and the size of the site, with graphs:
 
 | Project | FORD memory | fdoc memory | FORD site | fdoc site |
 |---|---:|---:|---:|---:|
-| fformat | 134 MB | 31 MB | 17 MB | 5 MB |
-| bspline-fortran | 175 MB | 38 MB | 17 MB | 5 MB |
-| rklib | 318 MB | 79 MB | 25 MB | 10 MB |
-| json-fortran | 310 MB | 99 MB | 83 MB | 30 MB |
-| Fortran-Astrodynamics-Toolkit | 197 MB | 58 MB | 31 MB | 9 MB |
-| qt-fortran | 425 MB | 157 MB | 100 MB | 33 MB |
+| fformat | 134 MB | 32 MB | 17 MB | 5 MB |
+| bspline-fortran | 175 MB | 32 MB | 17 MB | 5 MB |
+| rklib | 318 MB | 67 MB | 25 MB | 10 MB |
+| json-fortran | 310 MB | 82 MB | 83 MB | 30 MB |
+| Fortran-Astrodynamics-Toolkit | 197 MB | 49 MB | 31 MB | 9 MB |
+| qt-fortran | 425 MB | 131 MB | 100 MB | 33 MB |
 
 Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
 
@@ -187,6 +187,8 @@ Every routine has an `!>` block and every argument an inline `!!`, which `check-
 Code that runs in parallel must not call functions returning `character(len=:), allocatable`. gfortran 15 keeps the length of such a result in static storage, which threads share, so this gives wrong results in valid code. `example/slen_race.f90` shows the problem. Use an `intent(out)` argument, or a result with an explicit length, and `check-threads` will catch what gets through.
 
 Internal `read` and `write` statements are best kept out of busy parallel loops too. Each one takes a lock in libgfortran, and when the graph code used them, running it on several threads made it about ten times slower than running it on one. `int_text` turns an integer into text without the lock. Whole files also shouldn't go through functions in parallel code, as the temporary result can overflow a thread's stack.
+
+Parallel code reads and writes files with `file_read` and `file_write`, which go through the C library. Fortran file I/O from several threads at once crashes in libgfortran about once in 60 runs of a large project, with a segfault in `check_for_recursive`. Anything else, such as `inquire`, goes inside `!$omp critical (file_io)`.
 
 ## Dependencies
 

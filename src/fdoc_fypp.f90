@@ -31,9 +31,8 @@ module fdoc_fypp
 !! DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
 !! IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 !! OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-use ffmt_io, only: read_file
 use fdoc_buffer, only: buffer_t, add, take
-use fdoc_util, only: string_t
+use fdoc_util, only: string_t, name_index_t, index_find, index_set, file_read
 implicit none
 private
 
@@ -104,6 +103,15 @@ type :: body_t
     integer :: n = 0                        !! how many there are
 end type body_t
 
+type :: block_t
+    !! The parts of a directive.
+    integer, allocatable :: conds(:)        !! the conditions of each body, 0 for `else`
+    integer, allocatable :: targets(:)      !! the variables assigned
+    integer, allocatable :: args(:)         !! the arguments of a call
+    integer, allocatable :: keywords(:)     !! keywords of `args`, 0 if none
+    type(body_t), allocatable :: bodies(:)  !! the blocks
+end type block_t
+
 type :: node_t
     !! A piece of the document.
     integer :: kind = 0                     !! what it is
@@ -112,11 +120,7 @@ type :: node_t
     integer :: name = 0                     !! the macro
     character(len=:), allocatable :: text   !! the text
     character(len=:), allocatable :: source !! the expression as written, for messages
-    integer, allocatable :: conds(:)        !! the conditions of each body, 0 for `else`
-    integer, allocatable :: targets(:)      !! the variables assigned
-    integer, allocatable :: args(:)         !! the arguments of a call
-    integer, allocatable :: keywords(:)     !! keywords of `args`, 0 if none
-    type(body_t), allocatable :: bodies(:)  !! the blocks
+    type(block_t), allocatable :: block     !! what only directives have, as most nodes are text
 end type node_t
 
 type :: macro_t
@@ -151,6 +155,7 @@ type :: fypp_t
     integer :: num_names = 0                    !! how many there are
     type(expr_t), allocatable :: exprs(:)       !! the expressions
     integer :: num_exprs = 0                    !! how many there are
+    type(name_index_t) :: compiled              !! the expression for each text, as texts repeat a lot
     type(node_t), allocatable :: nodes(:)       !! the nodes
     integer :: num_nodes = 0                    !! how many there are
     integer :: root = 0                         !! the node holding the document
@@ -224,7 +229,7 @@ subroutine fypp_process(path, defines, includes, text, stat, errmsg)
         c%globals(names(k)) = v
         c%is_set(names(k)) = .true.
     end do
-    call render_body(c, c%nodes(c%root)%bodies(1), out, .true.)
+    call render_body(c, c%nodes(c%root)%block%bodies(1), out, .true.)
     if (allocated(c%error)) then
         stat = 1
         errmsg = c%error
@@ -528,10 +533,13 @@ subroutine compile(c, text, id)
     integer, intent(out) :: id              !! the result
     type(scan_t) :: s
 
+    id = index_find(c%compiled, text)
+    if (id > 0) return
     s%text = text
     call next_token(c, s)
     call parse_list(c, s, id)
     if (s%kind /= T_END) call fail(c, 'cannot read the expression: '//text)
+    if (id > 0) call index_set(c%compiled, text, id)
 end subroutine compile
 
 !> An expression, or several separated by commas, which make a tuple.
@@ -992,6 +1000,7 @@ integer function new_node(c, kind) result(id)
     c%num_nodes = c%num_nodes + 1
     id = c%num_nodes
     c%nodes(id)%kind = kind
+    if (kind /= N_TEXT .and. kind /= N_EVAL) allocate (c%nodes(id)%block)
 end function new_node
 
 !> Move a node, without copying what it holds.
@@ -1005,11 +1014,7 @@ pure subroutine move_node(from, to)
     to%name = from%name
     if (allocated(from%text)) call move_alloc(from%text, to%text)
     if (allocated(from%source)) call move_alloc(from%source, to%source)
-    if (allocated(from%conds)) call move_alloc(from%conds, to%conds)
-    if (allocated(from%targets)) call move_alloc(from%targets, to%targets)
-    if (allocated(from%args)) call move_alloc(from%args, to%args)
-    if (allocated(from%keywords)) call move_alloc(from%keywords, to%keywords)
-    if (allocated(from%bodies)) call move_alloc(from%bodies, to%bodies)
+    if (allocated(from%block)) call move_alloc(from%block, to%block)
 end subroutine move_node
 
 !> Add a block to `node`, with condition `condition`.
@@ -1021,15 +1026,15 @@ subroutine add_body(c, node, condition)
     integer :: k, n
 
     n = 0
-    if (allocated(c%nodes(node)%bodies)) n = size(c%nodes(node)%bodies)
+    if (allocated(c%nodes(node)%block%bodies)) n = size(c%nodes(node)%block%bodies)
     allocate (grown(n + 1))
     do k = 1, n
-        grown(k)%n = c%nodes(node)%bodies(k)%n
-        call move_alloc(c%nodes(node)%bodies(k)%ids, grown(k)%ids)
+        grown(k)%n = c%nodes(node)%block%bodies(k)%n
+        call move_alloc(c%nodes(node)%block%bodies(k)%ids, grown(k)%ids)
     end do
     allocate (grown(n + 1)%ids(16))
-    call move_alloc(grown, c%nodes(node)%bodies)
-    call push_id(c%nodes(node)%conds, condition)
+    call move_alloc(grown, c%nodes(node)%block%bodies)
+    call push_id(c%nodes(node)%block%conds, condition)
 end subroutine add_body
 
 !> Put `node` at the end of the block being read.
@@ -1041,8 +1046,8 @@ subroutine append(c, node)
 
     parent = c%root
     if (c%depth > 0) parent = c%stack(c%depth)
-    body = size(c%nodes(parent)%bodies)
-    associate (b => c%nodes(parent)%bodies(body))
+    body = size(c%nodes(parent)%block%bodies)
+    associate (b => c%nodes(parent)%block%bodies(body))
         n = b%n
         if (n == size(b%ids)) then
             allocate (grown(2*n))
@@ -1087,10 +1092,10 @@ end subroutine close_block
 recursive subroutine parse_file(c, path)
     type(fypp_t), intent(inout) :: c        !! the state
     character(len=*), intent(in) :: path    !! the file
-    character(len=:), allocatable :: text, errmsg
+    character(len=:), allocatable :: text
     integer :: stat
 
-    call read_file(path, text, stat, errmsg)
+    call file_read(path, text, stat)
     if (stat /= 0) then
         call fail(c, 'cannot read '//path)
         return
@@ -1263,7 +1268,6 @@ recursive subroutine handle_directive(c, kind, content, on_lines, path)
         node = new_node(c, N_EVAL)
         c%nodes(node)%expr = expr
         c%nodes(node)%on_lines = on_lines
-        c%nodes(node)%source = content
         call append(c, node)
     else if (kind == '#') then
         at = 1
@@ -1400,7 +1404,7 @@ subroutine for_directive(c, param)
     node = new_node(c, N_FOR)
     c%nodes(node)%expr = expr
     c%nodes(node)%source = param
-    call move_alloc(targets, c%nodes(node)%targets)
+    call move_alloc(targets, c%nodes(node)%block%targets)
     call add_body(c, node, 0)
     call open_block(c, node)
 end subroutine for_directive
@@ -1425,7 +1429,7 @@ subroutine set_directive(c, param)
     node = new_node(c, N_SET)
     c%nodes(node)%expr = expr
     c%nodes(node)%source = param
-    call move_alloc(targets, c%nodes(node)%targets)
+    call move_alloc(targets, c%nodes(node)%block%targets)
     call append(c, node)
 end subroutine set_directive
 
@@ -1446,7 +1450,7 @@ subroutine def_directive(c, param)
     node = new_node(c, N_DEF)
     c%nodes(node)%name = name
     c%nodes(node)%source = param
-    allocate (c%nodes(node)%targets(0), c%nodes(node)%args(0))
+    allocate (c%nodes(node)%block%targets(0), c%nodes(node)%block%args(0))
     s%text = param(at + 1:close - 1)
     call next_token(c, s)
     do while (s%kind == T_NAME .and. .not. allocated(c%error))
@@ -1457,8 +1461,8 @@ subroutine def_directive(c, param)
             call next_token(c, s)
             call parse_test(c, s, default)
         end if
-        call push_id(c%nodes(node)%targets, id)
-        call push_id(c%nodes(node)%args, default)
+        call push_id(c%nodes(node)%block%targets, id)
+        call push_id(c%nodes(node)%block%args, default)
         if (.not. at_word(s, ',')) exit
         call next_token(c, s)
     end do
@@ -1517,6 +1521,7 @@ recursive subroutine include_directive(c, param, path)
     name = param(2:len(param) - 1)
     slash = index(path, '/', back=.true.)
     candidate = path(:slash)//name
+    !$omp critical (file_io)
     inquire (file=candidate, exist=exists)
     k = 0
     do while (.not. exists .and. k < size(c%includes))
@@ -1524,6 +1529,7 @@ recursive subroutine include_directive(c, param, path)
         candidate = c%includes(k)%s//'/'//name
         inquire (file=candidate, exist=exists)
     end do
+    !$omp end critical (file_io)
     if (exists) then
         call parse_file(c, candidate)
     else
@@ -2544,7 +2550,7 @@ recursive subroutine call_macro(c, which, positional, keywords, by_keyword, v)
     saved = c%first_bound
     c%first_bound = c%num_bound + 1
     node = c%macros(which)%node
-    call render_body(c, c%nodes(node)%bodies(1), out, .false.)
+    call render_body(c, c%nodes(node)%block%bodies(1), out, .false.)
     c%first_bound = saved
     call close_scope(c)
     call take(out, text)
@@ -2592,26 +2598,26 @@ recursive subroutine render_node(c, id, out, top)
         end if
         if (c%nodes(id)%on_lines) call add(out, NL)
     case (N_IF)
-        do k = 1, size(c%nodes(id)%bodies)
-            if (c%nodes(id)%conds(k) > 0) then
-                call evaluate(c, c%nodes(id)%conds(k), v)
+        do k = 1, size(c%nodes(id)%block%bodies)
+            if (c%nodes(id)%block%conds(k) > 0) then
+                call evaluate(c, c%nodes(id)%block%conds(k), v)
                 if (allocated(c%error)) return
                 if (.not. truth_of(v)) cycle
             end if
-            call render_body(c, c%nodes(id)%bodies(k), out, top)
+            call render_body(c, c%nodes(id)%block%bodies(k), out, top)
             exit
         end do
     case (N_FOR)
         call render_loop(c, id, out, top)
     case (N_SET)
         if (c%nodes(id)%expr > 0) call evaluate(c, c%nodes(id)%expr, v)
-        if (.not. allocated(c%error)) call assign_targets(c, c%nodes(id)%targets, v)
+        if (.not. allocated(c%error)) call assign_targets(c, c%nodes(id)%block%targets, v)
     case (N_DEF)
         call define_macro(c, id)
     case (N_CALL)
         call render_call(c, id, out, top)
     case (N_MUTE)
-        call render_body(c, c%nodes(id)%bodies(1), discarded, .false.)
+        call render_body(c, c%nodes(id)%block%bodies(1), discarded, .false.)
     case (N_ASSERT)
         call evaluate(c, c%nodes(id)%expr, v)
         if (.not. truth_of(v)) call fail(c, 'assertion failed: '//c%nodes(id)%source)
@@ -2669,17 +2675,17 @@ recursive subroutine render_loop(c, id, out, top)
     call items_of(c, iterable, list)
     if (allocated(c%error)) return
     do k = 1, size(list)
-        if (size(c%nodes(id)%targets) == 1) then
-            call define(c, c%nodes(id)%targets(1), list(k))
+        if (size(c%nodes(id)%block%targets) == 1) then
+            call define(c, c%nodes(id)%block%targets(1), list(k))
         else if (list(k)%kind == V_LIST .or. list(k)%kind == V_TUPLE) then
             ! like Fypp, ignore items beyond the variables
-            do j = 1, min(size(c%nodes(id)%targets), size(list(k)%items))
-                call define(c, c%nodes(id)%targets(j), list(k)%items(j))
+            do j = 1, min(size(c%nodes(id)%block%targets), size(list(k)%items))
+                call define(c, c%nodes(id)%block%targets(j), list(k)%items(j))
             end do
         else
             call fail(c, 'a value cannot be unpacked')
         end if
-        call render_body(c, c%nodes(id)%bodies(1), out, top)
+        call render_body(c, c%nodes(id)%block%bodies(1), out, top)
         if (allocated(c%error)) return
     end do
 end subroutine render_loop
@@ -2705,16 +2711,16 @@ recursive subroutine define_macro(c, id)
         call move_alloc(grown, c%macros)
     end if
     c%num_macros = c%num_macros + 1
-    n = size(c%nodes(id)%targets)
+    n = size(c%nodes(id)%block%targets)
     associate (m => c%macros(c%num_macros))
         m%node = id
-        m%params = c%nodes(id)%targets
+        m%params = c%nodes(id)%block%targets
         allocate (m%has_default(n), m%defaults(n))
-        m%has_default = c%nodes(id)%args > 0
+        m%has_default = c%nodes(id)%block%args > 0
     end associate
     do k = 1, n
-        if (c%nodes(id)%args(k) > 0) then
-            call evaluate(c, c%nodes(id)%args(k), c%macros(c%num_macros)%defaults(k))
+        if (c%nodes(id)%block%args(k) > 0) then
+            call evaluate(c, c%nodes(id)%block%args(k), c%macros(c%num_macros)%defaults(k))
         end if
     end do
     if (c%frame > 0) then
@@ -2746,7 +2752,7 @@ recursive subroutine render_call(c, id, out, top)
     if (allocated(c%error)) return
     call open_scope(c, c%frame)
     if (allocated(c%error)) return
-    call render_body(c, c%nodes(id)%bodies(1), body, .false.)
+    call render_body(c, c%nodes(id)%block%bodies(1), body, .false.)
     call close_scope(c)
     if (allocated(c%error)) return
     call take(body, text)

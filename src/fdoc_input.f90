@@ -125,8 +125,11 @@ subroutine load_source(s, path, raw, text, stat, errmsg)
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
 
-    call read_file(path, raw, stat, errmsg)
-    if (stat /= 0) return
+    call file_read(path, raw, stat)
+    if (stat /= 0) then
+        errmsg = 'cannot read the file'
+        return
+    end if
     text = raw
     if (needs_fypp(s, path)) then
         call fypp_source(s, path, text)

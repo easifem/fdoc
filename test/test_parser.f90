@@ -36,7 +36,8 @@ subroutine collect_parser(testsuite)
                 new_unittest("common blocks", test_common), &
                 new_unittest("calls", test_calls), &
                 new_unittest("calls through associate", test_associate_calls), &
-                new_unittest("private modules stay visible", test_private_module) &
+                new_unittest("private modules stay visible", test_private_module), &
+                new_unittest("variables share what they do not use", test_shared_part) &
                 ]
 end subroutine collect_parser
 
@@ -97,6 +98,28 @@ subroutine test_private_module(error)
     if (allocated(error)) return
     call check(error, .not. p%list%box(x)%e%visible, 'its private variable is not')
 end subroutine test_private_module
+
+!> Checks: parsing leaves the part that all variables share empty, and gives others their own.
+subroutine test_shared_part(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(entity_list_t) :: l
+    integer :: x, f
+
+    call parse('module m'//NL//'integer :: x'//NL//'contains'//NL//'subroutine f(a)'//NL// &
+               'integer :: a'//NL//'call g()'//NL//'end subroutine f'//NL//'end module m'//NL, l)
+    x = find(l, E_VARIABLE, 'x')
+    f = find(l, E_SUBROUTINE, 'f')
+    call check(error, x > 0 .and. f > 0)
+    if (allocated(error)) return
+    call check(error, associated(l%box(x)%e%more, no_more), 'a variable uses the shared part')
+    if (allocated(error)) return
+    call check(error, .not. associated(l%box(f)%e%more, no_more), 'a procedure has its own')
+    if (allocated(error)) return
+    call check(error, allocated(l%box(f)%e%more%args), 'its arguments are in it')
+    if (allocated(error)) return
+    call check(error, .not. allocated(no_more%args) .and. .not. allocated(no_more%calls) .and. &
+               .not. allocated(no_more%uses) .and. .not. allocated(no_more%pending), 'the shared part stays empty')
+end subroutine test_shared_part
 
 !> Checks: doc comments before a statement.
 subroutine test_pre_doc(error)
@@ -222,11 +245,11 @@ subroutine test_arguments(error)
     call parse('subroutine s(a, i)'//NL//'real :: a'//NL//'end subroutine s'//NL, l)
     s = find(l, E_SUBROUTINE, 's')
     associate (p => l%box(s)%e)
-        call check(error, size(p%arg_ids), 2)
+        call check(error, size(p%more%arg_ids), 2)
         if (allocated(error)) return
-        call check(error, l%box(p%arg_ids(1))%e%var_role, VAR_ARGUMENT)
+        call check(error, l%box(p%more%arg_ids(1))%e%var_role, VAR_ARGUMENT)
         if (allocated(error)) return
-        call check(error, l%box(p%arg_ids(2))%e%vartype, 'integer', 'implicit typing')
+        call check(error, l%box(p%more%arg_ids(2))%e%vartype, 'integer', 'implicit typing')
     end associate
 end subroutine test_arguments
 
@@ -240,10 +263,10 @@ subroutine test_type(error)
                'private'//NL//'procedure, public :: a => impl'//NL//'procedure :: b, c'//NL// &
                'generic, public :: g => a, b'//NL//'end type t'//NL//'end module m'//NL, l)
     t = find(l, E_TYPE, 't')
-    call check(error, l%box(t)%e%extends, 'base')
+    call check(error, l%box(t)%e%more%extends, 'base')
     if (allocated(error)) return
     b = find(l, E_BOUNDPROC, 'a')
-    call check(error, join(l%box(b)%e%bindings, '|'), 'impl')
+    call check(error, join(l%box(b)%e%more%bindings, '|'), 'impl')
     if (allocated(error)) return
     call check(error, l%box(b)%e%permission, 'public')
     if (allocated(error)) return
@@ -252,7 +275,7 @@ subroutine test_type(error)
     g = find(l, E_BOUNDPROC, 'g')
     call check(error, l%box(g)%e%generic)
     if (allocated(error)) return
-    call check(error, join(l%box(g)%e%bindings, '|'), 'a|b')
+    call check(error, join(l%box(g)%e%more%bindings, '|'), 'a|b')
 end subroutine test_type
 
 !> Checks: interface blocks.
@@ -266,7 +289,7 @@ subroutine test_interfaces(error)
                'end interface'//NL//'end module m'//NL, l)
     m = find(l, E_MODULE, 'm')
     g = find(l, E_INTERFACE, 'g')
-    call check(error, join(l%box(g)%e%modprocs, '|'), 'a|b')
+    call check(error, join(l%box(g)%e%more%modprocs, '|'), 'a|b')
     if (allocated(error)) return
     f = find(l, E_FUNCTION, 'f')
     call check(error, l%box(f)%e%iface, IFACE_ABSTRACT)
@@ -311,9 +334,9 @@ subroutine test_several_bindings(error)
 
     call parse('module m'//NL//'type :: t'//NL//'contains'//NL//'procedure :: a => x, b => y'//NL//'end type t'//NL// &
                'end module m'//NL, l)
-    call check(error, join(l%box(find(l, E_BOUNDPROC, 'a'))%e%bindings, '|'), 'x')
+    call check(error, join(l%box(find(l, E_BOUNDPROC, 'a'))%e%more%bindings, '|'), 'x')
     if (allocated(error)) return
-    call check(error, join(l%box(find(l, E_BOUNDPROC, 'b'))%e%bindings, '|'), 'y')
+    call check(error, join(l%box(find(l, E_BOUNDPROC, 'b'))%e%more%bindings, '|'), 'y')
 end subroutine test_several_bindings
 
 !> Checks: common blocks.
@@ -326,7 +349,7 @@ subroutine test_common(error)
     b = find(l, E_COMMON, 'two')
     call check(error, b > 0)
     if (allocated(error)) return
-    call check(error, join(l%box(b)%e%args, '|'), 'x(2)')
+    call check(error, join(l%box(b)%e%more%args, '|'), 'x(2)')
     if (allocated(error)) return
     call check(error, l%box(find(l, E_VARIABLE, 'a'))%e%var_role, VAR_COMMON)
     if (allocated(error)) return
@@ -342,7 +365,7 @@ subroutine test_calls(error)
     call parse('subroutine s(x)'//NL//'real :: y = f0(1)'//NL//"if (g(x) > 0) call a%b%c(h(1), 'k(2)')"//NL// &
                'go to (1, 2) i'//NL//'y = sin(x) + a(3)%d(4)'//NL//'call e'//NL//'end subroutine s'//NL, l)
     s = find(l, E_SUBROUTINE, 's')
-    call check(error, join(l%box(s)%e%calls, ' '), 'a%b%c g h a%d e')
+    call check(error, join(l%box(s)%e%more%calls, ' '), 'a%b%c g h a%d e')
 end subroutine test_calls
 
 !> Checks: calls through associate.
@@ -355,7 +378,7 @@ subroutine test_associate_calls(error)
                'y = t(1)'//NL//'end associate'//NL//'end associate'//NL//'y = t(1)'//NL// &
                'end subroutine s'//NL, l)
     s = find(l, E_SUBROUTINE, 's')
-    call check(error, l%box(s)%e%calls(2)%s, 'w%e%tmp')
+    call check(error, l%box(s)%e%more%calls(2)%s, 'w%e%tmp')
 end subroutine test_associate_calls
 
 end module test_parser

@@ -152,7 +152,7 @@ subroutine merge_list(p, from)
             e%file = e%file + offset
             e%children = e%children + offset
             if (e%result > 0) e%result = e%result + offset
-            if (allocated(e%arg_ids)) e%arg_ids = e%arg_ids + offset
+            if (allocated(e%more%arg_ids)) e%more%arg_ids = e%more%arg_ids + offset
             if (e%kind == E_MODULE) call push_int(p%modules, offset + k)
             if (e%kind == E_SUBMODULE) call push_int(p%submodules, offset + k)
             if (e%kind == E_FILE) call push_int(p%files, offset + k)
@@ -196,7 +196,7 @@ subroutine add_external_modules(p, s)
             e%name = s%extra_mods(k)%key
             e%external_url = s%extra_mods(k)%value
             e%permission = 'public'
-            allocate (e%uses(0), e%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
+            allocate (e%more%uses(0), e%more%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
         end associate
         call push_int(p%modules, id)
     end do
@@ -299,7 +299,7 @@ recursive subroutine read_external(p, json, node, base, parent, id)
         call json%get(node, 'vartype', text, found)
         e%vartype = ''
         if (found) e%vartype = text
-        allocate (e%uses(0), e%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
+        allocate (e%more%uses(0), e%more%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
         e%var_role = VAR_PLAIN
     end associate
     do k = 1, size(LISTS)
@@ -320,19 +320,19 @@ subroutine link_uses(p)
 
     do k = 1, p%list%n
         associate (e => p%list%box(k)%e)
-            if (allocated(e%uses)) then
-                do u = 1, size(e%uses)
-                    found = find_module(p, e%uses(u)%module)
-                    if (found > 0) e%uses(u)%target = p%modules(found)
-                    call read_use_spec(e%uses(u)%spec, e%uses(u)%only, e%uses(u)%renames)
+            if (allocated(e%more%uses)) then
+                do u = 1, size(e%more%uses)
+                    found = find_module(p, e%more%uses(u)%module)
+                    if (found > 0) e%more%uses(u)%target = p%modules(found)
+                    call read_use_spec(e%more%uses(u)%spec, e%more%uses(u)%only, e%more%uses(u)%renames)
                 end do
             end if
             if (e%kind /= E_SUBMODULE) cycle
-            found = find_module(p, e%ancestor)
+            found = find_module(p, e%more%ancestor)
             if (found > 0) e%ancestor_id = p%modules(found)
-            if (allocated(e%parent_submodule)) then
+            if (allocated(e%more%parent_submodule)) then
                 do j = 1, size(p%submodules)
-                    if (lowercase(p%list%box(p%submodules(j))%e%name) == e%parent_submodule) then
+                    if (lowercase(p%list%box(p%submodules(j))%e%name) == e%more%parent_submodule) then
                         e%parent_submodule_id = p%submodules(j)
                     end if
                 end do
@@ -410,16 +410,16 @@ recursive integer function find_symbol(p, scope, name, category) result(id)
                 end if
             end associate
         end do
-        if (allocated(e%uses)) then
-            do u = 1, size(e%uses)
-                target = e%uses(u)%target
+        if (allocated(e%more%uses)) then
+            do u = 1, size(e%more%uses)
+                target = e%more%uses(u)%target
                 if (target == 0) cycle
                 used = module_position(p, target)
                 if (used == 0) cycle
-                if (e%uses(u)%only) then
-                    do j = 1, size(e%uses(u)%renames)
-                        if (e%uses(u)%renames(j)%local /= name) cycle
-                        id = public_symbol(p, used, e%uses(u)%renames(j)%used, category)
+                if (e%more%uses(u)%only) then
+                    do j = 1, size(e%more%uses(u)%renames)
+                        if (e%more%uses(u)%renames(j)%local /= name) cycle
+                        id = public_symbol(p, used, e%more%uses(u)%renames(j)%used, category)
                         if (id > 0) return
                     end do
                 else
@@ -481,26 +481,26 @@ recursive subroutine inherit(p, id)
 
     if (p%list%box(id)%e%inherit_state /= 0) return
     p%list%box(id)%e%inherit_state = 1
-    allocate (p%list%box(id)%e%inherited(0))
-    if (allocated(p%list%box(id)%e%extends)) then
-        base = find_symbol(p, p%list%box(id)%e%parent, lowercase(p%list%box(id)%e%extends), 3)
+    allocate (p%list%box(id)%e%more%inherited(0))
+    if (allocated(p%list%box(id)%e%more%extends)) then
+        base = find_symbol(p, p%list%box(id)%e%parent, lowercase(p%list%box(id)%e%more%extends), 3)
         if (base > 0 .and. base /= id) then
             p%list%box(id)%e%extends_id = base
             call inherit(p, base)
-            parent_items = [p%list%box(base)%e%inherited, p%list%box(base)%e%children]
+            parent_items = [p%list%box(base)%e%more%inherited, p%list%box(base)%e%children]
             do k = 1, size(parent_items)
                 item = parent_items(k)
                 associate (e => p%list%box(item)%e)
                     select case (e%kind)
                     case (E_VARIABLE)
-                        if (e%permission == 'public') call push_int(p%list%box(id)%e%inherited, item)
+                        if (e%permission == 'public') call push_int(p%list%box(id)%e%more%inherited, item)
                     case (E_BOUNDPROC)
                         if (e%permission == 'private') cycle
                         if (overrides(p, id, e%name)) cycle
                         if (e%generic) then
                             copy = copy_binding(p, item, id)
                         else
-                            call push_int(p%list%box(id)%e%inherited, item)
+                            call push_int(p%list%box(id)%e%more%inherited, item)
                         end if
                     end select
                 end associate
@@ -538,6 +538,7 @@ integer function copy_binding(p, item, id) result(copy)
     copy = p%list%add(E_BOUNDPROC, id)
     file = p%list%box(copy)%e%file
     p%list%box(copy)%e = p%list%box(item)%e
+    if (p%list%box(item)%e%kind /= E_VARIABLE) allocate (p%list%box(copy)%e%more, source=p%list%box(item)%e%more)
     p%list%box(copy)%e%parent = id
     p%list%box(copy)%e%file = file
 end function copy_binding
@@ -612,8 +613,8 @@ recursive subroutine public_names(p, which)
     p%pub(which)%state = 1
     id = p%modules(which)
     allocate (p%pub(which)%procs%s(16), p%pub(which)%absints%s(16), p%pub(which)%types%s(16), p%pub(which)%vars%s(16))
-    do c = 1, size(p%list%box(id)%e%public_list)
-        call index_set(p%pub(which)%public_list, p%list%box(id)%e%public_list(c)%s, c)
+    do c = 1, size(p%list%box(id)%e%more%public_list)
+        call index_set(p%pub(which)%public_list, p%list%box(id)%e%more%public_list(c)%s, c)
     end do
 
     associate (m => p%list%box(id)%e)
@@ -643,12 +644,12 @@ recursive subroutine public_names(p, which)
     end associate
     call generic_bodies(p, which, id)
 
-    do u = 1, size(p%list%box(id)%e%uses)
-        used = module_position(p, p%list%box(id)%e%uses(u)%target)
+    do u = 1, size(p%list%box(id)%e%more%uses)
+        used = module_position(p, p%list%box(id)%e%more%uses(u)%target)
         if (used == 0) cycle
         if (p%pub(used)%state == 1) cycle
         call public_names(p, used)
-        call import_names(p, which, used, p%list%box(id)%e%uses(u)%spec)
+        call import_names(p, which, used, p%list%box(id)%e%more%uses(u)%spec)
     end do
     p%pub(which)%state = 2
 end subroutine public_names
