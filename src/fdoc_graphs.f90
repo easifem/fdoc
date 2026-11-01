@@ -26,6 +26,8 @@ integer, parameter :: NUM_RELATIONS = 4
 integer, parameter :: BATCH = 25             !! graphs for one `dot` process
 integer(c_int), parameter :: POLL_MICROSECONDS = 2000   !! how often to look for finished batches
 
+character(len=*), parameter :: FONT_SIZE = '13'         !! points, of the names in a graph
+character(len=*), parameter :: LABEL_FONT_SIZE = '11'   !! points, of the labels of edges
 character(len=*), parameter :: EDGE_COLOUR = '#8a93a5'
 character(len=*), parameter :: EDGE_COLOURS(*) = [character(len=7) :: '#3657c9', '#1d7a55', '#a15c00', '#b3261e', &
                                                   '#6a4fb3', '#0b7285', '#a61e69', '#5c6f2d']
@@ -356,7 +358,7 @@ subroutine describe_graph(p, s, relation, forward, roots, marked, stamp, max_dep
         character(len=:), allocatable :: body
 
         call add(b, 'digraph g {'//achar(10)//'rankdir='//direction//'; bgcolor="transparent"; concentrate=true;'//achar(10))
-        call add(b, 'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, fontcolor=white, ')
+        call add(b, 'node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize='//FONT_SIZE//', fontcolor=white, ')
         call add(b, 'color=transparent, height=0.3, margin="0.1,0.04"];'//achar(10))
         call add(b, 'edge [color="'//EDGE_COLOUR//'", arrowsize=0.7];'//achar(10))
         call take(nodes, body)
@@ -429,7 +431,7 @@ subroutine add_edge(s, relation, from, to, b)
     do k = 1, size(relation%out(from)%ids)
         if (relation%out(from)%ids(k) /= to) cycle
         if (len(relation%labels(from)%text(k)%s) == 0) exit
-        call add(b, 'style=dashed, fontname="Helvetica", fontsize=9, fontcolor="#8a93a5", label="')
+        call add(b, 'style=dashed, fontname="Helvetica", fontsize='//LABEL_FONT_SIZE//', fontcolor="#8a93a5", label="')
         call quoted(relation%labels(from)%text(k)%s, b)
         call add(b, '"')
         exit
@@ -856,7 +858,7 @@ subroutine slim_svg(svg, out)
                 dropped(depth) = .false.
                 at = index(line, 'transform=')
                 call add(b, '<g '//line(at:len(line) - 1)//' fill="none" stroke="'//EDGE_COLOUR// &
-                         '" font-family="Helvetica,sans-Serif" font-size="11" text-anchor="middle">')
+                         '" font-family="Helvetica,sans-Serif" font-size="'//FONT_SIZE//'" text-anchor="middle">')
             else if (line == '</g>') then
                 if (.not. dropped(depth)) call add(b, line)
                 depth = max(depth - 1, 0)
@@ -912,7 +914,7 @@ subroutine slim_svg(svg, out)
                 call add(b, '" y="')
                 call rounded(y, b)
                 call add(b, '"')
-                if (size /= '11.00') call add(b, ' font-size="'//size//'"')
+                if (size /= FONT_SIZE//'.00') call add(b, ' font-size="'//size//'"')
                 if (fill /= 'white' .or. .not. in_link) call add(b, ' fill="'//fill//'"')
                 call add(b, line(index(line, '>'):))
             else

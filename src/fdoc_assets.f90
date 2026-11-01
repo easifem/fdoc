@@ -297,15 +297,15 @@ subroutine asset_fdoc_js(b)
         //'rEach(function (b) {'//NL//'        var button = document.createElement("button");'//NL//'        button.textC' &
         //'ontent = b[0];'//NL//'        button.setAttribute("aria-label", b[1] > 1 ? "Zoom in" : "Zoom out");'//NL//'   ' &
         //'     button.addEventListener("click", function () { set(scale * b[1]); });'//NL//'        zoom.appendCh' &
-        //'ild(button);'//NL//'      });'//NL//'      box.insertBefore(zoom, svg);'//NL//'      var start = null;'//NL//'      box.addE' &
-        //'ventListener("mousedown", function (event) {'//NL//'        if (event.target.closest("a, button")) retu')
+        //'ild(button);'//NL//'      });'//NL//'      box.insertBefore(zoom, svg);'//NL//'      var fit = box.clientWidth / widt' &
+        //'h;'//NL//'      if (fit > 0 && fit < 0.75) set(0.75);'//NL//'      var start = null;'//NL//'      box.addEventListene')
     call add(b, &
-        'rn;'//NL//'        start = [event.clientX, event.clientY, box.scrollLeft, box.scrollTop];'//NL//'        box.c' &
-        //'lassList.add("dragging");'//NL//'      });'//NL//'      window.addEventListener("mousemove", function (event) ' &
-        //'{'//NL//'        if (!start) return;'//NL//'        box.scrollLeft = start[2] - (event.clientX - start[0]);'//NL//'  ' &
-        //'      box.scrollTop = start[3] - (event.clientY - start[1]);'//NL//'      });'//NL//'      window.addEventList' &
-        //'ener("mouseup", function () { start = null; box.classList.remove("dragging"); });'//NL//'    });'//NL//'  });'//NL//'' &
-        //'})();'//NL//'')
+        'r("mousedown", function (event) {'//NL//'        if (event.target.closest("a, button")) return;'//NL//'       ' &
+        //' start = [event.clientX, event.clientY, box.scrollLeft, box.scrollTop];'//NL//'        box.classList.ad' &
+        //'d("dragging");'//NL//'      });'//NL//'      window.addEventListener("mousemove", function (event) {'//NL//'        i' &
+        //'f (!start) return;'//NL//'        box.scrollLeft = start[2] - (event.clientX - start[0]);'//NL//'        box.s' &
+        //'crollTop = start[3] - (event.clientY - start[1]);'//NL//'      });'//NL//'      window.addEventListener("mouse' &
+        //'up", function () { start = null; box.classList.remove("dragging"); });'//NL//'    });'//NL//'  });'//NL//'})();'//NL//'')
 end subroutine asset_fdoc_js
 
 end module fdoc_assets

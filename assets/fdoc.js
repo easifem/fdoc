@@ -248,6 +248,8 @@
         zoom.appendChild(button);
       });
       box.insertBefore(zoom, svg);
+      var fit = box.clientWidth / width;
+      if (fit > 0 && fit < 0.75) set(0.75);
       var start = null;
       box.addEventListener("mousedown", function (event) {
         if (event.target.closest("a, button")) return;
