@@ -80,6 +80,10 @@ h2 + .item { border-top: 0; padding-top: 0; }
   background: var(--bg-soft); color: var(--muted); border: 1px solid var(--line); vertical-align: middle; }
 table { border-collapse: collapse; width: 100%; font-size: .92rem; margin: .7rem 0 1rem; }
 th { text-align: left; font-weight: 600; color: var(--muted); }
+/* headings stay under the bar at the top; a sticky cell loses a collapsed border, so a shadow draws it */
+thead th { position: sticky; top: 3.5rem; z-index: 1; background: var(--bg); box-shadow: inset 0 -1px 0 var(--line); }
+tr[id] { scroll-margin-top: 2.5rem; }
+.listing td:last-child, .arguments td { overflow-wrap: anywhere; }
 th, td { padding: .35rem .7rem .35rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 td p { margin: 0; } td.type { font-family: var(--mono); font-size: .84em; width: 30%; overflow-wrap: break-word; }
 td.name { font-family: var(--mono); font-size: .88em; width: 24%; overflow-wrap: break-word; }
@@ -94,7 +98,7 @@ img { max-width: 100%; }
 details.specifics { margin: .5rem 0 1rem; } details.specifics summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
 details.specifics .item:first-of-type { border-top: 0; }
 .form { margin: 1rem 0 1.6rem; } .form .sig { margin-bottom: .4rem; }
-table.forms { width: auto; margin: .4rem 0 .5rem; } table.forms td.type, table.forms td.name { width: auto; white-space: nowrap; }
+table.forms { width: auto; margin: .4rem 0 .5rem; } table.forms td.type, table.forms td.name { width: auto; min-width: 5.5rem; overflow-wrap: anywhere; }
 table.forms td.rank, table.forms th.rank { text-align: center; padding-right: 1rem; white-space: nowrap; }
 table.forms td.rank a { text-decoration: none; }
 .fixed { color: var(--muted); font-size: .88rem; margin: .2rem 0 0; }
@@ -164,15 +168,11 @@ aside.tree ul ul { margin-left: .8rem; }
 .arguments td.name, .arguments td.type { width: auto; }
 td.attributes { font-family: var(--mono); font-size: .84em; }
 td.default { font-family: var(--mono); font-size: .84em; min-width: 11rem; max-width: 15rem; overflow-wrap: anywhere; }
-@media (min-width: 1400px) {
-  .arguments td.type { white-space: nowrap; }
-}
 @media (min-width: 1100px) {
-  .arguments td.name, .arguments td.attributes { white-space: nowrap; }
+  .arguments td.name { white-space: nowrap; }
   .arguments td:last-child { min-width: 12rem; }
   .inner:has(.arguments) { max-width: 72rem; }
   .inner:has(.arguments) > .doc, .inner:has(.arguments) > .sig { max-width: 54rem; }
-  main { overflow-x: auto; }
 }
 .attr { --h: 220; --s: 12%; display: inline-block; margin: 0 .25rem .15rem 0; padding: 0 .4rem; border-radius: 4px;
   font: 600 .74rem/1.55 var(--mono); color: hsl(var(--h), var(--s), var(--attr-l));
