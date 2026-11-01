@@ -380,7 +380,7 @@ subroutine stash_html(t, html, placeholder)
     character(len=12) :: number
 
     call push(t%stash, html)
-    write (number, '(i0)') size(t%stash)
+    number = int_text(size(t%stash))
     placeholder = STX//trim(number)//ETX
 end subroutine stash_html
 
@@ -1827,7 +1827,7 @@ subroutine unique_id(t, html, id)
     n = 0
     do while (contains_string(t%ids, id) .or. len(id) == 0)
         n = n + 1
-        write (number, '(i0)') n
+        number = int_text(n)
         id = base//'_'//trim(number)
     end do
     call push(t%ids, id)
@@ -2022,7 +2022,7 @@ end subroutine render_footnotes
 pure function number_text(k) result(text)
     integer, intent(in) :: k    !! the number
     character(len=12) :: text
-    write (text, '(i0)') k
+    text = int_text(k)
 end function number_text
 
 !> Write inline Markdown `text` as HTML.

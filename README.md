@@ -2,7 +2,7 @@
 
 A documentation generator for modern Fortran, written in modern Fortran.
 
-fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 50 to 130 times faster.
+fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 50 to 200 times faster.
 
 * **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
 * **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, apart from a few [listed below](#differences-from-ford), so existing links keep working.
@@ -119,23 +119,25 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.4 s | 73× | 3.1 s | 0.1 s | 28× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.3 s | 71× | 6.5 s | 0.2 s | 36× |
-| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.6 s | 102× | 8.2 s | 0.5 s | 17× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 48× | 6.8 s | 0.3 s | 27× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.7 s | 87× | 9.0 s | 0.3 s | 27× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.3 s | 135× | 25.3 s | 0.9 s | 29× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.3 s | 93× | 3.1 s | 0.1 s | 62× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.2 s | 95× | 6.5 s | 0.1 s | 65× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.3 s | 201× | 8.2 s | 0.2 s | 48× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 52× | 6.8 s | 0.2 s | 34× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.5 s | 116× | 9.0 s | 0.1 s | 64× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.3 s | 139× | 25.3 s | 0.7 s | 36× |
+
+Three larger or third-party projects, with graphs: the [Fortran standard library](https://github.com/fortran-lang/stdlib) takes 4.7 s against FORD's 690 s (145×), [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (45×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.2 s against 20.7 s (86×).
 
 Peak memory and the size of the site, with graphs:
 
 | Project | FORD memory | fdoc memory | FORD site | fdoc site |
 |---|---:|---:|---:|---:|
-| fformat | 134 MB | 30 MB | 17 MB | 5 MB |
-| bspline-fortran | 175 MB | 35 MB | 17 MB | 5 MB |
-| rklib | 318 MB | 74 MB | 25 MB | 10 MB |
-| json-fortran | 310 MB | 100 MB | 83 MB | 30 MB |
-| Fortran-Astrodynamics-Toolkit | 197 MB | 60 MB | 31 MB | 9 MB |
-| qt-fortran | 425 MB | 153 MB | 100 MB | 33 MB |
+| fformat | 134 MB | 31 MB | 17 MB | 5 MB |
+| bspline-fortran | 175 MB | 38 MB | 17 MB | 5 MB |
+| rklib | 318 MB | 79 MB | 25 MB | 10 MB |
+| json-fortran | 310 MB | 99 MB | 83 MB | 30 MB |
+| Fortran-Astrodynamics-Toolkit | 197 MB | 58 MB | 31 MB | 9 MB |
+| qt-fortran | 425 MB | 157 MB | 100 MB | 33 MB |
 
 Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
 
@@ -184,7 +186,7 @@ Every routine has an `!>` block and every argument an inline `!!`, which `check-
 
 Code that runs in parallel must not call functions returning `character(len=:), allocatable`. gfortran 15 keeps the length of such a result in static storage, which threads share, so this gives wrong results in valid code. `example/slen_race.f90` shows the problem. Use an `intent(out)` argument, or a result with an explicit length, and `check-threads` will catch what gets through.
 
-Internal `read` and `write` statements are best kept out of busy parallel loops too. Each one takes a lock in libgfortran, and when the graph code used them, running it on several threads made it about ten times slower than running it on one.
+Internal `read` and `write` statements are best kept out of busy parallel loops too. Each one takes a lock in libgfortran, and when the graph code used them, running it on several threads made it about ten times slower than running it on one. `int_text` turns an integer into text without the lock. Whole files also shouldn't go through functions in parallel code, as the temporary result can overflow a thread's stack.
 
 ## Dependencies
 

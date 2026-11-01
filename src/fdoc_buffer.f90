@@ -4,7 +4,7 @@ module fdoc_buffer
 implicit none
 private
 
-public :: buffer_t, add, take, html_escape
+public :: buffer_t, add, take, html_escape, int_text
 
 type :: buffer_t
     !! Text being built.
@@ -13,6 +13,29 @@ type :: buffer_t
 end type buffer_t
 
 contains
+
+!> `k` as text, in a fixed width. This is for parallel code, as an internal `write` takes a lock that
+!> threads end up spending most of their time on.
+pure function int_text(k) result(text)
+    integer, intent(in) :: k    !! the number
+    character(len=12) :: text
+    character(len=12) :: digits
+    integer :: at, rest
+
+    at = len(digits) + 1
+    rest = abs(k)
+    do
+        at = at - 1
+        digits(at:at) = achar(iachar('0') + mod(rest, 10))
+        rest = rest/10
+        if (rest == 0) exit
+    end do
+    if (k < 0) then
+        at = at - 1
+        digits(at:at) = '-'
+    end if
+    text = digits(at:)
+end function int_text
 
 !> Append `text` to `b`.
 pure subroutine add(b, text)

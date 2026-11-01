@@ -104,7 +104,7 @@ end function display_length
 pure function number(k) result(text)
     integer, intent(in) :: k    !! the number
     character(len=12) :: text
-    write (text, '(i0)') k
+    text = int_text(k)
 end function number
 
 !> The members of each list page, in the order of the `sort` setting.
@@ -1080,69 +1080,137 @@ logical function wants_source(site, id)
     end associate
 end function wants_source
 
-!> Find the code of each procedure and type in the text of its file. Entities are in source order, so
-!> each search starts where the last one found something, and each file is read about once.
+!> Find the code of each procedure and type in the text of its file. Files are handled in parallel.
 subroutine locate_sources(site)
     type(site_t), intent(inout) :: site     !! the site
-    character(len=:), allocatable :: low, keyword
-    integer :: k, file, cursor, first, last
+    integer, allocatable :: ids(:), starts(:)
+    integer :: k, n, runs, r, file
 
+    allocate (ids(site%p%list%n), starts(site%p%list%n + 1))
+    n = 0
+    runs = 0
     file = 0
-    cursor = 1
     do k = 1, site%p%list%n
         associate (e => site%p%list%box(k)%e)
-            select case (e%kind)
-            case (E_SUBROUTINE); keyword = 'subroutine'
-            case (E_FUNCTION); keyword = 'function'
-            case (E_TYPE); keyword = 'type'
-            case default; cycle
-            end select
+            if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION .and. e%kind /= E_TYPE) cycle
             if (allocated(e%external_url) .or. .not. e%visible) cycle
             if (.not. wants_source(site, k)) cycle
+            n = n + 1
+            ids(n) = k
             if (e%file /= file) then
                 file = e%file
-                low = lowercase(site%p%list%box(file)%e%source_text)
-                cursor = 1
+                runs = runs + 1
+                starts(runs) = n
             end if
-            call find_source(low, cursor, keyword, lowercase(e%name), first, last)
-            if (first == 0 .and. cursor > 1) call find_source(low, 1, keyword, lowercase(e%name), first, last)
+        end associate
+    end do
+    starts(runs + 1) = n + 1
+    !$omp parallel do schedule(dynamic) num_threads(max(1, site%s%parallel)) default(shared) private(r)
+    do r = 1, runs
+        call locate_in_file(site, ids(starts(r):starts(r + 1) - 1))
+    end do
+    !$omp end parallel do
+end subroutine locate_sources
+
+!> Find the code of entities `ids`, all from one file. They are in source order, so each search starts
+!> where the last one found something. Only the lines that name a construct are searched, as a name
+!> that is not in the file, like those Fypp makes, would otherwise cost two readings of the file.
+subroutine locate_in_file(site, ids)
+    type(site_t), intent(inout) :: site     !! the site
+    integer, intent(in) :: ids(:)           !! the entities
+    character(len=:), allocatable :: low
+    integer, allocatable :: starts(:), stops(:)
+    integer :: k, cursor, found, first, last
+
+    ! on the heap and lowered in place, as a whole file would not fit on the stack of a thread
+    low = site%p%list%box(site%p%list%box(ids(1))%e%file)%e%source_text
+    do k = 1, len(low)
+        if (low(k:k) >= 'A' .and. low(k:k) <= 'Z') low(k:k) = achar(iachar(low(k:k)) + 32)
+    end do
+    call construct_lines(low, starts, stops)
+    cursor = 1
+    do k = 1, size(ids)
+        associate (e => site%p%list%box(ids(k))%e)
+            select case (e%kind)
+            case (E_SUBROUTINE)
+                call find_source(low, starts, stops, cursor, 'subroutine', lowercase(e%name), found, first, last)
+                if (first == 0 .and. cursor > 1) &
+                    call find_source(low, starts, stops, 1, 'subroutine', lowercase(e%name), found, first, last)
+            case (E_FUNCTION)
+                call find_source(low, starts, stops, cursor, 'function', lowercase(e%name), found, first, last)
+                if (first == 0 .and. cursor > 1) &
+                    call find_source(low, starts, stops, 1, 'function', lowercase(e%name), found, first, last)
+            case default
+                call find_source(low, starts, stops, cursor, 'type', lowercase(e%name), found, first, last)
+                if (first == 0 .and. cursor > 1) &
+                    call find_source(low, starts, stops, 1, 'type', lowercase(e%name), found, first, last)
+            end select
             if (first == 0) cycle
             e%source_first = first
             e%source_last = last
-            cursor = first
+            cursor = found
         end associate
     end do
-end subroutine locate_sources
+end subroutine locate_in_file
+
+!> The lines of `low` that could start or end a procedure or type.
+pure subroutine construct_lines(low, starts, stops)
+    character(len=*), intent(in) :: low             !! the file, in lowercase
+    integer, allocatable, intent(out) :: starts(:)  !! where each line starts
+    integer, allocatable, intent(out) :: stops(:)   !! where each line ends
+    integer :: pass, i, j, stop_at, n
+
+    do pass = 1, 2
+        n = 0
+        i = 1
+        do while (i <= len(low))
+            j = index(low(i:), achar(10))
+            stop_at = merge(len(low), i + j - 2, j == 0)
+            if (index(low(i:stop_at), 'subroutine') > 0 .or. index(low(i:stop_at), 'function') > 0 .or. &
+                index(low(i:stop_at), 'type') > 0) then
+                n = n + 1
+                if (pass == 2) then
+                    starts(n) = i
+                    stops(n) = stop_at
+                end if
+            end if
+            if (j == 0) exit
+            i = stop_at + 2
+        end do
+        if (pass == 1) allocate (starts(n), stops(n))
+    end do
+end subroutine construct_lines
 
 !> Find the text of the construct `keyword name` in `low`, from its first line to its `end` line.
-subroutine find_source(low, start, keyword, name, first, last)
+subroutine find_source(low, starts, stops, from, keyword, name, found, first, last)
     character(len=*), intent(in) :: low     !! the file, in lowercase
-    integer, intent(in) :: start            !! where to start
+    integer, intent(in) :: starts(:)        !! where the lines to search start
+    integer, intent(in) :: stops(:)         !! where they end
+    integer, intent(in) :: from             !! the line to start from
     character(len=*), intent(in) :: keyword !! `subroutine`, `function` or `type`
     character(len=*), intent(in) :: name    !! the name, in lowercase
+    integer, intent(out) :: found           !! the line where it starts
     integer, intent(out) :: first           !! where it starts, or 0
     integer, intent(out) :: last            !! where it ends
-    integer :: i, j, stop_at, at, comment
+    integer :: k, at, comment
 
     first = 0
     last = 0
-    i = start
-    do while (i <= len(low))
-        j = index(low(i:), achar(10))
-        stop_at = merge(len(low), i + j - 2, j == 0)
-        associate (line => low(i:stop_at))
+    found = 0
+    do k = from, size(starts)
+        associate (line => low(starts(k):stops(k)))
+            if (index(line, name) == 0) cycle
             comment = index(line, '!')
             if (comment == 0) comment = len(line) + 1
             at = line_has(line(:comment - 1), keyword, name)
             if (at > 0 .and. first == 0 .and. .not. starts_word(adjustl(line), 'end')) then
-                first = i
+                first = starts(k)
+                found = k
             else if (first > 0 .and. at > 0 .and. starts_word(adjustl(line), 'end')) then
-                last = stop_at
+                last = stops(k)
                 return
             end if
         end associate
-        if (j == 0) exit
-        i = stop_at + 2
     end do
     first = 0
 end subroutine find_source

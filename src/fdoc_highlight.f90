@@ -82,7 +82,7 @@ subroutine line_start(out, line)
     integer, intent(in) :: line             !! the line
     character(len=12) :: number
 
-    write (number, '(i0)') line
+    number = int_text(line)
     call add(out, '<a class="ln" id="ln-'//trim(number)//'" href="#ln-'//trim(number)//'"></a>')
 end subroutine line_start
 

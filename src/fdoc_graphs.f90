@@ -455,7 +455,7 @@ end subroutine quoted
 pure function number(k) result(text)
     integer, intent(in) :: k    !! the number
     character(len=12) :: text
-    write (text, '(i0)') k
+    text = int_text(k)
 end function number
 
 !> Build the graphs of the project: those of `s%graph`, and of entities that ask for them.
