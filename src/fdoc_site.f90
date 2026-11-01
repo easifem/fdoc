@@ -373,6 +373,7 @@ subroutine page_head(site, title, here, prefix, math, b)
         call add(b, '<link rel="stylesheet" href="'//prefix//'css/fdoc.css">'//achar(10))
         if (allocated(s%css)) call add(b, '<link rel="stylesheet" href="'//prefix//'css/user.css">'//achar(10))
         call add(b, '<script src="'//prefix//'js/fdoc.js"></script>'//achar(10))
+        call add(b, '<script defer src="'//prefix//'js/sidebar.js"></script>'//achar(10))
         if (math) then
             call add(b, '<script async src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML">')
             call add(b, '</script>'//achar(10))
@@ -483,7 +484,7 @@ subroutine search_page(site, html)
 
     call page_head(site, 'Search', 0, '', .false., b)
     call add(b, '<aside class="side">'//achar(10))
-    call site_side(site, 0, '', .false., b)
+    call site_side(site, 0, '', b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<h1>Search</h1>'//achar(10))
     call add(b, '<p class="search-count"></p><div class="search-page"></div>'//achar(10))
     call page_foot(site, b)
@@ -1527,7 +1528,7 @@ subroutine entity_page(site, id, html)
         call page_head(site, display_name(e), here, '../', uses_math(site, id), b)
         call add(b, '<aside class="side">'//achar(10))
         if (len(text) > 0) call add(b, text)
-        call site_side(site, here, '../', .false., b)
+        call site_side(site, here, '../', b)
         call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
         call entity_title(site, id, word, b)
 
@@ -1843,13 +1844,13 @@ subroutine page_outline(site, id, b)
     end associate
 end subroutine page_outline
 
-!> Write the links to the list pages, for the sidebar. To keep pages small only a list page holds a
-!> whole list: others show the first `max_frontpage_items` entries.
-subroutine site_side(site, here, prefix, full, b)
+!> Write the links to the list pages, for the sidebar. The list of the page is empty here, as it could
+!> be far too long to go in each page: `fdoc.js` fills it from `sidebar.js`. Pages outside the lists, which
+!> have no place in one, show the start of each list.
+subroutine site_side(site, here, prefix, b)
     type(site_t), intent(in) :: site            !! the site
     integer, intent(in) :: here                 !! the current list page, or 0
     character(len=*), intent(in) :: prefix      !! from the page to the root of the site
-    logical, intent(in) :: full                 !! true to show all of the current list
     type(buffer_t), intent(inout) :: b          !! the HTML
     character(len=:), allocatable :: url
     integer :: k, shown, limit
@@ -1857,10 +1858,10 @@ subroutine site_side(site, here, prefix, full, b)
     do k = 1, NUM_LISTS
         if (size(site%members(k)%ids) == 0) cycle
         call add(b, '<h4><a href="'//prefix//'lists/'//trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a></h4>')
-        if (k /= here .and. here /= 0) cycle
+        if (k == here) call add(b, '<ul data-list="'//trim(LIST_FILE(k))//'"></ul>'//achar(10))
+        if (here /= 0) cycle
         call add(b, '<ul>')
         limit = min(site%s%max_frontpage_items, size(site%members(k)%ids))
-        if (full .and. k == here) limit = size(site%members(k)%ids)
         do shown = 1, limit
             associate (id => site%members(k)%ids(shown))
                 call entity_url(site%p%list, id, url)
@@ -1879,6 +1880,53 @@ subroutine site_side(site, here, prefix, full, b)
         call add(b, '</ul>'//achar(10))
     end do
 end subroutine site_side
+
+!> The script holding the entries of the lists of the sidebar, for `fdoc.js`.
+subroutine sidebar_script(site, text)
+    type(site_t), intent(in) :: site                    !! the site
+    character(len=:), allocatable, intent(out) :: text  !! the script
+    type(buffer_t) :: b, entry
+    character(len=:), allocatable :: url, html
+    logical :: first
+    integer :: k, j
+
+    call add(b, 'window.FDOC_SIDEBAR={')
+    first = .true.
+    do k = 1, NUM_LISTS
+        if (size(site%members(k)%ids) == 0) cycle
+        if (.not. first) call add(b, ',')
+        first = .false.
+        call add(b, "'"//trim(LIST_FILE(k))//"':'")
+        do j = 1, size(site%members(k)%ids)
+            associate (id => site%members(k)%ids(j))
+                call entity_url(site%p%list, id, url)
+                call add(entry, '<li><a href="@')
+                call html_escape(url, entry, .true.)
+                call add(entry, '">')
+                call side_icon(site%p%list%box(id)%e, entry)
+                call html_escape(display_name(site%p%list%box(id)%e), entry, .false.)
+                call add(entry, '</a></li>')
+                call take(entry, html)
+                call add_js_text(html, b)
+            end associate
+        end do
+        call add(b, "'")
+    end do
+    call add(b, '};'//achar(10))
+    call take(b, text)
+end subroutine sidebar_script
+
+!> Append `text` for use in a JavaScript string in single quotes.
+subroutine add_js_text(text, b)
+    character(len=*), intent(in) :: text    !! the text
+    type(buffer_t), intent(inout) :: b      !! the script
+    integer :: k
+
+    do k = 1, len(text)
+        if (text(k:k) == "'" .or. text(k:k) == '\') call add(b, '\')
+        call add(b, text(k:k))
+    end do
+end subroutine add_js_text
 
 !> Write the columns of a list page between the name and the description.
 subroutine list_columns(site, which, id, b)
@@ -1943,7 +1991,7 @@ subroutine list_page(site, which, html)
 
     call page_head(site, trim(LIST_TITLE(which)), which, '../', .false., b)
     call add(b, '<aside class="side">'//achar(10))
-    call site_side(site, which, '../', .true., b)
+    call site_side(site, which, '../', b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
     call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
     if (which == LIST_FILES) then
@@ -2014,7 +2062,7 @@ subroutine index_page(site, front, html)
     associate (s => site%s)
         call page_head(site, s%project, 0, '', index(front, 'math/tex') > 0, b)
         call add(b, '<aside class="side">'//achar(10))
-        call site_side(site, 0, '', .false., b)
+        call site_side(site, 0, '', b)
         call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
         call logo_name(s, name)
         if (len(name) > 0) then
@@ -2295,6 +2343,9 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     call asset_fdoc_js(b)
     call take(b, url)
     call write_whole_file(directory//'/js/fdoc.js', url, stat, errmsg)
+    if (stat /= 0) return
+    call sidebar_script(site, url)
+    call write_whole_file(directory//'/js/sidebar.js', url, stat, errmsg)
     if (stat /= 0) return
     if (s%search) then
         call search_index(site, url)

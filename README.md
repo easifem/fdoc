@@ -98,6 +98,7 @@ end function add
 * Syntax highlighted Fortran source.
 * Badges for what procedures are, such as `pure` or `recursive`, and for those that keep state between calls, with arguments coloured by intent.
 * A list of source files with their lines of code and comments, size and procedures, and totals, sorted by clicking a heading.
+* A sidebar with the whole list a page belongs to, showing where that page is in it.
 * A logo on the main page, from the `logo` setting, which is a path to an image.
 * Generic interfaces shown as call forms, with a table of the types and ranks each form takes and what it returns.
 * A search box. Press `/` to use it.

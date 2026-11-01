@@ -115,7 +115,7 @@ end subroutine test_lines
 subroutine test_file_list(error)
     type(error_type), allocatable, intent(out) :: error     !! the failure, if any
     character(len=*), parameter :: ROOT = 'build/test site files'
-    character(len=:), allocatable :: text, errmsg
+    character(len=:), allocatable :: text, sidebar, errmsg
     integer :: stat
 
     call make_site(ROOT, error)
@@ -128,6 +128,12 @@ subroutine test_file_list(error)
     call check(error, stat, 0, 'the list')
     if (allocated(error)) return
     call check(error, index(text, 'class="listing sortable"') > 0, 'it can be sorted')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/js/sidebar.js', sidebar, stat, errmsg)
+    call check(error, stat, 0, 'the entries of the sidebar')
+    if (allocated(error)) return
+    call check(error, index(sidebar, 'window.FDOC_SIDEBAR={') == 1, 'they are a script')
+    if (allocated(error)) return
     if (allocated(error)) return
     call check(error, index(text, '<td class="num" data-sort="6">6</td><td class="num" data-sort="5">5</td>') > 0, 'lines of b')
     if (allocated(error)) return

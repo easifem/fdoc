@@ -301,3 +301,25 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   });
 });
+
+// the sidebar holds all of the list of this page, and shows where this page is in it
+(function () {
+  var script = document.currentScript;
+  var root = script ? script.src.replace(/js\/fdoc\.js.*$/, "") : "";
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var side = document.querySelector("aside.side");
+    var list = side && side.querySelector("ul[data-list]");
+    if (!list || !window.FDOC_SIDEBAR) return;
+    list.innerHTML = (window.FDOC_SIDEBAR[list.dataset.list] || "").replace(/href="@/g, 'href="' + root);
+    var here = location.href.split("#")[0];
+    var links = list.querySelectorAll("a");
+    for (var k = 0; k < links.length; k++) {
+      if (links[k].href !== here) continue;
+      links[k].classList.add("current");
+      links[k].setAttribute("aria-current", "page");
+      side.scrollTop = links[k].offsetTop - side.clientHeight / 2;
+      return;
+    }
+  });
+})();

@@ -47,6 +47,7 @@ aside.side li a { display: block; padding: .12rem .5rem; margin-left: -.5rem; bo
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 aside.side li a:hover { background: var(--bg-soft); text-decoration: none; }
 aside.side li a.more { color: var(--muted); }
+aside.side li a.current { background: var(--bg-soft); color: var(--accent); font-weight: 600; }
 main { padding: 2rem 2.5rem 4rem; min-width: 0; }
 main > .inner { max-width: 54rem; }
 h1, h2, h3, h4 { line-height: 1.25; font-weight: 650; }
