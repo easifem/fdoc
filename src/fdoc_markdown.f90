@@ -50,7 +50,7 @@ end interface
 type :: markdown_options_t
     !! What rendering depends on.
     type(map_entry_t), allocatable :: aliases(:)    !! the `|alias|` replacements
-    character(len=:), allocatable :: base_path      !! where `{!file!}` paths start from
+    character(len=:), allocatable :: base_path      !! where file include directives paths start from
     logical :: toc = .false.                        !! the `toc` extension: ids on headers, `[TOC]`
     logical :: smarty = .false.                     !! the `smarty` extension: typographic punctuation
     procedure(link_resolver), pointer, nopass :: resolver => null() !! finds `[[...]]` links
@@ -186,7 +186,7 @@ subroutine normalize_lines(lines)
     end do
 end subroutine normalize_lines
 
-!> Replace `{!file!}` by the contents of the file.
+!> Replace file include directives by the contents of the file.
 recursive subroutine expand_file_includes(lines, options, depth)
     type(string_t), allocatable, intent(inout) :: lines(:)  !! the lines
     type(markdown_options_t), intent(in) :: options         !! what rendering depends on
