@@ -2,7 +2,7 @@
 
 A documentation generator for modern Fortran, written in modern Fortran.
 
-fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 20 to 100 times faster.
+fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 30 to 110 times faster.
 
 * **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
 * **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, so existing links keep working.
@@ -117,12 +117,12 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.6 s | 44× | 3.1 s | 0.1 s | 31× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.5 s | 49× | 6.5 s | 0.2 s | 41× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.5 s | 59× | 3.1 s | 0.1 s | 31× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.4 s | 57× | 6.5 s | 0.2 s | 41× |
 | [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.7 s | 92× | 8.2 s | 0.5 s | 18× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 3.2 s | 20× | 6.8 s | 0.2 s | 31× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.9 s | 69× | 9.0 s | 0.3 s | 30× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 3.1 s | 100× | 25.3 s | 0.8 s | 34× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.9 s | 33× | 6.8 s | 0.2 s | 31× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.8 s | 77× | 9.0 s | 0.3 s | 30× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.9 s | 110× | 25.3 s | 0.8 s | 34× |
 
 Peak memory and the size of the site, with graphs:
 
@@ -181,6 +181,8 @@ pixi run compare markdown path/to/ford.md ...   # conversion of doc comments
 Every routine has an `!>` block and every argument an inline `!!`, which `check-docs` enforces.
 
 Code that runs in parallel must not call functions returning `character(len=:), allocatable`. gfortran 15 keeps the length of such a result in static storage, which threads share, so this gives wrong results in valid code. `example/slen_race.f90` shows the problem. Use an `intent(out)` argument, or a result with an explicit length, and `check-threads` will catch what gets through.
+
+Internal `read` and `write` statements are best kept out of busy parallel loops too. Each one takes a lock in libgfortran, and when the graph code used them, running it on several threads made it about ten times slower than running it on one.
 
 ## Dependencies
 

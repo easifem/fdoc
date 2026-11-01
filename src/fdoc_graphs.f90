@@ -3,7 +3,7 @@ module fdoc_graphs
 !! how files depend on each other. Graphs are written in Graphviz's language and laid out by `dot`, in
 !! batches of files, so that a process does not have to start for each graph.
 use iso_c_binding, only: c_int
-use iso_fortran_env, only: int64
+use iso_fortran_env, only: int64, real64
 use ffmt_io, only: read_file, write_file
 use fdoc_util
 use fdoc_buffer
@@ -471,6 +471,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     integer, allocatable :: marked(:), roots(:)
     character(len=:), allocatable :: directory, text
     logical :: any_wanted
+    logical, allocatable :: found(:)
     integer :: k, n, stamp, depth, nodes, status, count_files
 
     stat = 0
@@ -540,18 +541,15 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
 
     deallocate (set%graphs)
     allocate (set%graphs(n))
+    allocate (found(n))
     do k = 1, n
-        call read_file(trim(file_name(directory, k, '.svg')), text, status, errmsg)
         set%graphs(k)%title = files(k)%title
         set%graphs(k)%owner = files(k)%owner
         set%graphs(k)%list_page = files(k)%list_page
-        set%graphs(k)%svg = ''
-        if (status /= 0) then
-            call warn('no layout for a graph of '//files(k)%title)
-            cycle
-        end if
-        status = index(text, '<svg')
-        if (status > 0) call slim_svg(text(status:), set%graphs(k)%svg)
+    end do
+    call load_graphs(directory, set%graphs, found, max(1, s%parallel))
+    do k = 1, n
+        if (.not. found(k)) call warn('no layout for a graph of '//files(k)%title)
     end do
     if (.not. allocated(s%graph_dir)) call execute_command_line("rm -rf '"//directory//"'")
 
@@ -642,34 +640,79 @@ end subroutine attribute
 pure subroutine rounded(text, b)
     character(len=*), intent(in) :: text    !! the text
     type(buffer_t), intent(inout) :: b      !! where it goes
-    integer :: i, j, k, tenths
+    integer :: i, j, k, start, tenths
 
     i = 1
+    start = 1
     do while (i <= len(text))
-        if (scan(text(i:i), '0123456789') == 0) then
-            call add(b, text(i:i))
+        if (.not. is_digit(text(i:i))) then
             i = i + 1
             cycle
         end if
-        j = i + verify(text(i:)//' ', '0123456789') - 1
-        if (j >= len(text) .or. text(min(j, len(text)):min(j, len(text))) /= '.') then
-            call add(b, text(i:j - 1))
+        j = end_of_digits(text, i)
+        if (j >= len(text)) then
+            i = j
+            cycle
+        else if (text(j:j) /= '.') then
             i = j
             cycle
         end if
-        k = j + verify(text(j + 1:)//' ', '0123456789')
-        tenths = 0
+        k = end_of_digits(text, j + 1)
+        if (i > start) call add(b, text(start:i - 1))
         call number_value(text(i:j - 1), tenths)
         tenths = tenths*10
         if (k > j + 1) tenths = tenths + iachar(text(j + 1:j + 1)) - iachar('0')
         if (k > j + 2) then
             if (text(j + 2:j + 2) >= '5') tenths = tenths + 1
         end if
-        call add(b, trim(number(tenths/10)))
-        if (mod(tenths, 10) /= 0) call add(b, '.'//achar(iachar('0') + mod(tenths, 10)))
+        call add_integer(tenths/10, b)
+        if (mod(tenths, 10) /= 0) then
+            call add(b, '.')
+            call add(b, achar(iachar('0') + mod(tenths, 10)))
+        end if
         i = k
+        start = k
     end do
+    if (start <= len(text)) call add(b, text(start:))
 end subroutine rounded
+
+!> Whether `c` is a digit.
+elemental logical function is_digit(c)
+    character, intent(in) :: c  !! the character
+    is_digit = c >= '0' .and. c <= '9'
+end function is_digit
+
+!> Where the digits of `text` starting at `from` end: the position after the last one.
+pure integer function end_of_digits(text, from)
+    character(len=*), intent(in) :: text    !! the text
+    integer, intent(in) :: from             !! where to start
+    integer :: k
+
+    k = from
+    do while (k <= len(text))
+        if (.not. is_digit(text(k:k))) exit
+        k = k + 1
+    end do
+    end_of_digits = k
+end function end_of_digits
+
+!> Append `value`, which is not negative.
+pure subroutine add_integer(value, b)
+    integer, intent(in) :: value            !! the value
+    type(buffer_t), intent(inout) :: b      !! where it goes
+    character(len=11) :: digits
+    integer :: at, rest
+
+    at = len(digits) + 1
+    rest = value
+    do
+        at = at - 1
+        digits(at:at) = achar(iachar('0') + mod(rest, 10))
+        rest = rest/10
+        if (rest == 0) exit
+    end do
+    call add(b, digits(at:))
+end subroutine add_integer
 
 !> The value of the digits `digits`.
 pure subroutine number_value(digits, value)
@@ -693,7 +736,7 @@ subroutine path_box(d, left, top, right, bottom)
     character(len=*), parameter :: DIGITS = '0123456789.-'
     real :: value
     logical :: is_x
-    integer :: i, j, ios
+    integer :: i, j
 
     left = huge(left)
     top = huge(top)
@@ -706,8 +749,12 @@ subroutine path_box(d, left, top, right, bottom)
             i = i + 1
             cycle
         end if
-        j = i + verify(d(i:)//' ', DIGITS) - 2
-        read (d(i:j), *, iostat=ios) value
+        j = i
+        do while (j < len(d))
+            if (scan(d(j + 1:j + 1), DIGITS) == 0) exit
+            j = j + 1
+        end do
+        call parse_real(d(i:j), value)
         if (is_x) then
             left = min(left, value)
             right = max(right, value)
@@ -720,16 +767,53 @@ subroutine path_box(d, left, top, right, bottom)
     end do
 end subroutine path_box
 
-!> Write a real with one decimal.
-subroutine real_text(value, b)
+!> The value of `text`, a decimal number. Internal `read` and `write` statements are avoided here, as
+!> they take a lock that threads end up spending most of their time on.
+pure subroutine parse_real(text, value)
+    character(len=*), intent(in) :: text    !! the number
+    real, intent(out) :: value              !! its value
+    real(real64) :: digits, scale
+    logical :: negative, fraction
+    integer :: k
+
+    digits = 0
+    scale = 1
+    negative = .false.
+    fraction = .false.
+    do k = 1, len(text)
+        select case (text(k:k))
+        case ('-')
+            negative = .true.
+        case ('.')
+            fraction = .true.
+        case default
+            digits = 10*digits + (iachar(text(k:k)) - iachar('0'))
+            if (fraction) scale = 10*scale
+        end select
+    end do
+    value = real(digits/scale)
+    if (negative) value = -value
+end subroutine parse_real
+
+!> Write a real with one decimal, rounded like the format `f0.1`: a tie goes to the even digit.
+pure subroutine real_text(value, b)
     real, intent(in) :: value           !! the value
     type(buffer_t), intent(inout) :: b  !! where it goes
-    character(len=24) :: text
+    real(real64) :: exact, rest
+    integer :: tenths
 
-    write (text, '(f0.1)') value
-    if (text(1:1) == '.') text = '0'//text
-    if (text(1:2) == '-.') text = '-0'//text(2:)
-    call add(b, trim(text))
+    exact = 10*abs(real(value, real64))
+    tenths = floor(exact)
+    rest = exact - tenths
+    if (rest > 0.5_real64) then
+        tenths = tenths + 1
+    else if (rest == 0.5_real64 .and. mod(tenths, 2) == 1) then
+        tenths = tenths + 1
+    end if
+    if (value < 0) call add(b, '-')
+    call add_integer(tenths/10, b)
+    call add(b, '.')
+    call add(b, achar(iachar('0') + mod(tenths, 10)))
 end subroutine real_text
 
 !> Rewrite a drawing from `dot` to draw the same thing in fewer bytes: the boxes of nodes become
@@ -745,6 +829,7 @@ subroutine slim_svg(svg, out)
     real :: left, top, right, bottom
     integer :: k, depth, at
 
+    allocate (character(len=len(svg)) :: b%s)
     lines = split_lines(svg)
     depth = 0
     dropped = .false.
@@ -866,6 +951,41 @@ pure function pack_blanks(text) result(out)
     stop_at = at + 1 + index(text(at + 2:), ' ')
     out = text(:stop_at - 1)//adjustl(text(stop_at:))
 end function pack_blanks
+
+!> Read the drawings of `graphs` from `directory`, and slim them. The directory is an argument with a
+!> plain length because a deferred-length string does not work when it is shared with a parallel region.
+subroutine load_graphs(directory, graphs, found, threads)
+    character(len=*), intent(in) :: directory       !! the directory
+    type(graph_t), intent(inout) :: graphs(:)       !! the graphs
+    logical, intent(out) :: found(:)                !! whether each one has a drawing
+    integer, intent(in) :: threads                  !! how many threads to use
+    integer :: k
+
+    call progress_start('Slimming graphs', size(graphs))
+    !$omp parallel do schedule(dynamic) num_threads(threads) default(shared) private(k)
+    do k = 1, size(graphs)
+        call load_graph(trim(file_name(directory, k, '.svg')), graphs(k)%svg, found(k))
+        call progress_tick()
+    end do
+    !$omp end parallel do
+    call progress_finish()
+end subroutine load_graphs
+
+!> Read and slim the drawing in file `path`.
+subroutine load_graph(path, svg, found)
+    character(len=*), intent(in) :: path                !! the file
+    character(len=:), allocatable, intent(out) :: svg   !! the slimmed drawing
+    logical, intent(out) :: found                       !! whether the file could be read
+    character(len=:), allocatable :: text, errmsg
+    integer :: at, status
+
+    svg = ''
+    call read_file(path, text, status, errmsg)
+    found = status == 0
+    if (.not. found) return
+    at = index(text, '<svg')
+    if (at > 0) call slim_svg(text(at:), svg)
+end subroutine load_graph
 
 !> Lay out `n` graphs, in batches, running up to `threads` processes at once. This uses a single
 !> thread, as `execute_command_line` runs only one waiting command at a time on some systems. The
