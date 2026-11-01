@@ -9,6 +9,7 @@ use fdoc_model
 use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t
 use fdoc_pages, only: page_t
+use fdoc_graphs, only: graph_set_t, build_graphs
 use json_module, only: json_core, json_value
 use fdoc_urls, only: entity_url, object_word, page_name, url_quote
 use fdoc_highlight, only: highlight_fortran
@@ -41,6 +42,8 @@ type :: site_t
     type(index_list_t), allocatable :: members(:)   !! the entities of each list page
     character(len=:), allocatable :: footer     !! the end of every page
     type(page_t), pointer :: pages(:) => null() !! the static pages
+    type(graph_set_t) :: graphs                 !! the graphs
+    type(index_list_t), allocatable :: graphs_of(:) !! the graphs of each entity
 end type site_t
 
 contains
@@ -811,6 +814,36 @@ subroutine anchor(site, id, b)
     call html_escape(quoted, b, .true.)
 end subroutine anchor
 
+!> Write the graphs of entity `id`.
+subroutine graph_sections(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    if (.not. allocated(site%graphs_of(id)%ids)) return
+    call add(b, '<h2 id="graphs">Graphs</h2>'//achar(10))
+    do k = 1, size(site%graphs_of(id)%ids)
+        call write_graph(site, site%graphs_of(id)%ids(k), b)
+    end do
+end subroutine graph_sections
+
+!> Write graph `k`.
+subroutine write_graph(site, k, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: k                !! the graph
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (g => site%graphs%graphs(k))
+        if (len(g%svg) == 0) return
+        call add(b, '<h3>')
+        call html_escape(g%title, b, .false.)
+        call add(b, '</h3>'//achar(10)//'<div class="graph">')
+        call add(b, g%svg)
+        call add(b, '</div>'//achar(10))
+    end associate
+end subroutine write_graph
+
 !> Write a section of short entries that link to the pages of `ids`.
 subroutine summary_section(site, title, ids, b)
     type(site_t), intent(in) :: site        !! the site
@@ -1111,6 +1144,7 @@ subroutine entity_page(site, id, html)
             call unit_body(site, id, b)
         end select
 
+        call graph_sections(site, id, b)
         if (e%kind /= E_FILE .and. e%kind /= E_INTERFACE .and. e%kind /= E_TYPE .and. e%kind /= E_NAMELIST) then
             if (size(variables) > 0) then
                 call add(b, '<h2 id="variables">Variables</h2>'//achar(10))
@@ -1458,6 +1492,9 @@ subroutine list_page(site, which, html)
     call site_side(site, which, '../', .true., b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
     call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
+    do k = 1, size(site%graphs%graphs)
+        if (site%graphs%graphs(k)%list_page == which) call write_graph(site, k, b)
+    end do
     call add(b, '<table class="listing">'//achar(10)//'<tbody>'//achar(10))
     do k = 1, size(site%members(which)%ids)
         associate (id => site%members(which)%ids(k))
@@ -1642,6 +1679,14 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
         if (has_page(site, k)) call push_int(ids, k)
     end do
     n = size(ids)
+    call build_graphs(p, s, ids, [LIST_FILES, LIST_MODULES, LIST_PROCEDURES, LIST_TYPES], site%graphs, stat, errmsg)
+    if (stat /= 0) return
+    allocate (site%graphs_of(p%list%n))
+    do k = 1, size(site%graphs%graphs)
+        if (site%graphs%graphs(k)%owner > 0) then
+            call push_int(site%graphs_of(site%graphs%graphs(k)%owner)%ids, k)
+        end if
+    end do
     extra = size(pages_in) + 1
     allocate (pages(n + NUM_LISTS + 1 + extra), paths(n + NUM_LISTS + 1 + extra))
     count = 0

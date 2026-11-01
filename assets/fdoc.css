@@ -121,3 +121,11 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
 .results b, .search-page b { font-family: var(--mono); font-size: .88rem; font-weight: 600; }
 .results small, .search-page small { display: block; color: var(--muted); }
 aside.tree ul ul { margin-left: .8rem; }
+.graph { position: relative; overflow: auto; max-height: 34rem; margin: .4rem 0 1rem; padding: .5rem;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); cursor: grab; }
+.graph.dragging { cursor: grabbing; user-select: none; }
+.graph svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.graph.zoomed svg { max-width: none; }
+.graph .zoom { position: sticky; top: 0; left: 0; float: right; z-index: 2; }
+.graph .zoom button { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 5px;
+  width: 1.6rem; height: 1.6rem; cursor: pointer; margin-left: .2rem; }

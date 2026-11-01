@@ -136,3 +136,40 @@
     }
   });
 })();
+(function () {
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".graph").forEach(function (box) {
+      var svg = box.querySelector("svg");
+      if (!svg) return;
+      var width = svg.width.baseVal.value, height = svg.height.baseVal.value, scale = 1;
+      function set(value) {
+        scale = Math.max(0.25, Math.min(6, value));
+        box.classList.add("zoomed");
+        svg.style.width = width * scale + "px";
+        svg.style.height = height * scale + "px";
+      }
+      var zoom = document.createElement("div");
+      zoom.className = "zoom";
+      [["+", 1.3], ["\u2212", 1 / 1.3]].forEach(function (b) {
+        var button = document.createElement("button");
+        button.textContent = b[0];
+        button.setAttribute("aria-label", b[1] > 1 ? "Zoom in" : "Zoom out");
+        button.addEventListener("click", function () { set(scale * b[1]); });
+        zoom.appendChild(button);
+      });
+      box.insertBefore(zoom, svg);
+      var start = null;
+      box.addEventListener("mousedown", function (event) {
+        if (event.target.closest("a, button")) return;
+        start = [event.clientX, event.clientY, box.scrollLeft, box.scrollTop];
+        box.classList.add("dragging");
+      });
+      window.addEventListener("mousemove", function (event) {
+        if (!start) return;
+        box.scrollLeft = start[2] - (event.clientX - start[0]);
+        box.scrollTop = start[3] - (event.clientY - start[1]);
+      });
+      window.addEventListener("mouseup", function () { start = null; box.classList.remove("dragging"); });
+    });
+  });
+})();

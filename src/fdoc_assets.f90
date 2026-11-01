@@ -109,7 +109,15 @@ subroutine asset_fdoc_css(b)
         //'line); }'//NL//'.results a:hover, .results a.on, .search-page a:hover { background: var(--accent-soft);' &
         //' text-decoration: none; }'//NL//'.results b, .search-page b { font-family: var(--mono); font-size: .88r' &
         //'em; font-weight: 600; }'//NL//'.results small, .search-page small { display: block; color: var(--muted)' &
-        //'; }'//NL//'aside.tree ul ul { margin-left: .8rem; }'//NL//'')
+        //'; }'//NL//'aside.tree ul ul { margin-left: .8rem; }'//NL//'.graph { position: relative; overflow: auto; max-he' &
+        //'ight: 34rem; margin: .4rem 0 1rem; padding: .5rem;'//NL//'  border: 1px solid var(--line); border-radiu' &
+        //'s: 8px; background: var(--bg-soft); cursor: grab; }'//NL//'.graph.dragging { cursor: grabbing; user-sel' &
+        //'ect: none; }'//NL//'.graph svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }'//NL//'.grap' &
+        //'h.zoomed svg { max-width: none; }'//NL//'.graph .zoom { position: sticky; top: 0; left: 0; float: right')
+    call add(b, &
+        '; z-index: 2; }'//NL//'.graph .zoom button { background: var(--bg); color: var(--muted); border: 1px so' &
+        //'lid var(--line); border-radius: 5px;'//NL//'  width: 1.6rem; height: 1.6rem; cursor: pointer; margin-le' &
+        //'ft: .2rem; }'//NL//'')
 end subroutine asset_fdoc_css
 
 !> The contents of `assets/fdoc.js`.
@@ -170,7 +178,24 @@ subroutine asset_fdoc_js(b)
         //'");'//NL//'    if (page) {'//NL//'      var query = new URLSearchParams(location.search).get("q") || "";'//NL//'     ' &
         //' input.value = query;'//NL//'      load(function () {'//NL//'        var results = search(query, 200);'//NL//'       ' &
         //' fill(page, results);'//NL//'        document.querySelector(".search-count").textContent = results.leng' &
-        //'th + " results for “" + query + "”";'//NL//'      });'//NL//'    }'//NL//'  });'//NL//'})();'//NL//'')
+        //'th + " results for “" + query + "”";'//NL//'      });'//NL//'    }'//NL//'  });'//NL//'})();'//NL//'(function () {'//NL//'  document.addEv' &
+        //'entListener("DOMContentLoaded", function () {'//NL//'    document.querySelectorAll(".graph").forEach(fu' &
+        //'nction (box) {'//NL//'      var svg = box.querySelector("svg");'//NL//'      if (!svg) return;'//NL//'      var width' &
+        //' = svg.width.baseVal.value, height = svg.height.baseVal.value, scale = 1;'//NL//'      function set(val' &
+        //'ue) {'//NL//'        scale = Math.max(0.25, Math.min(6, value));'//NL//'        box.classList.add("zoomed");'//NL//' ' &
+        //'       svg.style.width = width * scale + "px";'//NL//'        svg.style.height = height * scale + "px";' &
+        //''//NL//'      }'//NL//'      var zoom = document.createElement("div");'//NL//'      zoom.className = "zoom";'//NL//'      [[' &
+        //'"+", 1.3], ["\u2212", 1 / 1.3]].forEach(function (b) {'//NL//'        var button = document.createEleme' &
+        //'nt("button");'//NL//'        button.textContent = b[0];'//NL//'        button.setAttribute("aria-label", b[1] ' &
+        //'> 1 ? "Zoom in" : "Zoom out");'//NL//'        button.addEventListener("click", function () { set(scale ' &
+        //'* b[1]); });'//NL//'        zoom.appendChild(button);'//NL//'      });'//NL//'      box.insertBefore(zoom, svg);'//NL//'    ' &
+        //'  var start = null;'//NL//'      box.addEventListener("mousedown", function (event) {'//NL//'        if (event' &
+        //'.target.closest("a, button")) return;'//NL//'        start = [event.clientX, event.clientY, box.scrollL' &
+        //'eft, box.scrollTop];'//NL//'        box.classList.add("dragging");'//NL//'      });'//NL//'      window.addEventListe' &
+        //'ner("mousemove", function (event) {'//NL//'        if (!start) return;'//NL//'        box.scrollLeft = start[2' &
+        //'] - (event.clientX - start[0]);'//NL//'        box.scrollTop = start[3] - (event.clientY - start[1]);'//NL//' ' &
+        //'     });'//NL//'      window.addEventListener("mouseup", function () { start = null; box.classList.remo' &
+        //'ve("dragging"); });'//NL//'    });'//NL//'  });'//NL//'})();'//NL//'')
 end subroutine asset_fdoc_js
 
 end module fdoc_assets

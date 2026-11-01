@@ -116,6 +116,7 @@ subroutine link_binding(p, id)
                 found = 0
             else
                 found = find_symbol(p, parent, lowercase(b%bindings(k)%s), 1)
+                if (found > 0) p%list%box(found)%e%bound_to = parent
             end if
             b%binding_ids(k) = found
         end do
@@ -141,7 +142,8 @@ integer function type_member(p, id, name, kind) result(found)
 
     found = 0
     associate (e => p%list%box(id)%e)
-        do k = 1, size(e%children)
+        ! a generic binding can be declared in several statements: the last counts
+        do k = size(e%children), 1, -1
             if (p%list%box(e%children(k))%e%kind /= kind) cycle
             if (lowercase(p%list%box(e%children(k))%e%name) == name) then
                 found = e%children(k)

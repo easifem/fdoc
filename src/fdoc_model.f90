@@ -116,6 +116,7 @@ type, public :: entity_t
     integer, allocatable :: call_ids(:)         !! the procedures called, once found
     type(string_t), allocatable :: unknown_calls(:) !! the names of calls that were not found
     integer :: implements = 0                   !! the interface of a separate module procedure, once found
+    integer :: bound_to = 0                     !! a type that this procedure is bound to, once found
 
     ! interfaces
     logical :: abstract = .false.               !! an `abstract interface` block

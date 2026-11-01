@@ -236,6 +236,11 @@ nesting, for example).
   batching helps less than hoped.
 - Small own pan/zoom script; theme-aware SVG colors.
 - Warn clearly if `graph: true` and `dot` is missing, and carry on without graphs.
+- **Reached.** Module, type, file and interface graphs have the same nodes as FORD's on bspline-fortran
+  and json-fortran, and call graphs nearly so; `dot` takes batches of 25 files, with no process per
+  graph. Unlike FORD, project-wide graphs of more than 400 nodes are left out, and graphs too large
+  for `graph_maxnodes` are not turned into tables. Graphs are embedded, so pages with large call
+  graphs stay heavy: json-fortran's site is 85 MB, like FORD's.
 
 ### M8. Preprocessing
 
