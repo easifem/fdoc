@@ -733,17 +733,15 @@ subroutine signature(site, id, b)
 end subroutine signature
 
 !> Write a table of variables.
-subroutine variable_table(site, ids, arguments, b)
+subroutine variable_table(site, ids, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: ids(:)           !! the variables
-    logical, intent(in) :: arguments        !! true to show intent and optional
     type(buffer_t), intent(inout) :: b      !! the HTML
     integer :: k, a
     logical :: first
 
     if (size(ids) == 0) return
     call add(b, '<table>'//achar(10)//'<thead><tr><th>Type</th>')
-    if (arguments) call add(b, '<th>Intent</th>')
     call add(b, '<th>Name</th><th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
     do k = 1, size(ids)
         associate (e => site%p%list%box(ids(k))%e)
@@ -752,7 +750,6 @@ subroutine variable_table(site, ids, arguments, b)
                 call add(b, '<tr id="')
                 call anchor(site, ids(k), b)
                 call add(b, '"><td class="type">procedure</td>')
-                if (arguments) call add(b, '<td></td>')
                 call add(b, '<td class="name">')
                 call html_escape(e%name, b, .false.)
                 call add(b, '</td><td>')
@@ -777,19 +774,13 @@ subroutine variable_table(site, ids, arguments, b)
                 end if
             end if
             call add(b, '</td>')
-            if (arguments) then
-                call add(b, '<td>')
-                if (allocated(e%intent)) call html_escape(e%intent, b, .false.)
-                if (e%optional) call add(b, ' <span class="badge">optional</span>')
-                call add(b, '</td>')
-            end if
             call add(b, '<td class="name">')
             call html_escape(e%name, b, .false.)
             if (allocated(e%initial)) then
                 call add(b, ' = ')
                 call html_escape(e%initial, b, .false.)
             end if
-            if (allocated(e%permission) .and. .not. arguments) then
+            if (allocated(e%permission)) then
                 if (e%permission /= 'public') call add(b, '<span class="badge private">'//e%permission//'</span>')
             end if
             call add(b, '</td><td>')
@@ -799,6 +790,72 @@ subroutine variable_table(site, ids, arguments, b)
     end do
     call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
 end subroutine variable_table
+
+!> Write a table of dummy arguments.
+subroutine argument_table(site, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: ids(:)           !! the arguments
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    call add(b, '<table class="arguments">'//achar(10)//'<thead><tr><th>Name</th><th>Type</th><th>Intent</th>')
+    call add(b, '<th>Attributes</th><th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
+    do k = 1, size(ids)
+        associate (e => site%p%list%box(ids(k))%e)
+            call add(b, '<tr id="')
+            call anchor(site, ids(k), b)
+            call add(b, '"><td class="name">')
+            call html_escape(e%name, b, .false.)
+            call add(b, '</td><td class="type">')
+            if (e%kind == E_VARIABLE) then
+                call write_type(site, e, b)
+                call add(b, '</td><td>')
+                if (allocated(e%intent)) then
+                    if (len(e%intent) > 0) call badge(e%intent, b)
+                end if
+                call add(b, '</td><td class="attributes">')
+                call argument_attributes(e, b)
+                call add(b, '</td><td>')
+                if (allocated(e%html)) call add(b, e%html)
+            else
+                ! a dummy procedure with an interface
+                call add(b, 'procedure</td><td></td><td class="attributes"></td><td>')
+                if (allocated(e%summary)) call add(b, e%summary)
+            end if
+            call add(b, '</td></tr>'//achar(10))
+        end associate
+    end do
+    call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
+end subroutine argument_table
+
+!> Write the attributes of argument `e`.
+subroutine argument_attributes(e, b)
+    type(entity_t), intent(in) :: e     !! the argument
+    type(buffer_t), intent(inout) :: b  !! the HTML
+    integer :: k
+
+    if (e%optional) call badge('optional', b)
+    do k = 1, size(e%attribs)
+        call badge(e%attribs(k)%s, b)
+    end do
+    if (allocated(e%dimension)) then
+        if (index(e%dimension, '(') == 1) call badge('dimension'//e%dimension, b)
+    end if
+end subroutine argument_attributes
+
+!> Write `text`, an intent or attribute, as a badge. Its class comes from its first word, such as
+!> `attr-pointer`, which is what gives it its colour.
+subroutine badge(text, b)
+    character(len=*), intent(in) :: text    !! the intent or attribute
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    character(len=*), parameter :: LETTERS = 'abcdefghijklmnopqrstuvwxyz'
+    integer :: n
+
+    n = verify(lowercase(text)//'(', LETTERS) - 1
+    call add(b, '<span class="attr attr-'//lowercase(text(:n))//'">')
+    call html_escape(text, b, .false.)
+    call add(b, '</span>')
+end subroutine badge
 
 !> Write the anchor of entity `id`.
 subroutine anchor(site, id, b)
@@ -1148,7 +1205,7 @@ subroutine entity_page(site, id, html)
         if (e%kind /= E_FILE .and. e%kind /= E_INTERFACE .and. e%kind /= E_TYPE .and. e%kind /= E_NAMELIST) then
             if (size(variables) > 0) then
                 call add(b, '<h2 id="variables">Variables</h2>'//achar(10))
-                call variable_table(site, variables, .false., b)
+                call variable_table(site, variables, b)
             end if
             call enum_sections(site, enums, b)
             call common_sections(site, blocks, b)
@@ -1178,7 +1235,7 @@ subroutine enum_sections(site, ids, b)
         call add(b, '<div class="item" id="')
         call anchor(site, ids(k), b)
         call add(b, '">'//achar(10))
-        call variable_table(site, site%p%list%box(ids(k))%e%children, .false., b)
+        call variable_table(site, site%p%list%box(ids(k))%e%children, b)
         call add(b, '</div>'//achar(10))
     end do
 end subroutine enum_sections
@@ -1279,12 +1336,12 @@ subroutine procedure_body(site, id, b)
         if (allocated(e%arg_ids)) then
             if (size(e%arg_ids) > 0) then
                 call add(b, '<h2 id="arguments">Arguments</h2>'//achar(10))
-                call variable_table(site, e%arg_ids, .true., b)
+                call argument_table(site, e%arg_ids, b)
             end if
         end if
         if (e%result > 0) then
             call add(b, '<h2 id="result">Result</h2>'//achar(10))
-            call variable_table(site, [e%result], .false., b)
+            call variable_table(site, [e%result], b)
         end if
         if (e%implements > 0) then
             call add(b, '<div class="meta"><span>')
@@ -1346,7 +1403,7 @@ subroutine type_body(site, id, variables, bindings, finals, b)
         end if
         if (size(variables) > 0) then
             call add(b, '<h2 id="components">Components</h2>'//achar(10))
-            call variable_table(site, variables, .false., b)
+            call variable_table(site, variables, b)
         end if
         if (e%constructor > 0) then
             call add(b, '<h2 id="constructor">Constructor</h2>'//achar(10))
