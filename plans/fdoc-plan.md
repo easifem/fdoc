@@ -257,7 +257,7 @@ nesting, for example).
   batching helps less than hoped.
 - Small own pan/zoom script; theme-aware SVG colors.
 - **Reached.** Module, type, file and interface graphs have the same nodes as FORD's on bspline-fortran
-  and json-fortran, and call graphs nearly so. Unlike FORD, project-wide graphs of more than 400 nodes are left out, and graphs too large
+  and json-fortran, and call graphs nearly so. Unlike FORD, graphs too large
   for `graph_maxnodes` are not turned into tables. Graphs are embedded in a compact form:
   json-fortran's site is 29 MB, against 80 MB with FORD.
 - **Replaced `dot` with fdot 0.1.0.** Each thread describes, lays out and draws its graphs in memory.

@@ -106,12 +106,12 @@ end function add
 
 * **Fixed-form source is not supported yet.** Those files are skipped with a warning.
 * **`logo` is fdoc's own setting.** FORD doesn't have it.
+* **`graph_project_maxnodes` is fdoc's own setting too.** Whole-project graphs have no size limit unless you set one, which leaves out any graph over that many nodes.
 * **`html_template_dir` has no effect**, because there are no templates. The HTML is different too, so CSS written for FORD's pages needs rewriting. `css:` still adds your own style sheet.
 * **Of the Python-Markdown extensions in `md_extensions`,** only `toc` and `smarty` are available. Others are skipped with a warning.
 * **fdoc doesn't run Python programs.** `pcpp` is replaced by `gfortran -E -cpp` when it's the preprocessor.
 * **Fypp is built in, in part.** A `preprocessor` of `fypp` uses a port in Fortran of what the Fortran standard library needs, so Python isn't involved. A file using anything else, such as `#:del`, `@:` or Python beyond what stdlib uses, is read without preprocessing, with a warning naming what's missing. Other `preprocessor` commands run as given.
 * **Search covers names and summaries,** not the full text of the documentation.
-* **Whole-project graphs of more than 400 nodes are left out,** with a warning, as they are slow to lay out and hard to read. The setting `graph_project_maxnodes` changes the limit.
 * **Text after a `<`, as in `x<y`, is kept.** FORD's Markdown drops it.
 * **`externalize: false` is honored.** FORD's command line default overrides it.
 * **A few page URLs differ.** A generic interface named after its only procedure gets its own page in `interface/`, where FORD uses `proc/`, and that can shift the `~2` numbers of other pages with the same name.
@@ -128,7 +128,7 @@ Time to generate each project's documentation, using the project's own settings:
 | [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.2 s | 271× | 8.2 s | 0.2 s | 55× |
 | [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 0.6 s | 115× | 6.8 s | 0.2 s | 38× |
 | [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.2 s | 274× | 9.0 s | 0.1 s | 75× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 0.9 s | 338× | 25.3 s | 0.9 s | 29× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 1.3 s | 243× | 25.3 s | 0.9 s | 29× |
 | [stdlib](https://github.com/fortran-lang/stdlib) | 614,270 | 680 s | 2.3 s | 297× | 211 s | 2.1 s | 101× |
 
 The lines of stdlib are its Fypp templates and Fortran sources, leaving out what its project file excludes, before the templates are expanded. FORD also needs the Python Fypp for it, and fdoc doesn't.
@@ -149,7 +149,7 @@ Peak memory and the size of the site, with graphs:
 
 Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 16.2, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. FORD's memory doesn't include `dot`.
 
-The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Graphs take little of fdoc's time on stdlib, about 0.2 s, but most of it on projects with deep call chains, such as json-fortran.
+The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. Graphs take little of fdoc's time on stdlib, about 0.2 s, but most of it on projects with deep call chains, such as json-fortran.
 
 To run them yourself:
 
