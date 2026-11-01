@@ -61,9 +61,9 @@ subroutine load_project_sources(s, p, stat, errmsg)
     type(project_t), intent(out) :: p                   !! the project
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
-    type(string_t), allocatable :: paths(:), texts(:)
+    type(string_t), allocatable :: paths(:), texts(:), raws(:)
     type(entity_list_t), allocatable :: lists(:)
-    character(len=:), allocatable :: raw, msg
+    character(len=:), allocatable :: msg
     integer :: k, ios
 
     stat = 0
@@ -73,12 +73,13 @@ subroutine load_project_sources(s, p, stat, errmsg)
         errmsg = 'No source files with appropriate extension found in specified directory.'
         return
     end if
-    allocate (texts(size(paths)), lists(size(paths)))
+    allocate (texts(size(paths)), lists(size(paths)), raws(size(paths)))
     do k = 1, size(paths)
-        call load_source(s, paths(k)%s, raw, texts(k)%s, ios, msg)
+        call load_source(s, paths(k)%s, raws(k)%s, texts(k)%s, ios, msg)
         if (ios /= 0) then
             write (error_unit, '(a)') 'Warning: could not read '//paths(k)%s//': '//msg
             texts(k)%s = ''
+            raws(k)%s = ''
         end if
     end do
 
@@ -89,6 +90,7 @@ subroutine load_project_sources(s, p, stat, errmsg)
     !$omp end parallel do
 
     do k = 1, size(lists)
+        call move_alloc(raws(k)%s, lists(k)%box(1)%e%source_text)
         call merge_list(p, lists(k))
     end do
 end subroutine load_project_sources

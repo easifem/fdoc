@@ -84,6 +84,8 @@ type, public :: entity_t
     type(string_t), allocatable :: display(:)   !! the permissions shown inside this entity
     logical :: internals = .false.              !! the `proc_internals` setting that applies here
     character(len=:), allocatable :: external_url  !! where it is documented, if in another project
+    character(len=:), allocatable :: page       !! the name of its page, unique in its directory, if it has one
+    character(len=:), allocatable :: source_text !! the text of a file, as it is
 
     ! containers
     type(use_t), allocatable :: uses(:)         !! its `use` statements

@@ -54,6 +54,15 @@ pure integer function permission_length(list, id)
     if (allocated(list%box(id)%e%child_permission)) permission_length = len(list%box(id)%e%child_permission)
 end function permission_length
 
+!> Length of the first blank-separated word of `text`.
+pure integer function word_length(text)
+    character(len=*), intent(in) :: text    !! the text
+    integer :: a, b
+    a = verify(text//'x', ' ')
+    b = index(text(min(a, len(text) + 1):)//' ', ' ')
+    word_length = b - 1
+end function word_length
+
 !> Number of commas in `text`.
 pure integer function comma_count(text)
     character(len=*), intent(in) :: text    !! the text
@@ -543,6 +552,15 @@ contains
 
 end subroutine collect_docs
 
+!> The first blank-separated word of `text`, after any leading blanks.
+pure function first_word_of(text) result(word)
+    character(len=*), intent(in) :: text    !! the text
+    character(len=word_length(text)) :: word
+    integer :: a
+    a = verify(text//'x', ' ')
+    word = text(a:)
+end function first_word_of
+
 !> `s` without trailing whitespace.
 pure function strip_trailing(s) result(t)
     character(len=*), intent(in) :: s   !! the text
@@ -611,7 +629,10 @@ subroutine doxygen_meta(line, moved)
     if (stop_at < 3) return
     at = len_trim(text(:stop_at))
     select case (text(2:at))
-    case ('note', 'warning', 'todo', 'bug', 'history', 'param', 'see')
+    case ('see')
+        line = '[['//strip(first_word_of(text(stop_at:)))//']]'//text(stop_at + len(first_word_of(strip(text(stop_at:)))) + 1:)
+        return
+    case ('note', 'warning', 'todo', 'bug', 'history')
         return
     case ('brief')
         call push(moved, 'summary: '//strip(text(stop_at:)))
@@ -981,6 +1002,7 @@ subroutine attach_arguments(list, id)
             end do
             if (p%result == 0) p%result = implicit_variable(list, id, p%result_name, VAR_RESULT)
         end if
+        call doxygen_params(list, id)
         do a = 1, size(p%args)
             wanted = lowercase(p%args(a)%s)
             do c = 1, size(p%children)
@@ -1004,6 +1026,39 @@ subroutine attach_arguments(list, id)
         end do
     end associate
 end subroutine attach_arguments
+
+!> Move doxygen `@param name text` lines from procedure `id` to the variables they describe.
+subroutine doxygen_params(list, id)
+    type(entity_list_t), intent(inout) :: list  !! the entities
+    integer, intent(in) :: id                   !! the procedure
+    type(string_t), allocatable :: kept(:), words(:)
+    character(len=:), allocatable :: line
+    integer :: k, c, at, child
+    logical :: moved
+
+    if (.not. allocated(list%box(id)%e%doc)) return
+    allocate (kept(0))
+    do k = 1, size(list%box(id)%e%doc)
+        line = strip(list%box(id)%e%doc(k)%s)
+        moved = .false.
+        if (starts_with(line, '@param')) then
+            at = index(line, ']')
+            if (at == 0) at = 6
+            words = split_words(line(at + 1:))
+            if (size(words) >= 1) then
+                do c = 1, size(list%box(id)%e%children)
+                    child = list%box(id)%e%children(c)
+                    if (list%box(child)%e%kind /= E_VARIABLE) cycle
+                    if (lowercase(list%box(child)%e%name) /= lowercase(words(1)%s)) cycle
+                    call push(list%box(child)%e%doc, join(words(2:), ' '))
+                    moved = .true.
+                end do
+            end if
+        end if
+        if (.not. moved) call push(kept, list%box(id)%e%doc(k)%s)
+    end do
+    call move_alloc(kept, list%box(id)%e%doc)
+end subroutine doxygen_params
 
 !> Add a variable for `name`, implicitly typed.
 function implicit_variable(list, parent, name, role) result(id)

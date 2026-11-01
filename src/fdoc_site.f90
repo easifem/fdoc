@@ -1,0 +1,1413 @@
+module fdoc_site
+!! Writing the HTML site. Pages are rendered in parallel, each to text in memory, and written after, so
+!! nothing that renders a page calls a function returning a deferred-length string (see
+!! `example/slen_race.f90`).
+use iso_fortran_env, only: error_unit
+use ffmt_io, only: write_file
+use fdoc_util
+use fdoc_buffer
+use fdoc_model
+use fdoc_settings, only: settings_t
+use fdoc_project, only: project_t
+use fdoc_urls, only: entity_url, object_word, page_name, url_quote
+use fdoc_highlight, only: highlight_fortran
+use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
+implicit none
+private
+
+public :: assign_pages, write_site
+
+integer, parameter :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIST_ABSINT = 4, LIST_TYPES = 5
+integer, parameter :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
+integer, parameter :: NUM_LISTS = 8
+
+character(len=*), parameter :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
+                                                       'types', 'programs', 'blockdata', 'namelists']
+character(len=*), parameter :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'Source Files', 'Modules', 'Procedures', &
+                                                        'Abstract Interfaces', 'Derived Types', 'Programs', 'Block Data', &
+                                                        'Namelists']
+
+type :: index_list_t
+    !! Entities, by index.
+    integer, allocatable :: ids(:)              !! the entities
+end type index_list_t
+
+type :: site_t
+    !! What every page needs.
+    type(project_t), pointer :: p => null()     !! the project
+    type(settings_t), pointer :: s => null()    !! the settings
+    type(index_list_t), allocatable :: members(:)   !! the entities of each list page
+    character(len=:), allocatable :: footer     !! the end of every page
+end type site_t
+
+contains
+
+!> Give each entity with a page of its own a page name that is unique in its directory, as FORD does:
+!> `name`, then `name~2`.
+subroutine assign_pages(p)
+    type(project_t), intent(inout) :: p     !! the project
+    character(len=:), allocatable :: url, key, name
+    type(string_t), allocatable :: keys(:)
+    integer, allocatable :: counts(:)
+    integer :: k, j, at
+
+    allocate (keys(0), counts(0))
+    do k = 1, p%list%n
+        associate (e => p%list%box(k)%e)
+            if (e%kind == E_NONE .or. .not. allocated(e%name)) cycle
+            if (allocated(e%external_url)) cycle
+            if (e%kind == E_FILE) then
+                at = index(e%name, '/', back=.true.)
+                call page_name(e%name(at + 1:), name)
+                e%page = name
+            end if
+            call entity_url(p%list, k, url)
+            if (len(url) == 0 .or. index(url, '#') > 0) cycle
+            key = url
+            do j = 1, size(keys)
+                if (keys(j)%s == key) then
+                    counts(j) = counts(j) + 1
+                    call page_name(e%name, name)
+                    if (e%kind == E_FILE) name = e%page
+                    e%page = name//'~'//trim(number(counts(j)))
+                    key = ''
+                    exit
+                end if
+            end do
+            if (len(key) > 0) then
+                call push(keys, key)
+                call push_int(counts, 1)
+            end if
+        end associate
+    end do
+end subroutine assign_pages
+
+!> Length of the result of [[display_name]].
+pure integer function display_length(e)
+    type(entity_t), intent(in) :: e     !! the entity
+
+    display_length = len(e%name)
+    if (e%kind == E_FILE) display_length = len(e%name) - index(e%name, '/', back=.true.)
+end function display_length
+
+!> `k` as text, in a fixed width.
+pure function number(k) result(text)
+    integer, intent(in) :: k    !! the number
+    character(len=12) :: text
+    write (text, '(i0)') k
+end function number
+
+!> The members of each list page, in the order of the `sort` setting.
+subroutine collect_lists(site)
+    type(site_t), intent(inout) :: site     !! the site
+    integer :: k, which
+
+    allocate (site%members(NUM_LISTS))
+    do which = 1, NUM_LISTS
+        allocate (site%members(which)%ids(0))
+    end do
+    do k = 1, site%p%list%n
+        which = list_of(site, k)
+        if (which > 0) call push_int(site%members(which)%ids, k)
+    end do
+    do which = 1, NUM_LISTS
+        call sort_ids(site, site%members(which)%ids)
+    end do
+end subroutine collect_lists
+
+!> The list page that entity `id` belongs on, or 0.
+integer function list_of(site, id) result(which)
+    type(site_t), intent(in) :: site    !! the site
+    integer, intent(in) :: id           !! the entity
+    logical :: page
+
+    which = 0
+    associate (e => site%p%list%box(id)%e)
+        if (allocated(e%external_url) .or. .not. e%visible .or. .not. allocated(e%name)) return
+        page = has_page(site, id)
+        select case (e%kind)
+        case (E_FILE); which = LIST_FILES
+        case (E_MODULE, E_SUBMODULE); which = LIST_MODULES
+        case (E_PROGRAM); which = LIST_PROGRAMS
+        case (E_BLOCKDATA); which = LIST_BLOCKDATA
+        case (E_NAMELIST); which = LIST_NAMELISTS
+        case (E_TYPE); if (page) which = LIST_TYPES
+        case (E_INTERFACE); if (page) which = LIST_PROCEDURES
+        case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)
+            if (.not. page) return
+            which = merge(LIST_ABSINT, LIST_PROCEDURES, e%iface == IFACE_ABSTRACT)
+        end select
+    end associate
+end function list_of
+
+!> True if entity `id` has a page of its own.
+logical function has_page(site, id)
+    type(site_t), intent(in) :: site    !! the site
+    integer, intent(in) :: id           !! the entity
+    character(len=:), allocatable :: url
+
+    associate (e => site%p%list%box(id)%e)
+        has_page = .false.
+        if (e%kind == E_NONE .or. e%kind == E_VARIABLE .or. e%kind == E_BOUNDPROC .or. e%kind == E_FINAL .or. &
+            e%kind == E_COMMON .or. e%kind == E_ENUM) return
+        if (.not. allocated(e%name) .or. allocated(e%external_url) .or. .not. e%visible) return
+    end associate
+    call entity_url(site%p%list, id, url)
+    has_page = len(url) > 0 .and. index(url, '#') == 0
+end function has_page
+
+!> True if `a` sorts before `b`, for the `sort` setting.
+logical function sorts_before(site, a, b)
+    type(site_t), intent(in) :: site    !! the site
+    integer, intent(in) :: a            !! one entity
+    integer, intent(in) :: b            !! the other
+    character(len=:), allocatable :: mode
+    integer :: pa, pb
+
+    mode = site%s%sort
+    sorts_before = .false.
+    if (mode == 'src') return
+    associate (x => site%p%list%box(a)%e, y => site%p%list%box(b)%e)
+        if (starts_with(mode, 'permission')) then
+            pa = permission_rank(x)
+            pb = permission_rank(y)
+            if (pa /= pb) then
+                sorts_before = pa < pb
+                return
+            end if
+            if (mode == 'permission') return
+        end if
+        if (starts_with(mode, 'type')) then
+            if (allocated(x%vartype) .and. allocated(y%vartype)) then
+                if (x%vartype /= y%vartype) then
+                    sorts_before = llt(x%vartype, y%vartype)
+                    return
+                end if
+            end if
+            if (mode == 'type') return
+        end if
+        sorts_before = llt(lowercase(x%name), lowercase(y%name))
+    end associate
+end function sorts_before
+
+!> The order of the permission of `e`.
+pure integer function permission_rank(e)
+    type(entity_t), intent(in) :: e     !! the entity
+
+    permission_rank = 0
+    if (.not. allocated(e%permission)) return
+    select case (e%permission)
+    case ('public'); permission_rank = 1
+    case ('protected'); permission_rank = 2
+    case ('private'); permission_rank = 3
+    end select
+end function permission_rank
+
+!> Sort `ids`, keeping the source order of equal entries.
+subroutine sort_ids(site, ids)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(inout) :: ids(:)        !! the entities
+    integer :: i, j, id
+
+    if (site%s%sort == 'src') return
+    do i = 2, size(ids)
+        id = ids(i)
+        j = i - 1
+        do while (j >= 1)
+            if (.not. sorts_before(site, id, ids(j))) exit
+            ids(j + 1) = ids(j)
+            j = j - 1
+        end do
+        ids(j + 1) = id
+    end do
+end subroutine sort_ids
+
+!> The visible children of `id` that `want` accepts, sorted: 1 variables, 2 functions, 3 subroutines,
+!> 4 explicit and generic interfaces, 5 abstract interfaces, 6 types, 7 bindings, 8 final procedures,
+!> 9 namelists, 10 common blocks, 11 enumerations, 12 separate module procedures.
+subroutine children_of(site, id, want, ids)
+    type(site_t), intent(in) :: site            !! the site
+    integer, intent(in) :: id                   !! the entity
+    integer, intent(in) :: want                 !! what to find
+    integer, allocatable, intent(out) :: ids(:) !! the children
+    integer :: k, child
+
+    allocate (ids(0))
+    associate (e => site%p%list%box(id)%e)
+        do k = 1, size(e%children)
+            child = e%children(k)
+            if (accepts(site%p%list%box(child)%e, want)) call push_int(ids, child)
+        end do
+        if (allocated(e%inherited)) then
+            do k = 1, size(e%inherited)
+                child = e%inherited(k)
+                if (accepts(site%p%list%box(child)%e, want) .and. contains_string(e%display, &
+                                                                                  site%p%list%box(child)%e%permission)) then
+                    call push_int(ids, child)
+                end if
+            end do
+        end if
+    end associate
+    call sort_ids(site, ids)
+end subroutine children_of
+
+!> True if `c` is of the category `want` of [[children_of]].
+pure logical function accepts(c, want)
+    type(entity_t), intent(in) :: c     !! the entity
+    integer, intent(in) :: want         !! the category
+
+    accepts = .false.
+    if (.not. c%visible .or. c%kind == E_NONE) return
+    select case (want)
+    case (1); accepts = c%kind == E_VARIABLE .and. c%var_role == VAR_PLAIN
+    case (2); accepts = c%kind == E_FUNCTION .and. c%iface == IFACE_NONE
+    case (3); accepts = c%kind == E_SUBROUTINE .and. c%iface == IFACE_NONE
+    case (4); accepts = c%kind == E_INTERFACE .or. c%iface == IFACE_EXPLICIT
+    case (5); accepts = c%iface == IFACE_ABSTRACT
+    case (6); accepts = c%kind == E_TYPE
+    case (7); accepts = c%kind == E_BOUNDPROC
+    case (8); accepts = c%kind == E_FINAL
+    case (9); accepts = c%kind == E_NAMELIST
+    case (10); accepts = c%kind == E_COMMON
+    case (11); accepts = c%kind == E_ENUM
+    case (12); accepts = c%kind == E_MODPROC
+    end select
+end function accepts
+
+!> Write `name`, linked to entity `id` if it can be.
+subroutine link_to(site, id, name, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity, or 0
+    character(len=*), intent(in) :: name    !! the text
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    character(len=:), allocatable :: url
+
+    url = ''
+    if (id > 0) then
+        associate (e => site%p%list%box(id)%e)
+            if (e%visible .or. allocated(e%external_url)) call entity_url(site%p%list, id, url)
+        end associate
+    end if
+    if (len(url) == 0) then
+        call html_escape(name, b, .false.)
+        return
+    end if
+    call add(b, '<a href="')
+    if (.not. allocated(site%p%list%box(id)%e%external_url)) call add(b, '../')
+    call html_escape(url, b, .true.)
+    call add(b, '">')
+    call html_escape(name, b, .false.)
+    call add(b, '</a>')
+end subroutine link_to
+
+!> Write the type of variable `e`.
+subroutine write_type(site, e, b)
+    type(site_t), intent(in) :: site        !! the site
+    type(entity_t), intent(in) :: e         !! the variable
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    call html_escape(e%vartype, b, .false.)
+    if (allocated(e%type_kind) .and. allocated(e%strlen)) then
+        call add(b, '(len=')
+        call html_escape(e%strlen, b, .false.)
+        call add(b, ', kind=')
+        call html_escape(e%type_kind, b, .false.)
+        call add(b, ')')
+    else if (allocated(e%type_kind)) then
+        call add(b, '(kind=')
+        call html_escape(e%type_kind, b, .false.)
+        call add(b, ')')
+    else if (allocated(e%strlen)) then
+        call add(b, '(len=')
+        call html_escape(e%strlen, b, .false.)
+        call add(b, ')')
+    else if (allocated(e%proto)) then
+        call add(b, '(')
+        call link_to(site, e%proto_id, e%proto(1)%s, b)
+        if (size(e%proto) > 1) then
+            if (len(e%proto(2)%s) > 0) then
+                call add(b, '(')
+                call html_escape(e%proto(2)%s, b, .false.)
+                call add(b, ')')
+            end if
+        end if
+        call add(b, ')')
+    end if
+end subroutine write_type
+
+!> Write the start of a page.
+subroutine page_head(site, title, here, prefix, math, b)
+    type(site_t), intent(in) :: site        !! the site
+    character(len=*), intent(in) :: title   !! the title
+    integer, intent(in) :: here             !! the list page this belongs to, or 0
+    character(len=*), intent(in) :: prefix  !! from the page to the root of the site: `../` or `''`
+    logical, intent(in) :: math             !! true to load MathJax
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    associate (s => site%s)
+        call add(b, '<!DOCTYPE html>'//achar(10)//'<html lang="en">'//achar(10)//'<head>'//achar(10))
+        call add(b, '<meta charset="utf-8">'//achar(10)//'<meta name="viewport" content="width=device-width, initial-scale=1">')
+        call add(b, achar(10)//'<title>')
+        call html_escape(title, b, .false.)
+        if (title /= s%project) then
+            call add(b, ' &ndash; ')
+            call html_escape(s%project, b, .false.)
+        end if
+        call add(b, '</title>'//achar(10))
+        if (allocated(s%author)) then
+            call add(b, '<meta name="author" content="')
+            call html_escape(s%author, b, .true.)
+            call add(b, '">'//achar(10))
+        end if
+        if (allocated(s%favicon)) call add(b, '<link rel="icon" href="'//prefix//'favicon.png">'//achar(10))
+        call add(b, '<link rel="stylesheet" href="'//prefix//'css/fdoc.css">'//achar(10))
+        if (allocated(s%css)) call add(b, '<link rel="stylesheet" href="'//prefix//'css/user.css">'//achar(10))
+        call add(b, '<script src="'//prefix//'js/fdoc.js"></script>'//achar(10))
+        if (math) then
+            call add(b, '<script async src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML">')
+            call add(b, '</script>'//achar(10))
+        end if
+        call add(b, '</head>'//achar(10)//'<body>'//achar(10)//'<header class="top">'//achar(10))
+        call add(b, '<a class="brand" href="'//prefix//'index.html">')
+        call html_escape(s%project, b, .false.)
+        if (allocated(s%version)) then
+            call add(b, '<small>')
+            call html_escape(s%version, b, .false.)
+            call add(b, '</small>')
+        end if
+        call add(b, '</a>'//achar(10)//'<nav>')
+        do k = 1, NUM_LISTS
+            if (size(site%members(k)%ids) == 0) cycle
+            call add(b, '<a'//trim(merge(' class="here"', '             ', k == here))//' href="'//prefix//'lists/'// &
+                     trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a>')
+        end do
+        call add(b, '</nav>'//achar(10)//'<button class="theme" title="Change theme" aria-label="Change theme">&#9680;</button>')
+        call add(b, achar(10)//'</header>'//achar(10)//'<div class="layout">'//achar(10))
+    end associate
+end subroutine page_head
+
+!> Write the end of a page.
+subroutine page_foot(site, b)
+    type(site_t), intent(in) :: site    !! the site
+    type(buffer_t), intent(inout) :: b  !! the HTML
+
+    call add(b, site%footer)
+    call add(b, '</div>'//achar(10)//'</main>'//achar(10)//'</div>'//achar(10)//'</body>'//achar(10)//'</html>'//achar(10))
+end subroutine page_foot
+
+!> Write a sidebar group of links to the entities `ids`, on the same page if `anchors`.
+subroutine side_group(site, title, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    character(len=*), intent(in) :: title   !! the heading
+    integer, intent(in) :: ids(:)           !! the entities
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    character(len=:), allocatable :: url
+    integer :: k, at
+
+    if (size(ids) == 0) return
+    call add(b, '<h4>'//title//'</h4><ul>')
+    do k = 1, size(ids)
+        call entity_url(site%p%list, ids(k), url)
+        at = index(url, '#')
+        call add(b, '<li><a href="')
+        if (at > 0) then
+            call html_escape(url(at:), b, .true.)
+        else if (len(url) > 0) then
+            call add(b, '../')
+            call html_escape(url, b, .true.)
+        end if
+        call add(b, '">')
+        call html_escape(site%p%list%box(ids(k))%e%name, b, .false.)
+        call add(b, '</a></li>')
+    end do
+    call add(b, '</ul>'//achar(10))
+end subroutine side_group
+
+!> Write the title of an entity's page, with what is known about it.
+subroutine entity_title(site, id, word, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    character(len=*), intent(in) :: word    !! what it is
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: parent, k
+    logical :: open
+
+    associate (e => site%p%list%box(id)%e)
+        parent = e%parent
+        if (parent > 0) then
+            associate (up => site%p%list%box(parent)%e)
+                if (up%kind /= E_FILE) then
+                    call add(b, '<div class="crumbs">')
+                    call link_to(site, parent, up%name, b)
+                    call add(b, '</div>'//achar(10))
+                end if
+            end associate
+        end if
+        call add(b, '<h1><span class="kind">'//word//'</span>')
+        call html_escape(display_name(e), b, .false.)
+        if (allocated(e%permission)) then
+            if (e%permission /= 'public' .and. e%kind /= E_MODULE .and. e%kind /= E_SUBMODULE .and. e%kind /= E_FILE .and. &
+                e%kind /= E_PROGRAM) call add(b, '<span class="badge private">'//e%permission//'</span>')
+        end if
+        call add(b, '</h1>'//achar(10))
+        open = .false.
+        do k = 1, size(e%meta)
+            select case (e%meta(k)%key)
+            case ('author', 'date', 'version', 'since', 'license', 'category')
+                if (.not. open) call add(b, '<div class="meta">')
+                open = .true.
+                call add(b, '<span>'//e%meta(k)%key//': ')
+                call html_escape(join(e%meta(k)%values, ' '), b, .false.)
+                call add(b, '</span>')
+            case ('deprecated')
+                if (.not. open) call add(b, '<div class="meta">')
+                open = .true.
+                call add(b, '<span class="badge deprecated">deprecated</span>')
+            end select
+        end do
+        if (open) call add(b, '</div>'//achar(10))
+        select case (e%kind)
+        case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)
+            call signature(site, id, b)
+        end select
+        if (allocated(e%html)) then
+            if (len(e%html) > 0) then
+                call add(b, '<div class="doc">'//achar(10))
+                call add(b, e%html)
+                call add(b, achar(10)//'</div>'//achar(10))
+            end if
+        end if
+    end associate
+end subroutine entity_title
+
+!> The base name of a file entity, or the name of another.
+pure function display_name(e) result(name)
+    type(entity_t), intent(in) :: e     !! the entity
+    character(len=display_length(e)) :: name
+    integer :: at
+
+    at = 0
+    if (e%kind == E_FILE) at = index(e%name, '/', back=.true.)
+    name = e%name(at + 1:)
+end function display_name
+
+!> Write the declaration of a procedure.
+subroutine signature(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the procedure
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    associate (e => site%p%list%box(id)%e)
+        call add(b, '<div class="sig">')
+        if (allocated(e%attribs)) then
+            do k = 1, size(e%attribs)
+                call add(b, '<span class="k">')
+                call html_escape(e%attribs(k)%s, b, .false.)
+                call add(b, '</span> ')
+            end do
+        end if
+        if (e%kind == E_FUNCTION .and. e%result > 0) then
+            call write_type(site, site%p%list%box(e%result)%e, b)
+            call add(b, ' ')
+        end if
+        select case (e%kind)
+        case (E_FUNCTION); call add(b, '<span class="k">function</span> ')
+        case (E_SUBROUTINE); call add(b, '<span class="k">subroutine</span> ')
+        case (E_MODPROC); call add(b, '<span class="k">module procedure</span> ')
+        end select
+        call html_escape(e%name, b, .false.)
+        if (allocated(e%args)) then
+            call add(b, '(')
+            call html_escape(join(e%args, ', '), b, .false.)
+            call add(b, ')')
+        end if
+        if (e%kind == E_FUNCTION) then
+            if (allocated(e%result_name)) then
+                if (lowercase(e%result_name) /= lowercase(e%name)) then
+                    call add(b, ' <span class="k">result</span>(')
+                    call html_escape(e%result_name, b, .false.)
+                    call add(b, ')')
+                end if
+            end if
+        end if
+        if (allocated(e%bind_c)) then
+            call add(b, ' <span class="k">bind</span>(')
+            call html_escape(e%bind_c, b, .false.)
+            call add(b, ')')
+        end if
+        call add(b, '</div>'//achar(10))
+    end associate
+end subroutine signature
+
+!> Write a table of variables.
+subroutine variable_table(site, ids, arguments, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: ids(:)           !! the variables
+    logical, intent(in) :: arguments        !! true to show intent and optional
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k, a
+    logical :: first
+
+    if (size(ids) == 0) return
+    call add(b, '<table>'//achar(10)//'<thead><tr><th>Type</th>')
+    if (arguments) call add(b, '<th>Intent</th>')
+    call add(b, '<th>Name</th><th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
+    do k = 1, size(ids)
+        associate (e => site%p%list%box(ids(k))%e)
+            if (e%kind /= E_VARIABLE) then
+                ! a dummy procedure with an interface
+                call add(b, '<tr id="')
+                call anchor(site, ids(k), b)
+                call add(b, '"><td class="type">procedure</td>')
+                if (arguments) call add(b, '<td></td>')
+                call add(b, '<td class="name">')
+                call html_escape(e%name, b, .false.)
+                call add(b, '</td><td>')
+                if (allocated(e%summary)) call add(b, e%summary)
+                call add(b, '</td></tr>'//achar(10))
+                cycle
+            end if
+            call add(b, '<tr id="')
+            call anchor(site, ids(k), b)
+            call add(b, '"><td class="type">')
+            call write_type(site, e, b)
+            first = .true.
+            do a = 1, size(e%attribs)
+                call add(b, ', ')
+                call html_escape(e%attribs(a)%s, b, .false.)
+            end do
+            if (e%parameter) call add(b, ', parameter')
+            if (allocated(e%dimension)) then
+                if (index(e%dimension, '(') == 1) then
+                    call add(b, ', dimension')
+                    call html_escape(e%dimension, b, .false.)
+                end if
+            end if
+            call add(b, '</td>')
+            if (arguments) then
+                call add(b, '<td>')
+                if (allocated(e%intent)) call html_escape(e%intent, b, .false.)
+                if (e%optional) call add(b, ' <span class="badge">optional</span>')
+                call add(b, '</td>')
+            end if
+            call add(b, '<td class="name">')
+            call html_escape(e%name, b, .false.)
+            if (allocated(e%initial)) then
+                call add(b, ' = ')
+                call html_escape(e%initial, b, .false.)
+            end if
+            if (allocated(e%permission) .and. .not. arguments) then
+                if (e%permission /= 'public') call add(b, '<span class="badge private">'//e%permission//'</span>')
+            end if
+            call add(b, '</td><td>')
+            if (allocated(e%html)) call add(b, e%html)
+            call add(b, '</td></tr>'//achar(10))
+        end associate
+    end do
+    call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
+end subroutine variable_table
+
+!> Write the anchor of entity `id`.
+subroutine anchor(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    character(len=:), allocatable :: word, name, quoted
+
+    call object_word(site%p%list%box(id)%e, word)
+    call page_name(site%p%list%box(id)%e%name, name)
+    call url_quote(name, quoted)
+    call add(b, word//'-')
+    call html_escape(quoted, b, .true.)
+end subroutine anchor
+
+!> Write a section of short entries that link to the pages of `ids`.
+subroutine summary_section(site, title, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    character(len=*), intent(in) :: title   !! the heading
+    integer, intent(in) :: ids(:)           !! the entities
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    if (size(ids) == 0) return
+    call add(b, '<h2 id="'//section_id(title)//'">'//title//'</h2>'//achar(10))
+    do k = 1, size(ids)
+        call summary_item(site, ids(k), b)
+    end do
+end subroutine summary_section
+
+!> An anchor for the section titled `title`.
+pure function section_id(title) result(id)
+    character(len=*), intent(in) :: title   !! the title
+    character(len=len(title)) :: id
+    integer :: k
+
+    id = lowercase(title)
+    do k = 1, len(id)
+        if (id(k:k) == ' ') id(k:k) = '-'
+    end do
+end function section_id
+
+!> Write a short entry for entity `id`.
+subroutine summary_item(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (e => site%p%list%box(id)%e)
+        call add(b, '<div class="item" id="')
+        call anchor(site, id, b)
+        call add(b, '"><h3>')
+        call link_to(site, id, e%name, b)
+        if (allocated(e%permission)) then
+            if (e%permission /= 'public') call add(b, '<span class="badge private">'//e%permission//'</span>')
+        end if
+        call add(b, '</h3>'//achar(10))
+        select case (e%kind)
+        case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)
+            call signature(site, id, b)
+        end select
+        if (allocated(e%summary)) call add(b, e%summary)
+        call add(b, achar(10)//'</div>'//achar(10))
+    end associate
+end subroutine summary_item
+
+!> Write the `use` statements of a unit.
+subroutine uses_section(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the unit
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    associate (e => site%p%list%box(id)%e)
+        if (.not. allocated(e%uses)) return
+        if (size(e%uses) == 0) return
+        call add(b, '<h2 id="uses">Uses</h2>'//achar(10)//'<ul class="chips">')
+        do k = 1, size(e%uses)
+            call add(b, '<li>')
+            call link_to(site, e%uses(k)%target, e%uses(k)%module, b)
+            call add(b, '</li>')
+        end do
+        call add(b, '</ul>'//achar(10))
+    end associate
+end subroutine uses_section
+
+!> Write what a procedure calls.
+subroutine calls_section(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the procedure
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    associate (e => site%p%list%box(id)%e)
+        if (.not. allocated(e%call_ids)) return
+        if (size(e%call_ids) == 0) return
+        call add(b, '<h2 id="calls">Calls</h2>'//achar(10)//'<ul class="chips">')
+        do k = 1, size(e%call_ids)
+            call add(b, '<li>')
+            call link_to(site, e%call_ids(k), site%p%list%box(e%call_ids(k))%e%name, b)
+            call add(b, '</li>')
+        end do
+        call add(b, '</ul>'//achar(10))
+    end associate
+end subroutine calls_section
+
+!> Write the source of entity `id`, if `source` is set, from the text of its file.
+subroutine source_section(site, id, keyword, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the procedure or type
+    character(len=*), intent(in) :: keyword !! the word that opens it
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: first, last
+
+    if (.not. wants_source(site, id)) return
+    associate (e => site%p%list%box(id)%e)
+        call find_source(site%p%list%box(e%file)%e%source_text, keyword, lowercase(e%name), first, last)
+        if (first == 0) return
+        call add(b, '<h2 id="source">Source</h2>'//achar(10)//'<details class="source"><summary>Show the code</summary>')
+        call add(b, '<pre><code>')
+        call highlight_fortran(site%p%list%box(e%file)%e%source_text(first:last), b, .false.)
+        call add(b, '</code></pre></details>'//achar(10))
+    end associate
+end subroutine source_section
+
+!> True if the source of entity `id` should be shown.
+logical function wants_source(site, id)
+    type(site_t), intent(in) :: site    !! the site
+    integer, intent(in) :: id           !! the entity
+    logical :: flag, ok
+    integer :: k
+
+    wants_source = site%s%source
+    associate (e => site%p%list%box(id)%e)
+        do k = 1, size(e%meta)
+            if (e%meta(k)%key /= 'source') cycle
+            call parse_bool(e%meta(k)%values(1)%s, flag, ok)
+            if (ok) wants_source = flag
+        end do
+    end associate
+end function wants_source
+
+!> Find the text of the construct `keyword name` in `text`, from its first line to its `end` line.
+subroutine find_source(text, keyword, name, first, last)
+    character(len=*), intent(in) :: text    !! the file
+    character(len=*), intent(in) :: keyword !! `subroutine`, `function` or `type`
+    character(len=*), intent(in) :: name    !! the name, in lowercase
+    integer, intent(out) :: first           !! where it starts, or 0
+    integer, intent(out) :: last            !! where it ends
+    character(len=len(text)) :: low
+    integer :: i, j, stop_at, at, comment
+
+    first = 0
+    last = 0
+    low = lowercase(text)
+    i = 1
+    do while (i <= len(low))
+        j = index(low(i:), achar(10))
+        stop_at = merge(len(low), i + j - 2, j == 0)
+        associate (line => low(i:stop_at))
+            comment = index(line, '!')
+            if (comment == 0) comment = len(line) + 1
+            at = line_has(line(:comment - 1), keyword, name)
+            if (at > 0 .and. first == 0 .and. .not. starts_word(adjustl(line), 'end')) then
+                first = i
+            else if (first > 0 .and. at > 0 .and. starts_word(adjustl(line), 'end')) then
+                last = stop_at
+                return
+            end if
+        end associate
+        if (j == 0) exit
+        i = stop_at + 2
+    end do
+    first = 0
+end subroutine find_source
+
+!> The position of `keyword` followed by `name` in `line`, or 0.
+pure integer function line_has(line, keyword, name)
+    character(len=*), intent(in) :: line    !! the line
+    character(len=*), intent(in) :: keyword !! the keyword
+    character(len=*), intent(in) :: name    !! the name
+    integer :: k, n
+
+    line_has = 0
+    do k = 1, len(line) - len(keyword) + 1
+        if (.not. word_at(line, k, keyword)) cycle
+        n = k + len(keyword)
+        do while (n <= len(line))
+            if (index(' :,', line(n:n)) == 0) exit
+            if (line(n:n) == ',') exit
+            n = n + 1
+        end do
+        if (n <= len(line)) then
+            if (word_at(line, n, name)) then
+                line_has = k
+                return
+            end if
+        end if
+    end do
+    if (keyword == 'type' .and. index(line, '::') > 0) then
+        n = index(line, '::') + 2
+        n = n + verify(line(n:)//'x', ' ') - 1
+        if (word_at(line, n, name) .and. starts_word(adjustl(line), 'type')) line_has = 1
+    end if
+end function line_has
+
+!> Render the page of entity `id`.
+subroutine entity_page(site, id, html)
+    type(site_t), intent(in) :: site                    !! the site
+    integer, intent(in) :: id                           !! the entity
+    character(len=:), allocatable, intent(out) :: html  !! the page
+    type(buffer_t) :: b, side
+    integer, allocatable :: variables(:), functions(:), subroutines(:), interfaces(:), abstracts(:), types(:)
+    integer, allocatable :: bindings(:), finals(:), lists(:), blocks(:), implementations(:), enums(:)
+    character(len=:), allocatable :: word, text
+    integer :: here
+
+    call children_of(site, id, 1, variables)
+    call children_of(site, id, 2, functions)
+    call children_of(site, id, 3, subroutines)
+    call children_of(site, id, 4, interfaces)
+    call children_of(site, id, 5, abstracts)
+    call children_of(site, id, 6, types)
+    call children_of(site, id, 7, bindings)
+    call children_of(site, id, 8, finals)
+    call children_of(site, id, 9, lists)
+    call children_of(site, id, 10, blocks)
+    call children_of(site, id, 11, enums)
+    call children_of(site, id, 12, implementations)
+
+    associate (e => site%p%list%box(id)%e)
+        here = list_of(site, id)
+        select case (e%kind)
+        case (E_MODULE); word = 'module'
+        case (E_SUBMODULE); word = 'submodule'
+        case (E_PROGRAM); word = 'program'
+        case (E_BLOCKDATA); word = 'block data'
+        case (E_SUBROUTINE); word = 'subroutine'
+        case (E_FUNCTION); word = 'function'
+        case (E_MODPROC); word = 'module procedure'
+        case (E_INTERFACE); word = 'interface'
+        case (E_TYPE); word = 'type'
+        case (E_NAMELIST); word = 'namelist'
+        case default; word = 'file'
+        end select
+        if (e%iface == IFACE_EXPLICIT) word = 'interface'
+        if (e%iface == IFACE_ABSTRACT) word = 'abstract interface'
+
+        call side_group(site, 'Variables', variables, side)
+        call side_group(site, 'Interfaces', interfaces, side)
+        call side_group(site, 'Abstract interfaces', abstracts, side)
+        call side_group(site, 'Types', types, side)
+        call side_group(site, 'Functions', functions, side)
+        call side_group(site, 'Subroutines', subroutines, side)
+        call side_group(site, 'Module procedures', implementations, side)
+        call side_group(site, 'Bindings', bindings, side)
+        call take(side, text)
+
+        call page_head(site, display_name(e), here, '../', uses_math(site, id), b)
+        call add(b, '<aside class="side">'//achar(10))
+        if (len(text) > 0) then
+            call add(b, text)
+        else
+            call site_side(site, here, '../', b)
+        end if
+        call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
+        call entity_title(site, id, word, b)
+
+        select case (e%kind)
+        case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)
+            call procedure_body(site, id, b)
+        case (E_INTERFACE)
+            call interface_body(site, id, b)
+        case (E_TYPE)
+            call type_body(site, id, variables, bindings, finals, b)
+        case (E_NAMELIST)
+            if (allocated(e%args)) then
+                call add(b, '<h2>Variables</h2>'//achar(10)//'<ul class="chips">')
+                call add_words(e%args, b)
+                call add(b, '</ul>'//achar(10))
+            end if
+        case (E_FILE)
+            call file_body(site, id, b)
+        case default
+            call unit_body(site, id, b)
+        end select
+
+        if (e%kind /= E_FILE .and. e%kind /= E_INTERFACE .and. e%kind /= E_TYPE .and. e%kind /= E_NAMELIST) then
+            if (size(variables) > 0) then
+                call add(b, '<h2 id="variables">Variables</h2>'//achar(10))
+                call variable_table(site, variables, .false., b)
+            end if
+            call enum_sections(site, enums, b)
+            call common_sections(site, blocks, b)
+            call summary_section(site, 'Interfaces', interfaces, b)
+            call summary_section(site, 'Abstract interfaces', abstracts, b)
+            call summary_section(site, 'Types', types, b)
+            call summary_section(site, 'Namelists', lists, b)
+            call summary_section(site, 'Functions', functions, b)
+            call summary_section(site, 'Subroutines', subroutines, b)
+            call summary_section(site, 'Module procedures', implementations, b)
+        end if
+        call page_foot(site, b)
+    end associate
+    call take(b, html)
+end subroutine entity_page
+
+!> Write enumerations.
+subroutine enum_sections(site, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: ids(:)           !! the enumerations
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    if (size(ids) == 0) return
+    call add(b, '<h2 id="enumerations">Enumerations</h2>'//achar(10))
+    do k = 1, size(ids)
+        call add(b, '<div class="item" id="')
+        call anchor(site, ids(k), b)
+        call add(b, '">'//achar(10))
+        call variable_table(site, site%p%list%box(ids(k))%e%children, .false., b)
+        call add(b, '</div>'//achar(10))
+    end do
+end subroutine enum_sections
+
+!> Write common blocks.
+subroutine common_sections(site, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: ids(:)           !! the common blocks
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    if (size(ids) == 0) return
+    call add(b, '<h2 id="common-blocks">Common blocks</h2>'//achar(10))
+    do k = 1, size(ids)
+        associate (e => site%p%list%box(ids(k))%e)
+            call add(b, '<div class="item" id="')
+            call anchor(site, ids(k), b)
+            call add(b, '"><h3>')
+            call html_escape(e%name, b, .false.)
+            call add(b, '</h3>'//achar(10))
+            if (allocated(e%html)) call add(b, e%html)
+            call add(b, '<ul class="chips">')
+            call add_words(e%args, b)
+            call add(b, '</ul></div>'//achar(10))
+        end associate
+    end do
+end subroutine common_sections
+
+!> Write `words` as list items.
+subroutine add_words(words, b)
+    type(string_t), intent(in) :: words(:)  !! the words
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    do k = 1, size(words)
+        call add(b, '<li>')
+        call html_escape(words(k)%s, b, .false.)
+        call add(b, '</li>')
+    end do
+end subroutine add_words
+
+!> True if the documentation shown on the page of `id` has math.
+logical function uses_math(site, id)
+    type(site_t), intent(in) :: site    !! the site
+    integer, intent(in) :: id           !! the entity
+    integer :: k
+
+    uses_math = has_math(site%p%list%box(id)%e)
+    if (uses_math) return
+    do k = 1, size(site%p%list%box(id)%e%children)
+        uses_math = has_math(site%p%list%box(site%p%list%box(id)%e%children(k))%e)
+        if (uses_math) return
+    end do
+end function uses_math
+
+!> True if `e` has math in its documentation.
+pure logical function has_math(e)
+    type(entity_t), intent(in) :: e     !! the entity
+
+    has_math = .false.
+    if (allocated(e%html)) has_math = index(e%html, 'math/tex') > 0
+end function has_math
+
+!> Write what is specific to a module, submodule, program or block data unit.
+subroutine unit_body(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the unit
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    associate (e => site%p%list%box(id)%e)
+        if (e%kind == E_SUBMODULE) then
+            call add(b, '<div class="meta"><span>submodule of ')
+            call link_to(site, e%ancestor_id, e%ancestor, b)
+            call add(b, '</span></div>'//achar(10))
+        end if
+        call uses_section(site, id, b)
+        if (allocated(e%descendants)) then
+            call add(b, '<h2 id="submodules">Submodules</h2>'//achar(10)//'<ul class="chips">')
+            do k = 1, size(e%descendants)
+                call add(b, '<li>')
+                call link_to(site, e%descendants(k), site%p%list%box(e%descendants(k))%e%name, b)
+                call add(b, '</li>')
+            end do
+            call add(b, '</ul>'//achar(10))
+        end if
+        if (e%kind == E_PROGRAM) call calls_section(site, id, b)
+    end associate
+end subroutine unit_body
+
+!> Write what is specific to a procedure.
+subroutine procedure_body(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the procedure
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (e => site%p%list%box(id)%e)
+        if (allocated(e%arg_ids)) then
+            if (size(e%arg_ids) > 0) then
+                call add(b, '<h2 id="arguments">Arguments</h2>'//achar(10))
+                call variable_table(site, e%arg_ids, .true., b)
+            end if
+        end if
+        if (e%result > 0) then
+            call add(b, '<h2 id="result">Result</h2>'//achar(10))
+            call variable_table(site, [e%result], .false., b)
+        end if
+        if (e%implements > 0) then
+            call add(b, '<div class="meta"><span>')
+            call add(b, merge('implements  ', 'implemented ', e%kind == E_MODPROC))
+            call link_to(site, e%implements, site%p%list%box(e%implements)%e%name, b)
+            call add(b, '</span></div>'//achar(10))
+        end if
+        call uses_section(site, id, b)
+        call calls_section(site, id, b)
+        call source_section(site, id, merge('function  ', 'subroutine', e%kind == E_FUNCTION), b)
+    end associate
+end subroutine procedure_body
+
+!> Write what is specific to a generic interface: the procedures in it.
+subroutine interface_body(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the interface
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k
+
+    associate (e => site%p%list%box(id)%e)
+        call add(b, '<h2 id="procedures">Procedures</h2>'//achar(10))
+        do k = 1, size(e%modproc_ids)
+            if (e%modproc_ids(k) == 0) then
+                call add(b, '<div class="item"><h3>')
+                call html_escape(e%modprocs(k)%s, b, .false.)
+                call add(b, '</h3></div>'//achar(10))
+            else
+                call summary_item(site, e%modproc_ids(k), b)
+            end if
+        end do
+        do k = 1, size(e%children)
+            if (site%p%list%box(e%children(k))%e%kind == E_NONE) cycle
+            if (allocated(site%p%list%box(e%children(k))%e%args)) call summary_item(site, e%children(k), b)
+        end do
+    end associate
+end subroutine interface_body
+
+!> Write what is specific to a derived type.
+subroutine type_body(site, id, variables, bindings, finals, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the type
+    integer, intent(in) :: variables(:)     !! its components
+    integer, intent(in) :: bindings(:)      !! its bindings
+    integer, intent(in) :: finals(:)        !! its final procedures
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k, j
+
+    associate (e => site%p%list%box(id)%e)
+        if (allocated(e%extends)) then
+            call add(b, '<div class="meta"><span>extends ')
+            call link_to(site, e%extends_id, e%extends, b)
+            call add(b, '</span></div>'//achar(10))
+        end if
+        if (size(e%attribs) > 0) then
+            call add(b, '<ul class="chips">')
+            call add_words(e%attribs, b)
+            call add(b, '</ul>'//achar(10))
+        end if
+        if (size(variables) > 0) then
+            call add(b, '<h2 id="components">Components</h2>'//achar(10))
+            call variable_table(site, variables, .false., b)
+        end if
+        if (e%constructor > 0) then
+            call add(b, '<h2 id="constructor">Constructor</h2>'//achar(10))
+            call summary_item(site, e%constructor, b)
+        end if
+        if (size(bindings) > 0) then
+            call add(b, '<h2 id="bindings">Type-bound procedures</h2>'//achar(10))
+            do k = 1, size(bindings)
+                associate (t => site%p%list%box(bindings(k))%e)
+                    call add(b, '<div class="item" id="')
+                    call anchor(site, bindings(k), b)
+                    call add(b, '"><h3>')
+                    call html_escape(t%name, b, .false.)
+                    if (t%generic) call add(b, '<span class="badge">generic</span>')
+                    if (t%deferred) call add(b, '<span class="badge">deferred</span>')
+                    if (t%permission /= 'public') call add(b, '<span class="badge private">'//t%permission//'</span>')
+                    call add(b, '</h3>'//achar(10))
+                    if (allocated(t%html)) call add(b, t%html)
+                    if (allocated(t%binding_ids)) then
+                        call add(b, '<ul class="chips">')
+                        do j = 1, size(t%binding_ids)
+                            call add(b, '<li>')
+                            call link_to(site, t%binding_ids(j), t%bindings(j)%s, b)
+                            call add(b, '</li>')
+                        end do
+                        call add(b, '</ul>')
+                    end if
+                    call add(b, achar(10)//'</div>'//achar(10))
+                end associate
+            end do
+        end if
+        if (size(finals) > 0) then
+            call add(b, '<h2 id="final">Final procedures</h2>'//achar(10)//'<ul class="chips">')
+            do k = 1, size(finals)
+                call add(b, '<li>')
+                call link_to(site, site%p%list%box(finals(k))%e%proto_id, site%p%list%box(finals(k))%e%name, b)
+                call add(b, '</li>')
+            end do
+            call add(b, '</ul>'//achar(10))
+        end if
+        call source_section(site, id, 'type', b)
+    end associate
+end subroutine type_body
+
+!> Write what is specific to a source file.
+subroutine file_body(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the file
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer, allocatable :: units(:)
+    integer :: k
+
+    associate (e => site%p%list%box(id)%e)
+        allocate (units(0))
+        do k = 1, size(e%children)
+            associate (c => site%p%list%box(e%children(k))%e)
+                select case (c%kind)
+                case (E_MODULE, E_SUBMODULE, E_PROGRAM, E_BLOCKDATA, E_SUBROUTINE, E_FUNCTION)
+                    call push_int(units, e%children(k))
+                end select
+            end associate
+        end do
+        call summary_section(site, 'Contents', units, b)
+        if (site%s%incl_src .and. allocated(e%source_text)) then
+            call add(b, '<h2 id="source">Source</h2>'//achar(10)//'<pre class="source"><code>')
+            call highlight_fortran(e%source_text, b, .true.)
+            call add(b, '</code></pre>'//achar(10))
+        end if
+    end associate
+end subroutine file_body
+
+!> Write the links to the list pages, for the sidebar of pages without an outline of their own.
+subroutine site_side(site, here, prefix, b)
+    type(site_t), intent(in) :: site            !! the site
+    integer, intent(in) :: here                 !! the current list page, or 0
+    character(len=*), intent(in) :: prefix      !! from the page to the root of the site
+    type(buffer_t), intent(inout) :: b          !! the HTML
+    character(len=:), allocatable :: url
+    integer :: k, shown, limit
+
+    do k = 1, NUM_LISTS
+        if (size(site%members(k)%ids) == 0) cycle
+        call add(b, '<h4><a href="'//prefix//'lists/'//trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a></h4>')
+        if (k /= here .and. here /= 0) cycle
+        call add(b, '<ul>')
+        limit = merge(size(site%members(k)%ids), min(site%s%max_frontpage_items, size(site%members(k)%ids)), k == here)
+        do shown = 1, limit
+            associate (id => site%members(k)%ids(shown))
+                call entity_url(site%p%list, id, url)
+                call add(b, '<li><a href="'//prefix)
+                call html_escape(url, b, .true.)
+                call add(b, '">')
+                call html_escape(display_name(site%p%list%box(id)%e), b, .false.)
+                call add(b, '</a></li>')
+            end associate
+        end do
+        call add(b, '</ul>'//achar(10))
+    end do
+end subroutine site_side
+
+!> Render list page `which`.
+subroutine list_page(site, which, html)
+    type(site_t), intent(in) :: site                    !! the site
+    integer, intent(in) :: which                        !! the list
+    character(len=:), allocatable, intent(out) :: html  !! the page
+    type(buffer_t) :: b
+    character(len=:), allocatable :: url
+    integer :: k
+
+    call page_head(site, trim(LIST_TITLE(which)), which, '../', .false., b)
+    call add(b, '<aside class="side">'//achar(10))
+    call site_side(site, which, '../', b)
+    call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
+    call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
+    call add(b, '<table class="listing">'//achar(10)//'<tbody>'//achar(10))
+    do k = 1, size(site%members(which)%ids)
+        associate (id => site%members(which)%ids(k))
+            call entity_url(site%p%list, id, url)
+            call add(b, '<tr><td><a href="../')
+            call html_escape(url, b, .true.)
+            call add(b, '">')
+            call html_escape(display_name(site%p%list%box(id)%e), b, .false.)
+            call add(b, '</a></td><td>')
+            if (allocated(site%p%list%box(id)%e%summary)) call add(b, site%p%list%box(id)%e%summary)
+            call add(b, '</td></tr>'//achar(10))
+        end associate
+    end do
+    call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
+    call page_foot(site, b)
+    call take(b, html)
+end subroutine list_page
+
+!> Render the front page.
+subroutine index_page(site, front, html)
+    type(site_t), intent(in) :: site                    !! the site
+    character(len=*), intent(in) :: front               !! the project file's text as HTML
+    character(len=:), allocatable, intent(out) :: html  !! the page
+    type(buffer_t) :: b
+    integer :: k
+
+    associate (s => site%s)
+        call page_head(site, s%project, 0, '', index(front, 'math/tex') > 0, b)
+        call add(b, '<aside class="side">'//achar(10))
+        call site_side(site, 0, '', b)
+        call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<h1>')
+        call html_escape(s%project, b, .false.)
+        call add(b, '</h1>'//achar(10))
+        if (allocated(s%summary)) then
+            call add(b, '<div class="lead">')
+            call html_escape(s%summary, b, .false.)
+            call add(b, '</div>'//achar(10))
+        end if
+        call add(b, '<div class="meta">')
+        if (allocated(s%author)) then
+            call add(b, '<span>')
+            call html_escape(s%author, b, .false.)
+            call add(b, '</span>')
+        end if
+        call project_link(s%project_github, 'GitHub', b)
+        call project_link(s%project_gitlab, 'GitLab', b)
+        call project_link(s%project_bitbucket, 'Bitbucket', b)
+        call project_link(s%project_sourceforge, 'SourceForge', b)
+        call project_link(s%project_website, 'Website', b)
+        call project_link(s%project_download, 'Download', b)
+        call add(b, '</div>'//achar(10)//'<div class="grid">')
+        do k = 1, NUM_LISTS
+            if (size(site%members(k)%ids) == 0) cycle
+            call add(b, '<a class="card" href="lists/'//trim(LIST_FILE(k))//'.html"><b>'// &
+                     trim(number(size(site%members(k)%ids)))//'</b><span>'//trim(LIST_TITLE(k))//'</span></a>')
+        end do
+        call add(b, '</div>'//achar(10)//'<div class="doc">'//achar(10))
+        call add(b, front)
+        call add(b, achar(10)//'</div>'//achar(10))
+        call page_foot(site, b)
+    end associate
+    call take(b, html)
+end subroutine index_page
+
+!> Write a link to `url` if it is set.
+subroutine project_link(url, label, b)
+    character(len=:), allocatable, intent(in) :: url    !! the address
+    character(len=*), intent(in) :: label               !! the text
+    type(buffer_t), intent(inout) :: b                  !! the HTML
+
+    if (.not. allocated(url)) return
+    call add(b, '<span><a href="')
+    call html_escape(url, b, .true.)
+    call add(b, '">'//label//'</a></span>')
+end subroutine project_link
+
+!> The end of every page.
+subroutine make_footer(s, footer)
+    type(settings_t), intent(in) :: s                   !! the settings
+    character(len=:), allocatable, intent(out) :: footer !! the HTML
+    type(buffer_t) :: b
+
+    call add(b, '<footer>')
+    call html_escape(s%project, b, .false.)
+    if (allocated(s%author)) then
+        call add(b, ' was developed by ')
+        call html_escape(s%author, b, .false.)
+    end if
+    if (len(s%license) > 0) then
+        call add(b, '. ')
+        call license_text(s%license, b)
+    end if
+    if (s%print_creation_date) then
+        call add(b, '. Generated on ')
+        call html_escape(s%creation_date, b, .false.)
+    end if
+    call add(b, '. Documentation generated by fdoc.</footer>'//achar(10))
+    call take(b, footer)
+end subroutine make_footer
+
+!> Write the name of license `license`, linked if it is a known one.
+subroutine license_text(license, b)
+    character(len=*), intent(in) :: license !! the setting
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    character(len=:), allocatable :: url, name
+
+    select case (lowercase(license))
+    case ('by'); name = 'CC BY'; url = 'http://creativecommons.org/licenses/by/4.0/'
+    case ('by-nd'); name = 'CC BY-ND'; url = 'http://creativecommons.org/licenses/by-nd/4.0/'
+    case ('by-sa'); name = 'CC BY-SA'; url = 'http://creativecommons.org/licenses/by-sa/4.0/'
+    case ('by-nc'); name = 'CC BY-NC'; url = 'http://creativecommons.org/licenses/by-nc/4.0/'
+    case ('by-nc-nd'); name = 'CC BY-NC-ND'; url = 'http://creativecommons.org/licenses/by-nc-nd/4.0/'
+    case ('by-nc-sa'); name = 'CC BY-NC-SA'; url = 'http://creativecommons.org/licenses/by-nc-sa/4.0/'
+    case ('gpl'); name = 'GNU GPL'; url = 'http://www.gnu.org/licenses/gpl'
+    case ('lgpl'); name = 'GNU LGPL'; url = 'http://www.gnu.org/licenses/lgpl'
+    case ('agpl'); name = 'GNU AGPL'; url = 'http://www.gnu.org/licenses/agpl'
+    case ('gfdl'); name = 'GNU FDL'; url = 'http://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html'
+    case ('opl'); name = 'Open Publication License'; url = 'http://opencontent.org/openpub/'
+    case ('pdl'); name = 'Public Documentation License'; url = 'http://www.openoffice.org/licenses/PDL.html'
+    case ('bsd'); name = 'FreeBSD Documentation License'; url = 'http://www.freebsd.org/copyright/freebsd-doc-license.html'
+    case ('isc'); name = 'ISC'; url = 'https://opensource.org/licenses/ISC'
+    case ('mit'); name = 'MIT'; url = 'https://opensource.org/licenses/MIT'
+    case default
+        call html_escape(license, b, .false.)
+        return
+    end select
+    call add(b, '<a rel="license" href="'//url//'">'//name//'</a>')
+end subroutine license_text
+
+!> Write the whole site.
+subroutine write_site(p, s, front, stat, errmsg)
+    type(project_t), intent(inout), target :: p         !! the project
+    type(settings_t), intent(in), target :: s           !! the settings
+    character(len=*), intent(in) :: front               !! the project file's text as HTML
+    integer, intent(out) :: stat                        !! nonzero on failure
+    character(len=:), allocatable, intent(out) :: errmsg !! what is wrong
+    type(site_t) :: site
+    type(string_t), allocatable :: pages(:), paths(:)
+    integer, allocatable :: ids(:)
+    character(len=:), allocatable :: url, directory
+    type(buffer_t) :: b
+    integer :: k, n
+
+    site%p => p
+    site%s => s
+    call collect_lists(site)
+    call make_footer(s, site%footer)
+
+    allocate (ids(0))
+    do k = 1, p%list%n
+        if (has_page(site, k)) call push_int(ids, k)
+    end do
+    n = size(ids)
+    allocate (pages(n + NUM_LISTS + 1), paths(n + NUM_LISTS + 1))
+
+    !$omp parallel do schedule(dynamic) num_threads(max(1, s%parallel)) default(shared)
+    do k = 1, n
+        call entity_page(site, ids(k), pages(k)%s)
+    end do
+    !$omp end parallel do
+    do k = 1, n
+        call entity_url(p%list, ids(k), paths(k)%s)
+    end do
+    do k = 1, NUM_LISTS
+        paths(n + k)%s = 'lists/'//trim(LIST_FILE(k))//'.html'
+        if (size(site%members(k)%ids) > 0) call list_page(site, k, pages(n + k)%s)
+    end do
+    paths(n + NUM_LISTS + 1)%s = 'index.html'
+    call index_page(site, front, pages(n + NUM_LISTS + 1)%s)
+
+    directory = s%output_dir
+    call execute_command_line("mkdir -p '"//directory//"' && cd '"//directory// &
+                              "' && mkdir -p css js lists module proc type interface program blockdata namelist sourcefile", &
+                              exitstat=stat)
+    if (stat /= 0) then
+        errmsg = 'could not create '//directory
+        return
+    end if
+    do k = 1, size(pages)
+        if (.not. allocated(pages(k)%s)) cycle
+        call write_file(directory//'/'//paths(k)%s, pages(k)%s, stat, errmsg)
+        if (stat /= 0) return
+    end do
+    call asset_fdoc_css(b)
+    call take(b, url)
+    call write_file(directory//'/css/fdoc.css', url, stat, errmsg)
+    if (stat /= 0) return
+    call asset_fdoc_js(b)
+    call take(b, url)
+    call write_file(directory//'/js/fdoc.js', url, stat, errmsg)
+    if (stat /= 0) return
+    if (allocated(s%css)) call execute_command_line("cp '"//s%css//"' '"//directory//"/css/user.css'")
+    if (allocated(s%favicon)) call execute_command_line("cp '"//s%favicon//"' '"//directory//"/favicon.png'")
+    if (allocated(s%media_dir)) then
+        call execute_command_line("[ -d '"//s%media_dir//"' ] && rm -rf '"//directory//"/media' && cp -R '"//s%media_dir// &
+                                  "' '"//directory//"/media'", exitstat=k)
+    end if
+end subroutine write_site
+
+end module fdoc_site

@@ -211,6 +211,9 @@ nesting, for example).
 - MathJax loads only on pages that contain math.
 - `css:` and `favicon:` overrides work as in FORD.
 - Check: Lighthouse-style accessibility pass, keyboard navigation.
+- **Reached so far:** `fdoc ford.md` writes the site. Page sets match FORD's on the projects compared
+  (apart from `search.html`, M6), and `pixi run check-links` checks every internal link. Code in
+  languages other than Fortran is not highlighted yet.
 
 ### M6. Pages, search, externals
 

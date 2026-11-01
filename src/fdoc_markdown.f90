@@ -12,11 +12,13 @@ module fdoc_markdown
 use iso_fortran_env, only: error_unit
 use ffmt_io, only: read_file
 use fdoc_util
+use fdoc_buffer
+use fdoc_highlight, only: highlight_fortran
 use fdoc_settings, only: map_entry_t
 implicit none
 private
 
-public :: markdown_to_html, markdown_options_t, html_escape, dedent
+public :: markdown_to_html, markdown_options_t, dedent
 
 character, parameter :: NL = achar(10)
 character, parameter :: STX = achar(2)      !! starts a placeholder for stashed HTML
@@ -53,13 +55,8 @@ type :: markdown_options_t
     logical :: smarty = .false.                     !! the `smarty` extension: typographic punctuation
     procedure(link_resolver), pointer, nopass :: resolver => null() !! finds `[[...]]` links
     class(*), pointer :: resolver_data => null()    !! passed to `resolver`
+    type(map_entry_t), allocatable :: abbreviations(:)  !! abbreviations that apply everywhere
 end type markdown_options_t
-
-type :: buffer_t
-    !! Text being built.
-    character(len=:), allocatable :: s      !! storage; only `s(1:n)` is in use
-    integer :: n = 0                        !! length of the text
-end type buffer_t
 
 type :: node_t
     !! An element of the tree.
@@ -106,62 +103,6 @@ end type tree_t
 
 contains
 
-!> Append `text` to `b`.
-pure subroutine add(b, text)
-    type(buffer_t), intent(inout) :: b      !! the buffer
-    character(len=*), intent(in) :: text    !! the text
-    character(len=:), allocatable :: grown
-    integer :: capacity
-
-    if (.not. allocated(b%s)) allocate (character(len=max(256, 2*len(text))) :: b%s)
-    capacity = len(b%s)
-    if (b%n + len(text) > capacity) then
-        allocate (character(len=max(2*capacity, b%n + len(text))) :: grown)
-        grown(1:b%n) = b%s(1:b%n)
-        call move_alloc(grown, b%s)
-    end if
-    b%s(b%n + 1:b%n + len(text)) = text
-    b%n = b%n + len(text)
-end subroutine add
-
-!> Move the text of `b` to `text`.
-pure subroutine take(b, text)
-    type(buffer_t), intent(inout) :: b                  !! the buffer
-    character(len=:), allocatable, intent(out) :: text  !! its text
-
-    if (allocated(b%s)) then
-        text = b%s(1:b%n)
-    else
-        text = ''
-    end if
-    b%n = 0
-end subroutine take
-
-!> Escape `text` for HTML. Attribute values also need quotes escaped: see `quotes`.
-pure subroutine html_escape(text, b, quotes)
-    character(len=*), intent(in) :: text    !! the text
-    type(buffer_t), intent(inout) :: b      !! the buffer
-    logical, intent(in) :: quotes           !! true to escape `"` as well
-    integer :: k, start
-
-    start = 1
-    do k = 1, len(text)
-        select case (text(k:k))
-        case ('&', '<', '>', '"')
-            if (text(k:k) == '"' .and. .not. quotes) cycle
-            if (k > start) call add(b, text(start:k - 1))
-            start = k + 1
-            select case (text(k:k))
-            case ('&'); call add(b, '&amp;')
-            case ('<'); call add(b, '&lt;')
-            case ('>'); call add(b, '&gt;')
-            case default; call add(b, '&quot;')
-            end select
-        end select
-    end do
-    if (start <= len(text)) call add(b, text(start:))
-end subroutine html_escape
-
 !> Remove the leading whitespace that all non-blank lines of `lines` share.
 subroutine dedent(lines)
     type(string_t), intent(inout) :: lines(:)   !! the lines
@@ -192,7 +133,12 @@ recursive subroutine markdown_to_html(source, options, html)
     character(len=:), allocatable :: text
     type(buffer_t) :: out
 
-    allocate (t%nodes(32), t%stash(0), t%refs(0), t%notes(0), t%abbreviations(0), t%headings(0), t%ids(0))
+    allocate (t%nodes(32), t%stash(0), t%refs(0), t%notes(0), t%headings(0), t%ids(0))
+    if (allocated(options%abbreviations)) then
+        t%abbreviations = options%abbreviations
+    else
+        allocate (t%abbreviations(0))
+    end if
     t%state = ''
     t%n = 1
     t%nodes(1)%tag = 'div'
@@ -567,7 +513,12 @@ subroutine code_block_html(code, lang, html)
         call add(b, '"')
     end if
     call add(b, '>')
-    call html_escape(code, b, .false.)
+    select case (lowercase(lang))
+    case ('fortran', 'f90', 'f', 'fortranfixed')
+        call highlight_fortran(code, b, .false.)
+    case default
+        call html_escape(code, b, .false.)
+    end select
     call add(b, '</code></pre></div>')
     call take(b, html)
 end subroutine code_block_html

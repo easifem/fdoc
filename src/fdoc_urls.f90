@@ -8,7 +8,7 @@ use fdoc_model
 implicit none
 private
 
-public :: page_name, object_word, entity_url, link_context_t, resolve_link
+public :: page_name, object_word, entity_url, link_context_t, resolve_link, url_quote
 
 type :: link_context_t
     !! Where a `[[name]]` link is being read.
@@ -114,7 +114,11 @@ recursive subroutine entity_url(list, id, url)
         call page_name(e%name, name)
         if (has_page) then
             if (e%kind == E_SUBMODULE) word = 'module'
-            url = word//'/'//name//'.html'
+            if (allocated(e%page)) then
+                url = word//'/'//e%page//'.html'
+            else
+                url = word//'/'//name//'.html'
+            end if
             return
         end if
         url = ''
@@ -257,6 +261,7 @@ subroutine resolve_link(data, name, entity, child, child_entity, url, text, foun
     logical, intent(out) :: found                       !! false if there is no such entity
     character(len=len(name)) :: low
     character(len=len(entity)) :: class
+    character(len=:), allocatable :: label
     integer :: item, inner, parent
 
     found = .false.
@@ -274,16 +279,24 @@ subroutine resolve_link(data, name, entity, child, child_entity, url, text, foun
         end if
         if (item == 0) item = find_anywhere(data%list, low, class)
         if (item == 0) return
+        label = data%list%box(item)%e%name
         if (len(child) > 0) then
             inner = find_child(data%list, item, lowercase(child), lowercase(child_entity))
             if (inner > 0) then
                 item = inner
+                label = data%list%box(item)%e%name
             end if
         end if
         call entity_url(data%list, item, url)
+        ! something not shown has no anchor to go to: link to the page around it
+        do while (len(url) == 0 .and. data%list%box(item)%e%parent > 0)
+            item = data%list%box(item)%e%parent
+            call entity_url(data%list, item, url)
+        end do
         if (len(url) == 0) return
+        if (.not. data%list%box(item)%e%visible .and. index(url, '#') > 0) url = url(:index(url, '#') - 1)
         if (.not. allocated(data%list%box(item)%e%external_url)) url = data%prefix//url
-        text = data%list%box(item)%e%name
+        text = label
         found = .true.
     end select
 end subroutine resolve_link

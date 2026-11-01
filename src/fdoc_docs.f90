@@ -9,18 +9,19 @@ use fdoc_urls, only: link_context_t, resolve_link
 implicit none
 private
 
-public :: base_options, render_documentation, render_text
+public :: base_options, render_documentation, render_text, collect_abbreviations
 
 contains
 
 !> The Markdown options of a project.
-subroutine base_options(s, options)
+subroutine base_options(s, root, options)
     type(settings_t), intent(in) :: s                   !! the settings
+    character(len=*), intent(in) :: root                !! from the pages to the root of the site
     type(markdown_options_t), intent(out) :: options    !! the options
     integer :: k
     character(len=:), allocatable :: url
 
-    url = s%project_url
+    url = root
     options%aliases = [s%alias, s%external, map_entry_t('url', url), map_entry_t('media', url//'/media'), &
                        map_entry_t('page', url//'/page')]
     options%base_path = s%md_base_dir
@@ -34,6 +35,28 @@ subroutine base_options(s, options)
         end select
     end do
 end subroutine base_options
+
+!> Make the abbreviations defined in any documentation apply everywhere, as they do in FORD.
+subroutine collect_abbreviations(p, options)
+    type(project_t), intent(in) :: p                    !! the project
+    type(markdown_options_t), intent(inout) :: options  !! the options
+    type(map_entry_t), allocatable :: found(:)
+    integer :: k, j, at
+
+    allocate (found(0))
+    do k = 1, p%list%n
+        if (.not. allocated(p%list%box(k)%e%doc)) cycle
+        associate (doc => p%list%box(k)%e%doc)
+            do j = 1, size(doc)
+                if (.not. starts_with(strip(doc(j)%s), '*[')) cycle
+                at = index(doc(j)%s, ']:')
+                if (at == 0) cycle
+                found = [found, map_entry_t(doc(j)%s(index(doc(j)%s, '*[') + 2:at - 1), strip(doc(j)%s(at + 2:)))]
+            end do
+        end associate
+    end do
+    if (size(found) > 0) options%abbreviations = found
+end subroutine collect_abbreviations
 
 !> Render `text`, as if it belonged to entity `context`, for a page `prefix` away from the root.
 subroutine render_text(p, base, context, prefix, text, html)

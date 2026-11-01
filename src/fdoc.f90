@@ -11,7 +11,8 @@ use fdoc_project, only: project_t, load_project_sources, correlate, prune
 use fdoc_output, only: write_modules
 use fdoc_links, only: link_project, dump_links
 use fdoc_markdown, only: markdown_to_html, markdown_options_t
-use fdoc_docs, only: base_options, render_documentation
+use fdoc_docs, only: base_options, render_documentation, render_text, collect_abbreviations
+use fdoc_site, only: assign_pages, write_site
 use json_module, only: json_core, json_value
 implicit none
 private
@@ -24,10 +25,10 @@ contains
 integer function run(args) result(status)
     type(string_t), intent(in) :: args(:)   !! the arguments, in order
     type(args_t) :: parsed
-    type(settings_t) :: s
+    type(settings_t), target :: s
     type(project_t), target :: p
-    type(markdown_options_t) :: options
-    character(len=:), allocatable :: errmsg, body, directory
+    type(markdown_options_t) :: options, front_options
+    character(len=:), allocatable :: errmsg, body, directory, front
     integer :: stat
 
     status = 0
@@ -82,15 +83,21 @@ integer function run(args) result(status)
         call write_text(dump_links(p))
         return
     end if
-    call base_options(s, options)
+    call assign_pages(p)
+    call base_options(s, '..', options)
+    call collect_abbreviations(p, options)
     call render_documentation(p, s, options)
-    if (s%externalize) call write_modules(p, s, stat, errmsg)
+    call base_options(s, '.', front_options)
+    if (allocated(options%abbreviations)) front_options%abbreviations = options%abbreviations
+    call render_text(p, front_options, 0, '', body, front)
+    call write_site(p, s, front, stat, errmsg)
+    if (stat == 0 .and. s%externalize) call write_modules(p, s, stat, errmsg)
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg
         status = 1
         return
     end if
-    write (error_unit, '(a)') 'fdoc: only modules.json is generated so far; the HTML site is not implemented yet'
+    if (.not. s%quiet) write (output_unit, '(a)') 'Documentation written to '//s%output_dir
 end function run
 
 !> Convert the Markdown texts in JSON array file `path`, and print the results as a JSON array.
