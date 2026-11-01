@@ -26,7 +26,7 @@ subroutine collect_settings(testsuite)
                 new_unittest("paths", test_paths), &
                 new_unittest("project graph limit", test_project_nodes), &
                 new_unittest("threads default to every core", test_threads), &
-                new_unittest("Fypp is not run", test_fypp), &
+                new_unittest("Fypp files are recognized", test_fypp), &
                 new_unittest("line splitting", test_lines) &
                 ]
 end subroutine collect_settings

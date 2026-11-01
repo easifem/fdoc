@@ -105,7 +105,7 @@ end function add
 * **`html_template_dir` has no effect**, because there are no templates. The HTML is different too, so CSS written for FORD's pages needs rewriting. `css:` still adds your own style sheet.
 * **Of the Python-Markdown extensions in `md_extensions`,** only `toc` and `smarty` are available. Others are skipped with a warning.
 * **fdoc doesn't run Python programs.** `pcpp` is replaced by `gfortran -E -cpp` when it's the preprocessor.
-* **Fypp is not supported yet.** Files that would go through a `preprocessor` of `fypp` are skipped with a warning, so projects built on it, such as stdlib, are only partly documented. Other `preprocessor` commands run as given.
+* **Fypp is built in, in part.** A `preprocessor` of `fypp` uses a port in Fortran of what the Fortran standard library needs, so Python isn't involved. A file using anything else, such as `#:del`, `@:` or Python beyond what stdlib uses, is read without preprocessing, with a warning naming what's missing. Other `preprocessor` commands run as given.
 * **Search covers names and summaries,** not the full text of the documentation.
 * **Whole-project graphs of more than 400 nodes are left out,** with a warning, as they are slow to lay out and hard to read. The setting `graph_project_maxnodes` changes the limit.
 * **Text after a `<`, as in `x<y`, is kept.** FORD's Markdown drops it.
@@ -204,4 +204,4 @@ Generated sites load [MathJax](https://www.mathjax.org) from a CDN, only on page
 
 ## License
 
-fdoc is released under the [MIT License](https://github.com/jacobwilliams/fdoc/blob/master/LICENSE). It is an independent program, not derived from FORD's code, and owes its project file format and doc comment conventions to FORD.
+fdoc is released under the [MIT License](https://github.com/jacobwilliams/fdoc/blob/master/LICENSE). It is an independent program, not derived from FORD's code, and owes its project file format and doc comment conventions to FORD. [src/fdoc_fypp.f90](https://github.com/jacobwilliams/fdoc/blob/master/src/fdoc_fypp.f90) is a partial port of [Fypp](https://github.com/aradi/fypp) by Bálint Aradi, and keeps its BSD 2-clause license notice.

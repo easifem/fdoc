@@ -5,6 +5,7 @@ use ffmt_fs, only: is_directory, parent_directory, join_path
 use ffmt_io, only: read_file
 use ffmt_walk, only: collect_files
 use fregex, only: regex_t, regex, re_escape
+use fdoc_fypp, only: fypp_process
 use fdoc_util
 use fdoc_settings, only: settings_t
 use fdoc_progress, only: warn
@@ -39,7 +40,7 @@ logical function is_fixed_form(s, path)
     is_fixed_form = contains_string(s%fixed_extensions, extension_of(path))
 end function is_fixed_form
 
-!> True if `path` would go through Fypp, which is Python, and so is not run.
+!> True if `path` goes through Fypp, which is Python, so that [[fdoc_fypp]] takes its place.
 logical function needs_fypp(s, path)
     type(settings_t), intent(in) :: s       !! the settings
     character(len=*), intent(in) :: path    !! the file
@@ -47,8 +48,8 @@ logical function needs_fypp(s, path)
                  contains_string(s%fpp_extensions, extension_of(path))
 end function needs_fypp
 
-!> The source files of the project, sorted, without those excluded. Fixed-form and Fypp files are left
-!> out with a warning, as they are not supported yet.
+!> The source files of the project, sorted, without those excluded. Fixed-form files are left out
+!> with a warning, as they are not supported yet.
 subroutine find_sources(s, files)
     type(settings_t), intent(in) :: s                       !! the settings
     type(string_t), allocatable, intent(out) :: files(:)    !! paths of the files
@@ -74,10 +75,6 @@ subroutine find_sources(s, files)
                 .not. contains_string(s%extensions, extension_of(found(k)%s))) then
                 skipped = skipped + 1
                 call warn('skipping fixed-form file (not supported yet): '//found(k)%s)
-                keep = .false.
-            end if
-            if (keep .and. needs_fypp(s, found(k)%s)) then
-                call warn('skipping Fypp file (not supported yet): '//found(k)%s)
                 keep = .false.
             end if
             if (keep) call push(files, found(k)%s)
@@ -123,9 +120,29 @@ subroutine load_source(s, path, raw, text, stat, errmsg)
     call read_file(path, raw, stat, errmsg)
     if (stat /= 0) return
     text = raw
-    if (s%preprocess .and. contains_string(s%fpp_extensions, extension_of(path))) call preprocess(s, path, text)
+    if (needs_fypp(s, path)) then
+        call fypp_source(s, path, text)
+    else if (s%preprocess .and. contains_string(s%fpp_extensions, extension_of(path))) then
+        call preprocess(s, path, text)
+    end if
     call expand_includes(s%include, parent_directory(path), text, 1)
 end subroutine load_source
+
+!> Replace `text` by the output of Fypp for `path`, or keep it if that fails.
+subroutine fypp_source(s, path, text)
+    type(settings_t), intent(in) :: s                       !! the settings
+    character(len=*), intent(in) :: path                    !! the file
+    character(len=:), allocatable, intent(inout) :: text    !! the text
+    character(len=:), allocatable :: result, errmsg
+    integer :: stat
+
+    call fypp_process(path, s%macro, s%include, result, stat, errmsg)
+    if (stat == 0) then
+        call move_alloc(result, text)
+    else
+        call warn('preprocessing failed, reverting to the file itself: '//path//': '//errmsg)
+    end if
+end subroutine fypp_source
 
 !> The preprocessor command for `path`. FORD's default of `pcpp` is Python, so it is replaced.
 function preprocessor_command(s, path) result(command)
