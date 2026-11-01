@@ -4,7 +4,7 @@ use iso_c_binding, only: c_int
 use ffmt_fs, only: is_directory, parent_directory, join_path
 use ffmt_io, only: read_file
 use ffmt_walk, only: collect_files
-use fregex, only: regex_t, regex, re_escape, match_t
+use fregex, only: regex_t, regex, re_escape
 use fdoc_util
 use fdoc_settings, only: settings_t
 use fdoc_progress, only: warn
