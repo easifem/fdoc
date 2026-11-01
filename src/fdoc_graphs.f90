@@ -526,9 +526,9 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     n = count_files
     if (n == 0) return
     call unique_tag(tag)
+    ! a directory of this run's own, as the names of the files inside are the same in every run
     directory = s%output_dir//'/.graphs-'//trim(tag)
-    if (allocated(s%graph_dir)) directory = s%graph_dir
-    call remove_directory(directory)
+    if (allocated(s%graph_dir)) directory = s%graph_dir//'/'//trim(tag)
     call make_directory(directory, status)
     do k = 1, n
         call write_file(trim(file_name(directory, k, '')), files(k)%text, stat, errmsg)

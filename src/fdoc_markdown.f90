@@ -411,7 +411,7 @@ subroutine unstash(t, html)
                 i = i + 1
                 cycle
             end if
-            read (html(i + 1:i + j - 2), *, iostat=ios) number
+            call read_digits(html(i + 1:i + j - 2), number, ios)
             if (ios == 0 .and. number >= 1 .and. number <= size(t%stash)) then
                 call add(b, t%stash(number)%s)
                 changed = .true.
@@ -1835,6 +1835,24 @@ subroutine unique_id(t, html, id)
     end do
     call push(t%ids, id)
 end subroutine unique_id
+
+!> The value of `text`, which should be digits. This is not an internal `read`, as it runs in parallel.
+pure subroutine read_digits(text, value, stat)
+    character(len=*), intent(in) :: text    !! the text
+    integer, intent(out) :: value           !! its value
+    integer, intent(out) :: stat            !! nonzero if it is not a number
+    integer :: k
+
+    value = 0
+    stat = merge(1, 0, len(text) == 0)
+    do k = 1, len(text)
+        if (text(k:k) < '0' .or. text(k:k) > '9') then
+            stat = 1
+            return
+        end if
+        value = 10*value + iachar(text(k:k)) - iachar('0')
+    end do
+end subroutine read_digits
 
 !> `c` in lowercase.
 elemental function lower_one(c) result(l)

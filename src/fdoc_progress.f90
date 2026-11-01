@@ -83,9 +83,9 @@ subroutine progress_tick(steps)
     call system_clock(now)
     if ((now - last_draw)*1000 < REDRAW_MILLISECONDS*rate) return
     last_draw = now
-    !$omp critical (fdoc_terminal)
+    !$omp critical (file_io)
     call draw()
-    !$omp end critical (fdoc_terminal)
+    !$omp end critical (file_io)
 end subroutine progress_tick
 
 !> Finish the stage, leaving its line.
@@ -133,13 +133,13 @@ end subroutine progress_summary
 subroutine warn(message)
     character(len=*), intent(in) :: message !! the warning
 
-    !$omp critical (fdoc_terminal)
+    !$omp critical (file_io)
     if (drawn) write (output_unit, '(a)', advance='no') achar(13)//ESC//'[2K'
     if (drawn) flush (output_unit)
     write (error_unit, '(a)') 'Warning: '//message
     flush (error_unit)
     if (drawn) call draw()
-    !$omp end critical (fdoc_terminal)
+    !$omp end critical (file_io)
 end subroutine warn
 
 !> `ticks` of the clock as text.

@@ -13,6 +13,12 @@ check-standard` checks with `-std=f2018`. C library routines are used only for w
 equivalent: sleeping (`usleep`), detecting a terminal (`isatty`), and in fformat listing directories
 (`opendir`, `readdir`, `closedir`) and the current directory (`getcwd`).
 
+**Requirement: no races, and no shared file names.** Threads and processes running at once must not
+write the same file: temporary files have a name unique to the run, and each page has its own name.
+All Fortran I/O that can run on threads, including writing to the terminal, is in the one critical
+section `file_io`, which keeps libgfortran 16 from crashing. Two runs with the same `output_dir` are the
+exception, as they write the same site.
+
 **Requirement: test in the pixi env.** The pixi env is what users run, so results count only from
 that configuration, with the exact compiler and runtime in `pixi.lock`.
 

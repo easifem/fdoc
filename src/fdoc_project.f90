@@ -214,6 +214,7 @@ subroutine load_external_project(p, s, url)
     type(json_core) :: json
     type(json_value), pointer :: root, modules, item
     character(len=:), allocatable :: path, base, fetched
+    character(len=32) :: tag
     logical :: found, remote
     integer :: k, n, id, status
 
@@ -221,7 +222,8 @@ subroutine load_external_project(p, s, url)
     if (remote) then
         base = url
         if (.not. ends_with(base, '/')) base = base//'/'
-        fetched = s%output_dir//'/.external-modules.json'
+        call unique_tag(tag)
+        fetched = s%output_dir//'/.external-modules-'//trim(tag)//'.json'
         call make_directory(s%output_dir, status)
         call run_command('curl -fsSL -o '//quoted_path(fetched)//' '//quoted(base//'modules.json'), status)
         path = fetched
@@ -236,6 +238,10 @@ subroutine load_external_project(p, s, url)
 
     call json%initialize()
     call json%load(path, root)
+    if (remote) then
+        open (newunit=k, file=fetched, status='old', iostat=status)
+        if (status == 0) close (k, status='delete')
+    end if
     if (json%failed()) then
         call json%clear_exceptions()
         call warn("Could not open external URL '"//url//"'")

@@ -3,6 +3,7 @@ module test_fypp
 use omp_lib, only: omp_get_thread_num
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use ffmt_io, only: write_file
+use fdoc_buffer, only: int_text
 use fdoc_fypp, only: fypp_process
 use fdoc_shell, only: make_directory
 use fdoc_util, only: string_t
@@ -39,17 +40,17 @@ subroutine run(source, output, stat, errmsg)
     integer, intent(out) :: stat                            !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg    !! what is wrong
     type(string_t) :: defines(1), includes(0)
-    character(len=2) :: thread
+    character(len=12) :: thread
 
     ! tests run in parallel, so each thread has its own file
-    write (thread, '(i2.2)') omp_get_thread_num()
+    thread = int_text(omp_get_thread_num())
     defines(1)%s = 'MAXRANK=3'
     call make_directory(DIRECTORY, stat)
     !$omp critical (file_io)
-    call write_file(DIRECTORY//'/a'//thread//'.fypp', source, stat, errmsg)
+    call write_file(DIRECTORY//'/a'//trim(thread)//'.fypp', source, stat, errmsg)
     !$omp end critical (file_io)
     if (stat /= 0) return
-    call fypp_process(DIRECTORY//'/a'//thread//'.fypp', defines, includes, output, stat, errmsg)
+    call fypp_process(DIRECTORY//'/a'//trim(thread)//'.fypp', defines, includes, output, stat, errmsg)
 end subroutine run
 
 !> Check that `source` gives `expected`.
