@@ -117,12 +117,12 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.05 s | 0.61 s | 44× | 3.10 s | 0.10 s | 31× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.75 s | 0.46 s | 49× | 6.51 s | 0.16 s | 41× |
-| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.26 s | 0.67 s | 92× | 8.23 s | 0.45 s | 18× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.49 s | 3.22 s | 20× | 6.79 s | 0.22 s | 31× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.33 s | 0.88 s | 69× | 8.97 s | 0.30 s | 30× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 3.14 s | 100× | 25.27 s | 0.75 s | 34× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.6 s | 44× | 3.1 s | 0.1 s | 31× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.5 s | 49× | 6.5 s | 0.2 s | 41× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.7 s | 92× | 8.2 s | 0.5 s | 18× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 3.2 s | 20× | 6.8 s | 0.2 s | 31× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.9 s | 69× | 9.0 s | 0.3 s | 30× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 3.1 s | 100× | 25.3 s | 0.8 s | 34× |
 
 Peak memory and the size of the site, with graphs:
 
