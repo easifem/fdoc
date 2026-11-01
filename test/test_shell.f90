@@ -45,7 +45,9 @@ subroutine test_directories(error)
     call make_directory(MADE//'/a/b', stat)
     call check(error, stat, 0, 'making it again is fine')
     if (allocated(error)) return
+    !$omp critical (file_io)
     call write_file(MADE//'/a/b/f.txt', 'x', stat, msg)
+    !$omp end critical (file_io)
     call check(error, stat, 0)
     if (allocated(error)) return
     call remove_directory(MADE)
@@ -62,19 +64,25 @@ subroutine test_copies(error)
     call make_directory(COPIED//'/from/sub', stat)
     call check(error, stat, 0)
     if (allocated(error)) return
+    !$omp critical (file_io)
     call write_file(COPIED//'/from/sub/f.txt', 'hello', stat, msg)
+    !$omp end critical (file_io)
     call check(error, stat, 0)
     if (allocated(error)) return
     call copy_file(COPIED//'/from/sub/f.txt', COPIED//'/g.txt', stat)
     call check(error, stat, 0)
     if (allocated(error)) return
+    !$omp critical (file_io)
     call read_file(COPIED//'/g.txt', text, stat, msg)
+    !$omp end critical (file_io)
     call check(error, stat == 0 .and. text == 'hello', 'a file')
     if (allocated(error)) return
     call copy_path(COPIED//'/from', COPIED//'/to', stat)
     call check(error, stat, 0)
     if (allocated(error)) return
+    !$omp critical (file_io)
     call read_file(COPIED//'/to/sub/f.txt', text, stat, msg)
+    !$omp end critical (file_io)
     call check(error, stat == 0 .and. text == 'hello', 'a directory')
     if (allocated(error)) return
     call copy_path(COPIED//'/g.txt', COPIED//'/h.txt', stat)

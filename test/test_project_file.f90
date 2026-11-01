@@ -116,7 +116,9 @@ subroutine test_fpm_no_table(error)
     integer :: stat
 
     call make_directory(DIRECTORY, stat)
+    !$omp critical (file_io)
     call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL, stat, msg)
+    !$omp end critical (file_io)
     call check(error, stat, 0)
     if (allocated(error)) return
     call load_project(DIRECTORY//'/fpm.toml', DIRECTORY, s, body, stat, msg)
@@ -132,8 +134,10 @@ subroutine test_fpm_table(error)
     integer :: stat
 
     call make_directory(DIRECTORY, stat)
+    !$omp critical (file_io)
     call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL//'[extra.fdoc]'//NL//'project = "Mine"'//NL// &
                     'front_page = "Hello"'//NL//'[extra.ford]'//NL//'project = "Not this"'//NL, stat, msg)
+    !$omp end critical (file_io)
     call check(error, stat, 0)
     if (allocated(error)) return
     call load_project('', DIRECTORY, s, body, stat, msg)
@@ -144,8 +148,12 @@ subroutine test_fpm_table(error)
     call check(error, body, 'Hello')
     if (allocated(error)) return
 
+    !$omp critical (file_io)
     call write_file(DIRECTORY//'/front.md', 'From a file', stat, msg)
+    !$omp end critical (file_io)
+    !$omp critical (file_io)
     call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL//'[extra.fdoc]'//NL//'front_page_file = "front.md"'//NL, stat, msg)
+    !$omp end critical (file_io)
     call load_project('', DIRECTORY, s, body, stat, msg)
     call check(error, stat, 0)
     if (allocated(error)) return

@@ -60,7 +60,8 @@ function quoted_path(path) result(out)
     out = quoted(native)
 end function quoted_path
 
-!> Create directory `path` with those above it, if it does not exist.
+!> Create directory `path` with those above it, if it does not exist. It is not a failure if something
+!> else creates it first.
 subroutine make_directory(path, stat)
     character(len=*), intent(in) :: path    !! the directory
     integer, intent(out) :: stat            !! nonzero on failure
@@ -70,6 +71,7 @@ subroutine make_directory(path, stat)
     else
         call run_command('mkdir -p '//quoted_path(path), stat)
     end if
+    if (is_directory(path)) stat = 0
 end subroutine make_directory
 
 !> Delete directory `path` with what it holds, if it exists.
