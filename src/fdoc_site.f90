@@ -1,6 +1,7 @@
 module fdoc_site
 !! Writing the HTML site. Pages are rendered and written in parallel, so nothing that renders a page
 !! calls a function returning a deferred-length string (see `example/slen_race.f90`).
+use iso_fortran_env, only: int64
 use fdoc_util
 use fdoc_buffer
 use fdoc_model
@@ -12,6 +13,7 @@ use json_module, only: json_core, json_value
 use fdoc_urls, only: entity_url, entity_anchor, object_word, page_name, url_quote, is_shown
 use fdoc_highlight, only: highlight_fortran
 use fdoc_generics, only: write_call_forms
+use fdoc_stats, only: file_stats_t, count_source, add_stats
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
 use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
 use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path
@@ -51,6 +53,7 @@ type :: site_t
     type(page_t), pointer :: pages(:) => null() !! the static pages
     type(graph_set_t) :: graphs                 !! the graphs
     type(index_list_t), allocatable :: graphs_of(:) !! the graphs of each entity
+    type(file_stats_t), allocatable :: file_stats(:)    !! the size of each entity of the list of files
 end type site_t
 
 !> The directories of a site.
@@ -724,6 +727,126 @@ subroutine logo_name(s, name)
     name = 'logo'//s%logo(at:)
     if (index(name, '.') == 0) name = 'logo'
 end subroutine logo_name
+
+!> Measure the source files of the list of files.
+subroutine measure_files(site)
+    type(site_t), intent(inout) :: site     !! the site
+    integer :: k, n, file
+
+    n = size(site%members(LIST_FILES)%ids)
+    allocate (site%file_stats(n))
+    !$omp parallel do schedule(dynamic) num_threads(max(1, site%s%parallel)) default(shared) private(k)
+    do k = 1, n
+        associate (e => site%p%list%box(site%members(LIST_FILES)%ids(k))%e)
+            if (allocated(e%source_text)) call count_source(e%source_text, site%file_stats(k))
+        end associate
+    end do
+    !$omp end parallel do
+    if (n == 0) return
+    do k = 1, site%p%list%n
+        associate (e => site%p%list%box(k)%e)
+            if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION .and. e%kind /= E_MODPROC) cycle
+            if (e%iface /= IFACE_NONE .or. e%parent == 0) cycle
+            if (site%p%list%box(e%parent)%e%kind == E_INTERFACE) cycle
+            file = findloc(site%members(LIST_FILES)%ids, e%file, 1)
+            if (file > 0) site%file_stats(file)%procedures = site%file_stats(file)%procedures + 1
+        end associate
+    end do
+end subroutine measure_files
+
+!> Write `stats` as cells of a table. Each has the plain number, to sort by.
+subroutine stats_cells(stats, b)
+    type(file_stats_t), intent(in) :: stats !! the counts
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    call number_cell(int(stats%lines, int64), b)
+    call number_cell(int(stats%code, int64), b)
+    call number_cell(int(stats%comments, int64), b)
+    call number_cell(int(stats%blank, int64), b)
+    call add(b, '<td class="num" data-sort="')
+    call add_int(b, stats%bytes)
+    call add(b, '">')
+    call size_text(stats%bytes, b)
+    call add(b, '</td>')
+    call number_cell(int(stats%procedures, int64), b)
+end subroutine stats_cells
+
+!> Write the row of totals of the list of files.
+subroutine stats_total(site, described, b)
+    type(site_t), intent(in) :: site        !! the site
+    logical, intent(in) :: described        !! true if the table has descriptions
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    type(file_stats_t) :: total
+    integer :: k
+
+    do k = 1, size(site%file_stats)
+        call add_stats(total, site%file_stats(k))
+    end do
+    call add(b, '<tfoot><tr><td>Total</td>')
+    call stats_cells(total, b)
+    if (described) call add(b, '<td></td>')
+    call add(b, '</tr></tfoot>'//achar(10))
+end subroutine stats_total
+
+!> Write `value` as a cell of a table.
+subroutine number_cell(value, b)
+    integer(int64), intent(in) :: value     !! the number
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    call add(b, '<td class="num" data-sort="')
+    call add_int(b, value)
+    call add(b, '">')
+    call grouped(value, b)
+    call add(b, '</td>')
+end subroutine number_cell
+
+!> Write `value`, not negative, which may be too large for [[int_text]].
+recursive subroutine add_int(b, value)
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer(int64), intent(in) :: value     !! the number
+
+    if (value >= 10) call add_int(b, value/10)
+    call add(b, achar(iachar('0') + int(mod(value, 10_int64))))
+end subroutine add_int
+
+!> Write `value`, not negative, with a comma between each group of three digits.
+recursive subroutine grouped(value, b)
+    integer(int64), intent(in) :: value     !! the number
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer(int64), parameter :: GROUP = 1000
+    integer :: rest
+
+    if (value < GROUP) then
+        call add_int(b, value)
+        return
+    end if
+    call grouped(value/GROUP, b)
+    rest = int(mod(value, GROUP))
+    call add(b, ',')
+    if (rest < 100) call add(b, '0')
+    if (rest < 10) call add(b, '0')
+    call add_int(b, int(rest, int64))
+end subroutine grouped
+
+!> Write a size in bytes, with one decimal once it is in kilobytes or megabytes.
+subroutine size_text(bytes, b)
+    integer(int64), intent(in) :: bytes     !! the size
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer(int64), parameter :: KILO = 1000
+    integer(int64) :: unit, tenths
+
+    if (bytes < KILO) then
+        call add_int(b, bytes)
+        call add(b, ' B')
+        return
+    end if
+    unit = merge(KILO, KILO*KILO, bytes < KILO*KILO)
+    tenths = (10*bytes + unit/2)/unit
+    call grouped(tenths/10, b)
+    call add(b, '.')
+    call add_int(b, mod(tenths, 10_int64))
+    call add(b, merge(' kB', ' MB', bytes < KILO*KILO))
+end subroutine size_text
 
 !> Write what contains entity `id`, from its source file down, each with a link to its page.
 subroutine breadcrumbs(site, id, b)
@@ -1815,6 +1938,7 @@ subroutine list_page(site, which, html)
     character(len=:), allocatable, intent(out) :: html  !! the page
     type(buffer_t) :: b
     character(len=:), allocatable :: url
+    logical :: described
     integer :: k
 
     call page_head(site, trim(LIST_TITLE(which)), which, '../', .false., b)
@@ -1822,8 +1946,15 @@ subroutine list_page(site, which, html)
     call site_side(site, which, '../', .true., b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
     call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
-    call add(b, '<table class="listing">'//achar(10)//'<thead><tr><th>'//trim(LIST_NOUN(which))//'</th>')
+    if (which == LIST_FILES) then
+        call add(b, '<table class="listing sortable">'//achar(10)//'<thead><tr><th>'//trim(LIST_NOUN(which))//'</th>')
+    else
+        call add(b, '<table class="listing">'//achar(10)//'<thead><tr><th>'//trim(LIST_NOUN(which))//'</th>')
+    end if
     select case (which)
+    case (LIST_FILES)
+        call add(b, '<th class="num">Lines</th><th class="num">Code</th><th class="num">Comments</th>')
+        call add(b, '<th class="num">Blank</th><th class="num">Size</th><th class="num">Procedures</th>')
     case (LIST_MODULES, LIST_PROGRAMS, LIST_BLOCKDATA)
         call add(b, '<th>Source File</th>')
     case (LIST_PROCEDURES)
@@ -1833,7 +1964,16 @@ subroutine list_page(site, which, html)
     case (LIST_TYPES)
         call add(b, '<th>Location</th><th>Extends</th>')
     end select
-    call add(b, '<th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
+    ! what a file is about is rarely given, and the list of files is wide
+    described = which /= LIST_FILES
+    do k = 1, size(site%members(which)%ids)
+        if (described) exit
+        if (allocated(site%p%list%box(site%members(which)%ids(k))%e%summary)) then
+            described = len_trim(site%p%list%box(site%members(which)%ids(k))%e%summary) > 0
+        end if
+    end do
+    if (described) call add(b, '<th>Description</th>')
+    call add(b, '</tr></thead>'//achar(10)//'<tbody>'//achar(10))
     do k = 1, size(site%members(which)%ids)
         associate (id => site%members(which)%ids(k))
             call entity_url(site%p%list, id, url)
@@ -1843,12 +1983,18 @@ subroutine list_page(site, which, html)
             call html_escape(display_name(site%p%list%box(id)%e), b, .false.)
             call add(b, '</a></td>')
             call list_columns(site, which, id, b)
-            call add(b, '<td>')
-            if (allocated(site%p%list%box(id)%e%summary)) call add(b, site%p%list%box(id)%e%summary)
-            call add(b, '</td></tr>'//achar(10))
+            if (which == LIST_FILES) call stats_cells(site%file_stats(k), b)
+            if (described) then
+                call add(b, '<td>')
+                if (allocated(site%p%list%box(id)%e%summary)) call add(b, site%p%list%box(id)%e%summary)
+                call add(b, '</td>')
+            end if
+            call add(b, '</tr>'//achar(10))
         end associate
     end do
-    call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
+    call add(b, '</tbody>'//achar(10))
+    if (which == LIST_FILES) call stats_total(site, described, b)
+    call add(b, '</table>'//achar(10))
     do k = 1, size(site%graphs%graphs)
         if (site%graphs%graphs(k)%list_page == which) call write_graph(site, k, b)
     end do
@@ -2086,6 +2232,7 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     call collect_lists(site)
     call make_footer(s, site%footer)
     call locate_sources(site)
+    call measure_files(site)
 
     allocate (ids(0))
     do k = 1, p%list%n

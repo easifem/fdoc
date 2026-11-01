@@ -104,6 +104,13 @@ details.source { margin: 1rem 0; } details.source summary { cursor: pointer; col
   border-radius: 5px; padding: 0 .45rem; }
 .listing td:first-child { font-family: var(--mono); font-size: .9em; white-space: nowrap; }
 .listing td p { margin: 0; }
+.listing .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 0; padding-right: .55rem; }
+.listing tfoot td { font-weight: 600; border-bottom: 0; border-top: 2px solid var(--line); }
+.layout:has(table.sortable), .inner:has(table.sortable) { max-width: none; }
+.sortable th { cursor: pointer; user-select: none; }
+@media (max-width: 1099px) { .sortable { display: block; overflow-x: auto; } }
+.sortable th[aria-sort="ascending"]::after { content: " \25B2"; font-size: .7em; }
+.sortable th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }
 .hero { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1.2rem 1rem;
   margin-bottom: 1.4rem; }
 .hero { position: relative; }

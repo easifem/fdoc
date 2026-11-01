@@ -97,6 +97,7 @@ end function add
 * Graphs of module use, procedure calls, type inheritance and file dependencies, with links, zoom and panning.
 * Syntax highlighted Fortran source.
 * Badges for what procedures are, such as `pure` or `recursive`, and for those that keep state between calls, with arguments coloured by intent.
+* A list of source files with their lines of code and comments, size and procedures, and totals, sorted by clicking a heading.
 * A logo on the main page, from the `logo` setting, which is a path to an image.
 * Generic interfaces shown as call forms, with a table of the types and ranks each form takes and what it returns.
 * A search box. Press `/` to use it.
@@ -129,9 +130,9 @@ Time to generate each project's documentation, using the project's own settings:
 | [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 0.6 s | 115× | 6.8 s | 0.2 s | 38× |
 | [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.2 s | 274× | 9.0 s | 0.1 s | 75× |
 | [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 1.3 s | 243× | 25.3 s | 0.9 s | 29× |
-| [stdlib](https://github.com/fortran-lang/stdlib) | 614,270 | 680 s | 2.3 s | 297× | 211 s | 2.1 s | 101× |
+| [stdlib](https://github.com/fortran-lang/stdlib) | 645,495 | 680 s | 2.3 s | 297× | 211 s | 2.1 s | 101× |
 
-The lines of stdlib are its Fypp templates and Fortran sources, leaving out what its project file excludes, before the templates are expanded. FORD also needs the Python Fypp for it, and fdoc doesn't.
+The lines of stdlib are those of its Fypp templates and Fortran sources that get documented, before the templates are expanded. FORD also needs the Python Fypp for it, and fdoc doesn't.
 
 Two more third-party projects: [fpm](https://github.com/fortran-lang/fpm) 0.2 s against 9.0 s (50×), and [TOML Fortran](https://github.com/toml-f/toml-f) 0.1 s against 20.7 s (159×).
 

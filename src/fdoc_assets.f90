@@ -89,35 +89,41 @@ subroutine asset_fdoc_css(b)
         //'ps { display: flex; flex-wrap: wrap; gap: .35rem; padding: 0; list-style: none; margin: .5rem 0 1rem; }'//NL//'.' &
         //'chips li { font-family: var(--mono); font-size: .82rem; background: var(--bg-soft); border: 1px solid var(--l' &
         //'ine);'//NL//'  border-radius: 5px; padding: 0 .45rem; }'//NL//'.listing td:first-child { font-family: var(--m' &
-        //'ono); font-size: .9em; white-space: nowrap; }'//NL//'.listing td p { margin: 0; }'//NL//'.hero { background: ' &
-        //'var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1.2rem 1rem;'//NL//'  marg' &
-        //'in-bottom: 1.4rem; }'//NL//'.hero { position: relative; }'//NL//'.hero h1 { margin-right: 10rem; }'//NL//'.he' &
-        //'ro .meta { margin-bottom: .4rem; align-items: center; }'//NL//'.hero.with-logo { padding-left: 7rem; min-heig' &
-        //'ht: 6.2rem; }'//NL//'.hero-logo { position: absolute; left: 1.2rem; top: .9rem; width: 4.8rem; height: 4.8rem' &
-        //'; object-fit: contain; }'//NL//'.project-links { position: absolute; top: 1.1rem; right: 1.2rem; display: fle' &
-        //'x; gap: .55rem; }'//NL//'.author-links { display: inline-flex; gap: .45rem; align-items: center; }'//NL//'.au' &
-        //'thor-links:empty, .project-links:empty { display: none; }'//NL//'.icon-link { display: inline-block; width: 1' &
-        //'.1rem; height: 1.1rem; background: var(--muted);'//NL//'  -webkit-mask: var(--i) center / contain no-repeat; ' &
-        //'mask: var(--i) center / contain no-repeat; }'//NL//'.project-links .icon-link { width: 1.35rem; height: 1.35r' &
-        //'em; }'//NL//'.icon-link:hover { background: var(--accent); }'//NL//'.grid { display: flex; flex-wrap: wrap; g' &
-        //'ap: .4rem; margin: .5rem 0 0; }'//NL//'.card { background: var(--bg); }'//NL//'.card { border: 1px solid var(' &
-        //'--line); border-radius: 999px; padding: .05rem .65rem; color: var(--text); font-size: .84rem; white-space: no' &
-        //'wrap; }'//NL//'.card:hover { border-color: var(--accent); text-decoration: none; }'//NL//'.card b { margin-ri' &
-        //'ght: .3rem; font-weight: 650; } .card span { color: var(--muted); }'//NL//'pre.source { padding-left: 0; coun' &
-        //'ter-reset: line; line-height: 1.45; }'//NL//'.ln { display: inline-block; width: 3.6em; margin-right: 1em; te' &
-        //'xt-align: right; color: var(--muted); opacity: .6; user-select: none; }'//NL//'.ln::before { counter-incremen' &
-        //'t: line; content: counter(line); }'//NL//'.ln:target { color: var(--accent); opacity: 1; font-weight: 700; }'//NL &
-        //'footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-si' &
-        //'ze: .84rem; }'//NL//'@media (max-width: 860px) {'//NL//'  .layout { grid-template-columns: minmax(0, 1fr); }'//NL &
-        //'  aside.side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); max-hei' &
-        //'ght: 40vh; }'//NL//'  main { padding: 1.25rem 1rem 3rem; }'//NL//'}'//NL//'@media print { header.top, aside.s' &
-        //'ide, .theme, .copy { display: none; } .layout { display: block; } }'//NL//'.search { position: relative; flex' &
-        //': 0 1 15rem; }'//NL//'.search input { width: 100%; height: 2rem; padding: 0 .6rem; color: var(--text); backgr' &
-        //'ound: var(--bg-soft);'//NL//'  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: .')
+        //'ono); font-size: .9em; white-space: nowrap; }'//NL//'.listing td p { margin: 0; }'//NL//'.listing .num { text' &
+        //'-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 0; padding-right: .55re' &
+        //'m; }'//NL//'.listing tfoot td { font-weight: 600; border-bottom: 0; border-top: 2px solid var(--line); }'//NL &
+        //'.layout:has(table.sortable), .inner:has(table.sortable) { max-width: none; }'//NL//'.sortable th { cursor: po' &
+        //'inter; user-select: none; }'//NL//'@media (max-width: 1099px) { .sortable { display: block; overflow-x: auto;' &
+        //' } }'//NL//'.sortable th[aria-sort="ascending"]::after { content: " \25B2"; font-size: .7em; }'//NL//'.sortab' &
+        //'le th[aria-sort="descending"]::after { content: " \25BC"; font-size: .7em; }'//NL//'.hero { background: var(-' &
+        //'-bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1.2rem 1rem;'//NL//'  margin-bo' &
+        //'ttom: 1.4rem; }'//NL//'.hero { position: relative; }'//NL//'.hero h1 { margin-right: 10rem; }'//NL//'.hero .m' &
+        //'eta { margin-bottom: .4rem; align-items: center; }'//NL//'.hero.with-logo { padding-left: 7rem; min-height: 6' &
+        //'.2rem; }'//NL//'.hero-logo { position: absolute; left: 1.2rem; top: .9rem; width: 4.8rem; height: 4.8rem; obj' &
+        //'ect-fit: contain; }'//NL//'.project-links { position: absolute; top: 1.1rem; right: 1.2rem; display: flex; ga' &
+        //'p: .55rem; }'//NL//'.author-links { display: inline-flex; gap: .45rem; align-items: center; }'//NL//'.author-' &
+        //'links:empty, .project-links:empty { display: none; }'//NL//'.icon-link { display: inline-block; width: 1.1rem' &
+        //'; height: 1.1rem; background: var(--muted);'//NL//'  -webkit-mask: var(--i) center / contain no-repeat; mask:' &
+        //' var(--i) center / contain no-repeat; }'//NL//'.project-links .icon-link { width: 1.35rem; height: 1.35rem; }' &
+        //NL//'.icon-link:hover { background: var(--accent); }'//NL//'.grid { display: flex; flex-wrap: wrap; gap: .4rem' &
+        //'; margin: .5rem 0 0; }'//NL//'.card { background: var(--bg); }'//NL//'.card { border: 1px solid var(--line); ' &
+        //'border-radius: 999px; padding: .05rem .65rem; color: var(--text); font-size: .84rem; white-space: nowrap; }'//NL &
+        //'.card:hover { border-color: var(--accent); text-decoration: none; }'//NL//'.card b { margin-right: .3rem; fon' &
+        //'t-weight: 650; } .card span { color: var(--muted); }'//NL//'pre.source { padding-left: 0; counter-reset: line' &
+        //'; line-height: 1.45; }'//NL//'.ln { display: inline-block; width: 3.6em; margin-right: 1em; text-align: right' &
+        //'; color: var(--muted); opacity: .6; user-select: none; }'//NL//'.ln::before { counter-increment: line; conten' &
+        //'t: counter(line); }'//NL//'.ln:target { color: var(--accent); opacity: 1; font-weight: 700; }'//NL//'footer {' &
+        //' margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .84r')
     call add(b, &
-        '88rem; }'//NL//'.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }'//NL//'.searc' &
-        //'h .results { display: none; position: absolute; top: 2.4rem; right: 0; width: min(30rem, 90vw); max-height: 7' &
-        //'0vh;'//NL//'  overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;'//NL &
+        'em; }'//NL//'@media (max-width: 860px) {'//NL//'  .layout { grid-template-columns: minmax(0, 1fr); }'//NL//' ' &
+        //' aside.side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); max-heig' &
+        //'ht: 40vh; }'//NL//'  main { padding: 1.25rem 1rem 3rem; }'//NL//'}'//NL//'@media print { header.top, aside.si' &
+        //'de, .theme, .copy { display: none; } .layout { display: block; } }'//NL//'.search { position: relative; flex:' &
+        //' 0 1 15rem; }'//NL//'.search input { width: 100%; height: 2rem; padding: 0 .6rem; color: var(--text); backgro' &
+        //'und: var(--bg-soft);'//NL//'  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: .8' &
+        //'8rem; }'//NL//'.search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }'//NL//'.search' &
+        //' .results { display: none; position: absolute; top: 2.4rem; right: 0; width: min(30rem, 90vw); max-height: 70' &
+        //'vh;'//NL//'  overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;'//NL &
         //'  box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }'//NL//'.results a, .search-page a { display: block; padding: .' &
         //'45rem .7rem; color: var(--text); border-bottom: 1px solid var(--line); }'//NL//'.results a:hover, .results a.' &
         //'on, .search-page a:hover { background: var(--accent-soft); text-decoration: none; }'//NL//'.results b, .searc' &
@@ -317,7 +323,20 @@ subroutine asset_fdoc_js(b)
         //'function openTarget() {'//NL//'  var id = decodeURIComponent(location.hash.slice(1));'//NL//'  var target = i' &
         //'d && document.getElementById(id);'//NL//'  var section = target && target.closest(''details'');'//NL//'  if (' &
         //'section) { section.open = true; target.scrollIntoView(); }'//NL//'}'//NL//'window.addEventListener(''hashchan' &
-        //'ge'', openTarget);'//NL//'window.addEventListener(''DOMContentLoaded'', openTarget);'//NL)
+        //'ge'', openTarget);'//NL//'window.addEventListener(''DOMContentLoaded'', openTarget);'//NL//NL//'// clicking a' &
+        //' heading of a sortable table sorts it by that column'//NL//'window.addEventListener(''DOMContentLoaded'', fun' &
+        //'ction () {'//NL//'  document.querySelectorAll(''table.sortable'').forEach(function (table) {'//NL//'    var h' &
+        //'eadings = table.querySelectorAll(''thead th'');'//NL//'    headings.forEach(function (th, column) {'//NL//'  ' &
+        //'    th.addEventListener(''click'', function () {'//NL//'        var body = table.tBodies[0];'//NL//'        v' &
+        //'ar numeric = th.classList.contains(''num'');'//NL//'        var up = th.hasAttribute(''aria-sort'') ? th.getA' &
+        //'ttribute(''aria-sort'') === ''descending'' : !numeric;'//NL//'        var key = function (row) {'//NL//'     ' &
+        //'     var cell = row.cells[column];'//NL//'          return numeric ? Number(cell.dataset.sort) : cell.textCon' &
+        //'tent.toLowerCase();'//NL//'        };'//NL//'        var rows = Array.prototype.slice.call(body.rows);'//NL//' ' &
+        //'       rows.sort(function (a, b) {'//NL//'          var x = key(a), y = key(b);'//NL//'          return (x < ' &
+        //'y ? -1 : x > y ? 1 : 0) * (up ? 1 : -1);'//NL//'        });'//NL//'        rows.forEach(function (row) { body' &
+        //'.appendChild(row); });'//NL//'        headings.forEach(function (other) { other.removeAttribute(''aria-sort''' &
+        //'); });'//NL//'        th.setAttribute(''aria-sort'', up ? ''ascending'' : ''descending'');'//NL//'      });'//NL &
+        //'    });'//NL//'  });'//NL//'});'//NL)
 end subroutine asset_fdoc_js
 
 end module fdoc_assets

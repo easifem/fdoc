@@ -275,3 +275,29 @@ function openTarget() {
 }
 window.addEventListener('hashchange', openTarget);
 window.addEventListener('DOMContentLoaded', openTarget);
+
+// clicking a heading of a sortable table sorts it by that column
+window.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('table.sortable').forEach(function (table) {
+    var headings = table.querySelectorAll('thead th');
+    headings.forEach(function (th, column) {
+      th.addEventListener('click', function () {
+        var body = table.tBodies[0];
+        var numeric = th.classList.contains('num');
+        var up = th.hasAttribute('aria-sort') ? th.getAttribute('aria-sort') === 'descending' : !numeric;
+        var key = function (row) {
+          var cell = row.cells[column];
+          return numeric ? Number(cell.dataset.sort) : cell.textContent.toLowerCase();
+        };
+        var rows = Array.prototype.slice.call(body.rows);
+        rows.sort(function (a, b) {
+          var x = key(a), y = key(b);
+          return (x < y ? -1 : x > y ? 1 : 0) * (up ? 1 : -1);
+        });
+        rows.forEach(function (row) { body.appendChild(row); });
+        headings.forEach(function (other) { other.removeAttribute('aria-sort'); });
+        th.setAttribute('aria-sort', up ? 'ascending' : 'descending');
+      });
+    });
+  });
+});
