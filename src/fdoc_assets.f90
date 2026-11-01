@@ -164,54 +164,89 @@ subroutine asset_fdoc_js(b)
         //'    var w = words[i], at = entry.low.indexOf(w);'//NL//'      if (entry.low === w) total += 100;'//NL//'      ' &
         //'else if (at === 0) total += 50;'//NL//'      else if (at > 0) total += 25;'//NL//'      else if (entry.text.in' &
         //'dexOf(w) >= 0) total += 5;'//NL//'      else return 0;'//NL//'    }'//NL//'    return total - entry.low.length / 100;' &
-        //''//NL//'  }'//NL//''//NL//'  function search(query, limit) {'//NL//'    var words = query.toLowerCase().split(/\s+/).filter(' &
-        //'Boolean);'//NL//'    if (!words.length) return [];'//NL//'    var found = [];'//NL//'    entries.forEach(function (e)' &
-        //' { var s = score(e, words); if (s > 0) found.push([s, e]); });'//NL//'    found.sort(function (a, b) { ' &
-        //'return b[0] - a[0]; });'//NL//'    return found.slice(0, limit).map(function (f) { return f[1]; });'//NL//'  }' &
-        //''//NL//''//NL//'  function row(entry) {'//NL//'    var a = document.createElement("a");'//NL//'    a.href = root + entry.u;'//NL//'' &
-        //'    var title = document.createElement("b");'//NL//'    title.textContent = entry.t;'//NL//'    var kind = doc' &
-        //'ument.createElement("span");'//NL//'    kind.className = "badge";'//NL//'    kind.textContent = entry.k;'//NL//'    a' &
-        //'.appendChild(title);'//NL//'    a.appendChild(kind);'//NL//'    if (entry.s) {'//NL//'      var text = document.creat' &
-        //'eElement("small");'//NL//'      text.textContent = entry.s;'//NL//'      a.appendChild(text);'//NL//'    }'//NL//'    return' &
-        //' a;'//NL//'  }'//NL//''//NL//'  function fill(box, results) {'//NL//'    box.textContent = "";'//NL//'    results.forEach(function ' &
-        //'(e) { box.appendChild(row(e)); });'//NL//'  }'//NL//''//NL//'  document.addEventListener("DOMContentLoaded", function' &
-        //' () {'//NL//'    var input = document.querySelector(".search input");'//NL//'    if (!input) return;'//NL//'    var b' &
-        //'ox = document.querySelector(".search .results");'//NL//'    var selected = -1;'//NL//'    function mark() {'//NL//'  ' &
-        //'    var rows = box.children;'//NL//'      for (var i = 0; i < rows.length; i++) rows[i].className = i =' &
-        //'== selected ? "on" : "";'//NL//'    }'//NL//'    input.addEventListener("input", function () {'//NL//'      load(func' &
-        //'tion () {'//NL//'        fill(box, input.value ? search(input.value, 12) : []);'//NL//'        selected = -1;'//NL//'' &
-        //'        box.style.display = box.children.length ? "block" : "none";'//NL//'      });'//NL//'    });'//NL//'    input.' &
-        //'addEventListener("keydown", function (event) {'//NL//'      var n = box.children.length;'//NL//'      if (even' &
-        //'t.key === "ArrowDown" && n) { selected = (selected + 1) % n; mark(); event.preventDefault(); }'//NL//' ' &
-        //'     else if (event.key === "ArrowUp" && n) { selected = (selected + n - 1) % n; mark(); event.p' &
-        //'reventDefault(); }'//NL//'      else if (event.key === "Escape") { box.style.display = "none"; input.bl' &
-        //'ur(); }'//NL//'      else if (event.key === "Enter") {'//NL//'        if (selected >= 0) box.children[selected' &
-        //'].click();'//NL//'        else location.href = root + "search.html?q=" + encodeURIComponent(input.value' &
-        //');'//NL//'      }'//NL//'    });'//NL//'    document.addEventListener("click", function (event) {'//NL//'      if (!event.ta' &
-        //'rget.closest(".search")) box.style.display = "none";'//NL//'    });'//NL//'    document.addEventListener("keyd' &
-        //'own", function (event) {'//NL//'      if (event.key === "/" && document.activeElement !== input) { inpu' &
-        //'t.focus(); event.preventDefault(); }'//NL//'    });'//NL//'    var page = document.querySelector(".search-page' &
-        //'");'//NL//'    if (page) {'//NL//'      var query = new URLSearchParams(location.search).get("q") || "";'//NL//'     ' &
-        //' input.value = query;'//NL//'      load(function () {'//NL//'        var results = search(query, 200);'//NL//'       ' &
-        //' fill(page, results);'//NL//'        document.querySelector(".search-count").textContent = results.leng' &
-        //'th + " results for “" + query + "”";'//NL//'      });'//NL//'    }'//NL//'  });'//NL//'})();'//NL//'(function () {'//NL//'  document.addEv' &
-        //'entListener("DOMContentLoaded", function () {'//NL//'    document.querySelectorAll(".graph").forEach(fu' &
-        //'nction (box) {'//NL//'      var svg = box.querySelector("svg");'//NL//'      if (!svg) return;'//NL//'      var width' &
-        //' = svg.width.baseVal.value, height = svg.height.baseVal.value, scale = 1;'//NL//'      function set(val' &
-        //'ue) {'//NL//'        scale = Math.max(0.25, Math.min(6, value));'//NL//'        box.classList.add("zoomed");'//NL//' ' &
-        //'       svg.style.width = width * scale + "px";'//NL//'        svg.style.height = height * scale + "px";' &
-        //''//NL//'      }'//NL//'      var zoom = document.createElement("div");'//NL//'      zoom.className = "zoom";'//NL//'      [[' &
-        //'"+", 1.3], ["\u2212", 1 / 1.3]].forEach(function (b) {'//NL//'        var button = document.createEleme' &
-        //'nt("button");'//NL//'        button.textContent = b[0];'//NL//'        button.setAttribute("aria-label", b[1] ' &
-        //'> 1 ? "Zoom in" : "Zoom out");'//NL//'        button.addEventListener("click", function () { set(scale ' &
-        //'* b[1]); });'//NL//'        zoom.appendChild(button);'//NL//'      });'//NL//'      box.insertBefore(zoom, svg);'//NL//'    ' &
-        //'  var start = null;'//NL//'      box.addEventListener("mousedown", function (event) {'//NL//'        if (event' &
-        //'.target.closest("a, button")) return;'//NL//'        start = [event.clientX, event.clientY, box.scrollL' &
-        //'eft, box.scrollTop];'//NL//'        box.classList.add("dragging");'//NL//'      });'//NL//'      window.addEventListe' &
-        //'ner("mousemove", function (event) {'//NL//'        if (!start) return;'//NL//'        box.scrollLeft = start[2' &
-        //'] - (event.clientX - start[0]);'//NL//'        box.scrollTop = start[3] - (event.clientY - start[1]);'//NL//' ' &
-        //'     });'//NL//'      window.addEventListener("mouseup", function () { start = null; box.classList.remo' &
-        //'ve("dragging"); });'//NL//'    });'//NL//'  });'//NL//'})();'//NL//'')
+        //''//NL//'  }'//NL//''//NL//'  // edit distance with transpositions, giving up once it exceeds `most`'//NL//'  function distan' &
+        //'ce(a, b, most) {'//NL//'    if (Math.abs(a.length - b.length) > most) return most + 1;'//NL//'    var before =' &
+        //' null, last = [], row = [], i, j;'//NL//'    for (j = 0; j <= b.length; j++) last[j] = j;'//NL//'    for (i = ' &
+        //'1; i <= a.length; i++) {'//NL//'      row = [i];'//NL//'      var best = i;'//NL//'      for (j = 1; j <= b.length; j' &
+        //'++) {'//NL//'        var cost = a[i - 1] === b[j - 1] ? 0 : 1;'//NL//'        row[j] = Math.min(last[j] + 1, r' &
+        //'ow[j - 1] + 1, last[j - 1] + cost);'//NL//'        if (before && i > 1 && j > 1 && a[i - 1] === b[j - 2' &
+        //'] && a[i - 2] === b[j - 1]) {'//NL//'          row[j] = Math.min(row[j], before[j - 2] + 1);'//NL//'        }'//NL//'' &
+        //'        best = Math.min(best, row[j]);'//NL//'      }'//NL//'      if (best > most) return most + 1;'//NL//'      bef' &
+        //'ore = last;'//NL//'      last = row;'//NL//'    }'//NL//'    return last[b.length];'//NL//'  }'//NL//''//NL//'  function parts(text) { ret' &
+        //'urn text.split(/[^a-z0-9]+/).filter(Boolean); }'//NL//''//NL//'  // a typo: the word is close to some run of p' &
+        //'arts of the name, or to how such a run starts'//NL//'  function typo(tokens, word) {'//NL//'    if (word.lengt' &
+        //'h < 3) return 0;'//NL//'    var size = parts(word).length, plain = parts(word).join("_"), most = word.l' &
+        //'ength < 8 ? 1 : 2;'//NL//'    var result = 0;'//NL//'    for (var i = 0; i + size <= tokens.length; i++) {'//NL//'   ' &
+        //'   var run = tokens.slice(i, i + size).join("_");'//NL//'      var d = distance(plain, run, most);'//NL//'    ' &
+        //'  if (d > most) d = distance(plain, run.slice(0, plain.length), most);'//NL//'      if (d <= most) resu' &
+        //'lt = Math.max(result, 3 - d);'//NL//'    }'//NL//'    return result;'//NL//'  }'//NL//''//NL//'  // the word is in the initials of ' &
+        //'the parts of the name, as `jvcs` for json_value_create_string'//NL//'  function initials(tokens, word) ' &
+        //'{'//NL//'    if (word.length < 2) return 0;'//NL//'    return subsequence(tokens.map(function (t) { return t[0' &
+        //']; }).join(""), word) ? 2.5 : 0;'//NL//'  }'//NL//''//NL//'  function subsequence(text, word) {'//NL//'    var at = -1;'//NL//'    ' &
+        //'for (var i = 0; i < word.length; i++) {'//NL//'      at = text.indexOf(word[i], at + 1);'//NL//'      if (at <' &
+        //' 0) return false;'//NL//'    }'//NL//'    return true;'//NL//'  }'//NL//''//NL//'  // the letters of the word are in order and clos' &
+        //'e together'//NL//'  function letters(low, word) {'//NL//'    if (word.length < 3) return 0;'//NL//'    var best = 0;'//NL//'' &
+        //'    for (var start = low.indexOf(word[0]); start >= 0; start = low.indexOf(word[0], start + 1)) ' &
+        //'{'//NL//'      var at = start;'//NL//'      for (var i = 1; i < word.length && at >= 0; i++) at = low.indexOf(' &
+        //'word[i], at + 1);'//NL//'      if (at < 0) break;'//NL//'      var span = at - start + 1;'//NL//'      if (span <= wo' &
+        //'rd.length * 2) best = Math.max(best, word.length / span);'//NL//'    }'//NL//'    return best;'//NL//'  }'//NL//''//NL//'  function' &
+        //' fuzzy(entry, words) {'//NL//'    if (!entry.tokens) entry.tokens = parts(entry.low);'//NL//'    var total = 0' &
+        //';'//NL//'    for (var i = 0; i < words.length; i++) {'//NL//'      var w = words[i];'//NL//'      var s = entry.low.i' &
+        //'ndexOf(w) >= 0 ? 3 : Math.max(typo(entry.tokens, w), initials(entry.tokens, w), letters(entry.lo' &
+        //'w, w));'//NL//'      if (s <= 0) return 0;'//NL//'      total += s;'//NL//'    }'//NL//'    return total - entry.low.length ' &
+        //'/ 1000;'//NL//'  }'//NL//''//NL//'  function search(query, limit) {'//NL//'    var words = query.toLowerCase().split(/\s+/).' &
+        //'filter(Boolean);'//NL//'    if (!words.length) return [];'//NL//'    var found = [], rest = [];'//NL//'    entries.fo' &
+        //'rEach(function (e) {'//NL//'      var s = score(e, words);'//NL//'      if (s > 0) found.push([s, e]); else re' &
+        //'st.push(e);'//NL//'    });'//NL//'    found.sort(function (a, b) { return b[0] - a[0]; });'//NL//'    if (found.lengt' &
+        //'h < limit) {'//NL//'      // fuzzy matches only fill in below exact ones'//NL//'      var near = [];'//NL//'      res' &
+        //'t.forEach(function (e) { var s = fuzzy(e, words); if (s > 0) near.push([s, e]); });'//NL//'      near.s' &
+        //'ort(function (a, b) { return b[0] - a[0]; });'//NL//'      found = found.concat(near);'//NL//'    }'//NL//'    return' &
+        //' found.slice(0, limit).map(function (f) { return f[1]; });'//NL//'  }'//NL//''//NL//'  function row(entry) {'//NL//'    var ' &
+        //'a = document.createElement("a");'//NL//'    a.href = root + entry.u;'//NL//'    var title = document.createEle' &
+        //'ment("b");'//NL//'    title.textContent = entry.t;'//NL//'    var kind = document.createElement("span");'//NL//'    k' &
+        //'ind.className = "badge";'//NL//'    kind.textContent = entry.k;'//NL//'    a.appendChild(title);'//NL//'    a.appendC' &
+        //'hild(kind);'//NL//'    if (entry.s) {'//NL//'      var text = document.createElement("small");'//NL//'      text.text' &
+        //'Content = entry.s;'//NL//'      a.appendChild(text);'//NL//'    }'//NL//'    return a;'//NL//'  }'//NL//''//NL//'  function fill(box, resu' &
+        //'lts) {'//NL//'    box.textContent = "";'//NL//'    results.forEach(function (e) { box.appendChild(row(e)); });' &
+        //''//NL//'  }'//NL//''//NL//'  document.addEventListener("DOMContentLoaded", function () {'//NL//'    var input = document.que' &
+        //'rySelector(".search input");'//NL//'    if (!input) return;'//NL//'    var box = document.querySelector(".sear' &
+        //'ch .results");'//NL//'    var selected = -1;'//NL//'    function mark() {'//NL//'      var rows = box.children;'//NL//'     ' &
+        //' for (var i = 0; i < rows.length; i++) rows[i].className = i === selected ? "on" : "";'//NL//'    }'//NL//'   ' &
+        //' input.addEventListener("input", function () {'//NL//'      load(function () {'//NL//'        fill(box, input.' &
+        //'value ? search(input.value, 12) : []);'//NL//'        selected = -1;'//NL//'        box.style.display = box.ch' &
+        //'ildren.length ? "block" : "none";'//NL//'      });'//NL//'    });'//NL//'    input.addEventListener("keydown", functi' &
+        //'on (event) {'//NL//'      var n = box.children.length;'//NL//'      if (event.key === "ArrowDown" && n) { sele' &
+        //'cted = (selected + 1) % n; mark(); event.preventDefault(); }'//NL//'      else if (event.key === "Arrow' &
+        //'Up" && n) { selected = (selected + n - 1) % n; mark(); event.preventDefault(); }'//NL//'      else if (' &
+        //'event.key === "Escape") { box.style.display = "none"; input.blur(); }'//NL//'      else if (event.key =' &
+        //'== "Enter") {'//NL//'        if (selected >= 0) box.children[selected].click();'//NL//'        else location.h' &
+        //'ref = root + "search.html?q=" + encodeURIComponent(input.value);'//NL//'      }'//NL//'    });'//NL//'    document.ad' &
+        //'dEventListener("click", function (event) {'//NL//'      if (!event.target.closest(".search")) box.style' &
+        //'.display = "none";'//NL//'    });'//NL//'    document.addEventListener("keydown", function (event) {'//NL//'      if ' &
+        //'(event.key === "/" && document.activeElement !== input) { input.focus(); event.preventDefault();' &
+        //' }'//NL//'    });'//NL//'    var page = document.querySelector(".search-page");'//NL//'    if (page) {'//NL//'      var quer' &
+        //'y = new URLSearchParams(location.search).get("q") || "";'//NL//'      input.value = query;'//NL//'      load(f' &
+        //'unction () {'//NL//'        var results = search(query, 200);'//NL//'        fill(page, results);'//NL//'        docu' &
+        //'ment.querySelector(".search-count").textContent = results.length + " results for “" + query + "”' &
+        //'";'//NL//'      });'//NL//'    }'//NL//'  });'//NL//'})();'//NL//'(function () {'//NL//'  document.addEventListener("DOMContentLoaded", fu' &
+        //'nction () {'//NL//'    document.querySelectorAll(".graph").forEach(function (box) {'//NL//'      var svg = box' &
+        //'.querySelector("svg");'//NL//'      if (!svg) return;'//NL//'      var width = svg.width.baseVal.value, height' &
+        //' = svg.height.baseVal.value, scale = 1;'//NL//'      function set(value) {'//NL//'        scale = Math.max(0.2' &
+        //'5, Math.min(6, value));'//NL//'        box.classList.add("zoomed");'//NL//'        svg.style.width = width * s' &
+        //'cale + "px";'//NL//'        svg.style.height = height * scale + "px";'//NL//'      }'//NL//'      var zoom = document' &
+        //'.createElement("div");'//NL//'      zoom.className = "zoom";'//NL//'      [["+", 1.3], ["\u2212", 1 / 1.3]].fo' &
+        //'rEach(function (b) {'//NL//'        var button = document.createElement("button");'//NL//'        button.textC' &
+        //'ontent = b[0];'//NL//'        button.setAttribute("aria-label", b[1] > 1 ? "Zoom in" : "Zoom out");'//NL//'   ' &
+        //'     button.addEventListener("click", function () { set(scale * b[1]); });'//NL//'        zoom.appendCh' &
+        //'ild(button);'//NL//'      });'//NL//'      box.insertBefore(zoom, svg);'//NL//'      var start = null;'//NL//'      box.addE' &
+        //'ventListener("mousedown", function (event) {'//NL//'        if (event.target.closest("a, button")) retu')
+    call add(b, &
+        'rn;'//NL//'        start = [event.clientX, event.clientY, box.scrollLeft, box.scrollTop];'//NL//'        box.c' &
+        //'lassList.add("dragging");'//NL//'      });'//NL//'      window.addEventListener("mousemove", function (event) ' &
+        //'{'//NL//'        if (!start) return;'//NL//'        box.scrollLeft = start[2] - (event.clientX - start[0]);'//NL//'  ' &
+        //'      box.scrollTop = start[3] - (event.clientY - start[1]);'//NL//'      });'//NL//'      window.addEventList' &
+        //'ener("mouseup", function () { start = null; box.classList.remove("dragging"); });'//NL//'    });'//NL//'  });'//NL//'' &
+        //'})();'//NL//'')
 end subroutine asset_fdoc_js
 
 end module fdoc_assets

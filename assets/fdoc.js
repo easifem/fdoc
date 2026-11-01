@@ -60,12 +60,102 @@
     return total - entry.low.length / 100;
   }
 
+  // edit distance with transpositions, giving up once it exceeds `most`
+  function distance(a, b, most) {
+    if (Math.abs(a.length - b.length) > most) return most + 1;
+    var before = null, last = [], row = [], i, j;
+    for (j = 0; j <= b.length; j++) last[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      row = [i];
+      var best = i;
+      for (j = 1; j <= b.length; j++) {
+        var cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        row[j] = Math.min(last[j] + 1, row[j - 1] + 1, last[j - 1] + cost);
+        if (before && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+          row[j] = Math.min(row[j], before[j - 2] + 1);
+        }
+        best = Math.min(best, row[j]);
+      }
+      if (best > most) return most + 1;
+      before = last;
+      last = row;
+    }
+    return last[b.length];
+  }
+
+  function parts(text) { return text.split(/[^a-z0-9]+/).filter(Boolean); }
+
+  // a typo: the word is close to some run of parts of the name, or to how such a run starts
+  function typo(tokens, word) {
+    if (word.length < 3) return 0;
+    var size = parts(word).length, plain = parts(word).join("_"), most = word.length < 8 ? 1 : 2;
+    var result = 0;
+    for (var i = 0; i + size <= tokens.length; i++) {
+      var run = tokens.slice(i, i + size).join("_");
+      var d = distance(plain, run, most);
+      if (d > most) d = distance(plain, run.slice(0, plain.length), most);
+      if (d <= most) result = Math.max(result, 3 - d);
+    }
+    return result;
+  }
+
+  // the word is in the initials of the parts of the name, as `jvcs` for json_value_create_string
+  function initials(tokens, word) {
+    if (word.length < 2) return 0;
+    return subsequence(tokens.map(function (t) { return t[0]; }).join(""), word) ? 2.5 : 0;
+  }
+
+  function subsequence(text, word) {
+    var at = -1;
+    for (var i = 0; i < word.length; i++) {
+      at = text.indexOf(word[i], at + 1);
+      if (at < 0) return false;
+    }
+    return true;
+  }
+
+  // the letters of the word are in order and close together
+  function letters(low, word) {
+    if (word.length < 3) return 0;
+    var best = 0;
+    for (var start = low.indexOf(word[0]); start >= 0; start = low.indexOf(word[0], start + 1)) {
+      var at = start;
+      for (var i = 1; i < word.length && at >= 0; i++) at = low.indexOf(word[i], at + 1);
+      if (at < 0) break;
+      var span = at - start + 1;
+      if (span <= word.length * 2) best = Math.max(best, word.length / span);
+    }
+    return best;
+  }
+
+  function fuzzy(entry, words) {
+    if (!entry.tokens) entry.tokens = parts(entry.low);
+    var total = 0;
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i];
+      var s = entry.low.indexOf(w) >= 0 ? 3 : Math.max(typo(entry.tokens, w), initials(entry.tokens, w), letters(entry.low, w));
+      if (s <= 0) return 0;
+      total += s;
+    }
+    return total - entry.low.length / 1000;
+  }
+
   function search(query, limit) {
     var words = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
-    var found = [];
-    entries.forEach(function (e) { var s = score(e, words); if (s > 0) found.push([s, e]); });
+    var found = [], rest = [];
+    entries.forEach(function (e) {
+      var s = score(e, words);
+      if (s > 0) found.push([s, e]); else rest.push(e);
+    });
     found.sort(function (a, b) { return b[0] - a[0]; });
+    if (found.length < limit) {
+      // fuzzy matches only fill in below exact ones
+      var near = [];
+      rest.forEach(function (e) { var s = fuzzy(e, words); if (s > 0) near.push([s, e]); });
+      near.sort(function (a, b) { return b[0] - a[0]; });
+      found = found.concat(near);
+    }
     return found.slice(0, limit).map(function (f) { return f[1]; });
   }
 
