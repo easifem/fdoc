@@ -2,7 +2,7 @@
 
 A documentation generator for modern Fortran, written in modern Fortran.
 
-fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 30 to 110 times faster.
+fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 50 to 130 times faster.
 
 * **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
 * **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, so existing links keep working.
@@ -37,7 +37,7 @@ pixi run fpm install --profile release --prefix ~/.local
 fdoc [options] [project_file]
 ```
 
-The options are FORD's, including `-o`, `-d`, `-p`, `-g`, `-m`, `-I`, `-L`, `-q` and `--config`. Run `fdoc --help` for the full list. Command line options override the project's settings.
+The options are FORD's, including `-o`, `-d`, `-p`, `-g`, `-m`, `-I`, `-L`, `-q` and `--config`. Run `fdoc --help` for the full list. Command line options override the project's settings. fdoc uses every core unless `parallel` says otherwise.
 
 Without a project file, fdoc looks in the current directory for an `[extra.fdoc]` or `[extra.ford]` table in `fpm.toml`, and then for `ford.md`.
 
@@ -117,25 +117,25 @@ Time to generate each project's documentation, using the project's own settings:
 
 | Project | Lines | FORD | fdoc | Speedup | FORD, no graphs | fdoc, no graphs | Speedup |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.5 s | 59× | 3.1 s | 0.1 s | 31× |
-| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.4 s | 57× | 6.5 s | 0.2 s | 41× |
-| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.7 s | 92× | 8.2 s | 0.5 s | 18× |
-| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.9 s | 33× | 6.8 s | 0.2 s | 31× |
-| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.8 s | 77× | 9.0 s | 0.3 s | 30× |
-| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.9 s | 110× | 25.3 s | 0.8 s | 34× |
+| [fformat](https://github.com/jacobwilliams/fformat) | 6,902 | 27.1 s | 0.4 s | 73× | 3.1 s | 0.1 s | 28× |
+| [bspline-fortran](https://github.com/jacobwilliams/bspline-fortran) | 13,222 | 22.8 s | 0.3 s | 71× | 6.5 s | 0.2 s | 36× |
+| [rklib](https://github.com/jacobwilliams/rklib) | 17,025 | 62.3 s | 0.6 s | 102× | 8.2 s | 0.5 s | 17× |
+| [json-fortran](https://github.com/jacobwilliams/json-fortran) | 17,715 | 64.5 s | 1.3 s | 48× | 6.8 s | 0.3 s | 27× |
+| [Fortran-Astrodynamics-Toolkit](https://github.com/jacobwilliams/Fortran-Astrodynamics-Toolkit) | 25,174 | 60.3 s | 0.7 s | 87× | 9.0 s | 0.3 s | 27× |
+| [qt-fortran](https://github.com/jacobwilliams/qt-fortran) | 25,831 | 314 s | 2.3 s | 135× | 25.3 s | 0.9 s | 29× |
 
 Peak memory and the size of the site, with graphs:
 
 | Project | FORD memory | fdoc memory | FORD site | fdoc site |
 |---|---:|---:|---:|---:|
-| fformat | 134 MB | 33 MB | 17 MB | 5 MB |
-| bspline-fortran | 175 MB | 38 MB | 17 MB | 5 MB |
-| rklib | 318 MB | 80 MB | 25 MB | 10 MB |
-| json-fortran | 310 MB | 97 MB | 83 MB | 30 MB |
-| Fortran-Astrodynamics-Toolkit | 197 MB | 55 MB | 31 MB | 9 MB |
-| qt-fortran | 425 MB | 148 MB | 100 MB | 33 MB |
+| fformat | 134 MB | 30 MB | 17 MB | 5 MB |
+| bspline-fortran | 175 MB | 35 MB | 17 MB | 5 MB |
+| rklib | 318 MB | 74 MB | 25 MB | 10 MB |
+| json-fortran | 310 MB | 100 MB | 83 MB | 30 MB |
+| Fortran-Astrodynamics-Toolkit | 197 MB | 60 MB | 31 MB | 9 MB |
+| qt-fortran | 425 MB | 153 MB | 100 MB | 33 MB |
 
-Measured on an Apple M5 with 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
+Measured on an Apple M5 with 10 cores and 24 GB of memory, with FORD 7.0.13, a release build of fdoc 0.0.1 made with gfortran 15.3, and Graphviz 14.1.2. FORD ran once and fdoc three times, taking the best. Memory is that of the main process, and doesn't include `dot`.
 
 The comparison isn't exactly like for like. FORD's search index holds the full text, and fdoc's only names and summaries. On qt-fortran, fdoc leaves out the whole-project call graph, which FORD draws. Graphs take most of fdoc's time, and on projects with deep call chains, such as json-fortran, they limit the speedup.
 

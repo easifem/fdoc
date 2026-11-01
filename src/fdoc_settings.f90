@@ -4,6 +4,7 @@ module fdoc_settings
 !! Every source of settings (project file, `fpm.toml`, `--config`, command line) goes through
 !! [[set_option]], which takes the option's values as a list of strings, the form the project file
 !! gives them.
+use omp_lib, only: omp_get_num_procs
 use json_module, only: json_core, json_value
 use ffmt_strings, only: to_s
 use fdoc_util
@@ -61,7 +62,7 @@ type, public :: settings_t
     logical :: relative = .true.                        !! true if `project_url` was not given
     integer :: graph_maxdepth = 10000, graph_maxnodes = 1000000000, graph_project_maxnodes = 400
     integer :: max_frontpage_items = 10
-    integer :: parallel = 4
+    integer :: parallel = 1                             !! threads to use: `new_settings` gives every core
     type(string_t), allocatable :: copy_subdir(:), display(:), exclude(:), exclude_dir(:), extensions(:)
     type(string_t), allocatable :: extra_vartypes(:), fixed_extensions(:), fpp_extensions(:), html_template_dir(:)
     type(string_t), allocatable :: include(:), macro(:), md_extensions(:), src_dir(:)
@@ -78,6 +79,7 @@ function new_settings() result(s)
 
     call date_and_time(values=values)
     s%creation_date = '%Y-%m-%dT%H:%M:%S.%f%z'
+    s%parallel = omp_get_num_procs()
     s%docmark = '!'
     s%docmark_alt = '*'
     s%predocmark = '>'
