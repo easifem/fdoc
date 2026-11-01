@@ -248,6 +248,12 @@ subroutine test_paths(error)
     type(error_type), allocatable, intent(out) :: error  !! the failure, if any
     call check(error, resolve_path('/', './no-such-dir-fdoc/a/../b'), '/no-such-dir-fdoc/b')
     if (allocated(error)) return
+    call check(error, resolve_path('C:\a\b', '..\c'), 'C:/a/c')
+    if (allocated(error)) return
+    call check(error, resolve_path('C:/a', 'D:\z'), 'D:/z')
+    if (allocated(error)) return
+    call check(error, resolve_path('C:\a', '.'), 'C:/a')
+    if (allocated(error)) return
     call check(error, expand_vars('a$FDOC_SURELY_UNSET/b'), 'a$FDOC_SURELY_UNSET/b')
 end subroutine test_paths
 

@@ -1,9 +1,8 @@
 module fdoc_util
 !! String, date and path helpers shared by the rest of fdoc.
-use, intrinsic :: iso_c_binding, only: c_char, c_null_char, c_ptr, c_associated, c_null_ptr, c_size_t, c_f_pointer
 use, intrinsic :: iso_fortran_env, only: int64
 use ffmt_strings, only: string_t, lowercase
-use ffmt_fs, only: absolute_path, join_path, parent_directory
+use ffmt_fs, only: absolute_path, join_path
 implicit none
 private
 
@@ -15,27 +14,6 @@ public :: parse_bool, parse_int, expand_vars, strftime, resolve_path, sort_strin
 public :: top_split, top_index, closing_paren, remove_blanks, starts_word, word_at, push_int
 
 character(len=*), parameter :: WHITESPACE = ' '//achar(9)//achar(10)//achar(11)//achar(12)//achar(13)
-
-interface
-    !> C `realpath`: the canonical form of a path.
-    function c_realpath(path, resolved) bind(c, name='realpath') result(p)
-        import :: c_char, c_ptr
-        character(kind=c_char), intent(in) :: path(*)   !! the path, null-terminated
-        type(c_ptr), value :: resolved                  !! buffer, or null to allocate one
-        type(c_ptr) :: p
-    end function c_realpath
-    !> C `free`.
-    subroutine c_free(p) bind(c, name='free')
-        import :: c_ptr
-        type(c_ptr), value :: p     !! the memory to release
-    end subroutine c_free
-    !> C `strlen`.
-    function c_strlen(p) bind(c, name='strlen') result(n)
-        import :: c_ptr, c_size_t
-        type(c_ptr), value :: p     !! the null-terminated string
-        integer(c_size_t) :: n
-    end function c_strlen
-end interface
 
 
 type :: name_index_t
@@ -565,46 +543,51 @@ function expand_vars(path) result(out)
     end do
 end function expand_vars
 
-!> The absolute form of `path` relative to directory `base`, with variables expanded, links
-!> resolved and `.` and `..` removed. The trailing components do not have to exist.
+!> The absolute form of `path` relative to directory `base`, with variables expanded and `.` and `..`
+!> removed, and with `/` as the separator on paths with a drive letter. Links are left as they are, and
+!> the path does not have to exist.
 function resolve_path(base, path) result(out)
     character(len=*), intent(in) :: base    !! directory for relative paths
     character(len=*), intent(in) :: path    !! the path
-    character(len=:), allocatable :: out, head, tail, real
-    integer :: guard
+    character(len=:), allocatable :: out, head
+    integer :: k
 
     head = expand_vars(path)
-    if (head(1:min(1, len(head))) /= '/') head = absolute_path(join_path(base, head))
-    tail = ''
-    do guard = 1, 4096
-        real = real_path(head)
-        if (len(real) > 0) exit
-        if (head == '/' .or. len(head) == 0) then
-            real = '/'
-            exit
-        end if
-        if (len(tail) > 0) tail = '/'//tail
-        tail = base_name(head)//tail
-        head = parent_directory(head)
-    end do
-    out = lexical_clean(real//'/'//tail)
+    if (.not. has_root(head)) head = absolute_path(join_path(base, head))
+    if (has_drive(head)) then
+        do k = 1, len(head)
+            if (head(k:k) == '\') head(k:k) = '/'
+        end do
+    end if
+    out = lexical_clean(head)
 end function resolve_path
 
-!> The part of `path` after its last `/`.
-pure function base_name(path) result(name)
+!> True if `path` starts with a drive letter, as in `C:`.
+pure logical function has_drive(path)
     character(len=*), intent(in) :: path    !! the path
-    character(len=:), allocatable :: name
-    name = path(index(path, '/', back=.true.) + 1:)
-end function base_name
+
+    has_drive = .false.
+    if (len(path) < 2) return
+    has_drive = path(2:2) == ':' .and. verify(path(1:1), 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ') == 0
+end function has_drive
+
+!> True if `path` is absolute.
+pure logical function has_root(path)
+    character(len=*), intent(in) :: path    !! the path
+
+    has_root = has_drive(path)
+    if (len(path) > 0) has_root = has_root .or. path(1:1) == '/'
+end function has_root
 
 !> Remove empty, `.` and `..` components from absolute `path`.
 function lexical_clean(path) result(out)
     character(len=*), intent(in) :: path    !! the path
     character(len=:), allocatable :: out
     type(string_t), allocatable :: parts(:), kept(:)
-    integer :: k, n
+    integer :: k, n, first
 
-    parts = split_on(path, '/')
+    first = merge(3, 1, has_drive(path))
+    parts = split_on(path(first:), '/')
     allocate (kept(size(parts)))
     n = 0
     do k = 1, size(parts)
@@ -616,30 +599,8 @@ function lexical_clean(path) result(out)
         n = n + 1
         kept(n)%s = parts(k)%s
     end do
-    out = '/'//join(kept(1:n), '/')
+    out = path(:first - 1)//'/'//join(kept(1:n), '/')
 end function lexical_clean
-
-!> The `realpath` of `path`, or `''` if it does not exist.
-function real_path(path) result(out)
-    character(len=*), intent(in) :: path    !! the path
-    character(len=:), allocatable :: out
-    character(kind=c_char), pointer :: chars(:)
-    type(c_ptr) :: p
-    integer :: k, n
-
-    p = c_realpath(path//c_null_char, c_null_ptr)
-    if (.not. c_associated(p)) then
-        out = ''
-        return
-    end if
-    n = int(c_strlen(p))
-    call c_f_pointer(p, chars, [n])
-    allocate (character(len=n) :: out)
-    do k = 1, n
-        out(k:k) = chars(k)
-    end do
-    call c_free(p)
-end function real_path
 
 !> The current local time in a `strftime` format.
 function strftime(format) result(out)

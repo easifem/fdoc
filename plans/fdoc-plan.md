@@ -10,8 +10,8 @@ stands in the way is listed in M9.
 **Requirement: portable, standard Fortran.** fdoc must be able to build with other compilers, such as
 ifx, though only gfortran is tested for now. Compiler extensions are not used, which `pixi run
 check-standard` checks with `-std=f2018`. C library routines are used only for what has no Fortran
-equivalent: sleeping (`usleep`), detecting a terminal (`isatty`), resolving paths (`realpath`, with
-`free` and `strlen`) and listing directories (`opendir`, `readdir`, `closedir`, in fformat).
+equivalent: sleeping (`usleep`), detecting a terminal (`isatty`), and in fformat listing directories
+(`opendir`, `readdir`, `closedir`) and the current directory (`getcwd`).
 
 **Requirement: test in the pixi env.** The pixi env is what users run, so results count only from
 that configuration, with the exact compiler and runtime in `pixi.lock`.
@@ -292,8 +292,8 @@ What is not supported stops with an error naming it, and the file is read as it 
     `[ -d ... ]`, `command -v dot`, single quotes, and `/dev/null` (`fdoc_site`, `fdoc_graphs`,
     `fdoc_output`, `fdoc_project`, `fdoc_input`). Replace these with file operations in Fortran, or
     through the C library, rather than one command per platform.
-  - POSIX functions: `realpath`, `usleep` and `isatty` in fdoc, and `opendir`, `readdir`, `closedir`
-    and `getcwd` in fformat, need Windows equivalents.
+  - POSIX functions: `usleep` and `isatty` in fdoc, and `opendir`, `readdir`, `closedir` and `getcwd`
+    in fformat, need checking on Windows.
   - Paths: backslashes, drive letters and case-insensitive names, in settings, `exclude` and URLs.
   - Text: CRLF line endings, and UTF-8 paths.
   - `execute_command_line(wait=.false.)` is expected to run in turn on Windows. Check that, and the
