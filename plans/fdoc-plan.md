@@ -2,6 +2,11 @@
 
 Scope: **free-form Fortran only for now.** Fixed-form input is deferred (see M8).
 
+**Requirement: fdoc must run on Windows, macOS and Linux.** This applies to the program, its tests and
+its output, not only to the build. Code must not depend on a Unix shell or POSIX-only functions
+unless a tested alternative exists for each platform. It has only been tested on macOS so far; what
+stands in the way is listed in M9.
+
 Goal: `fdoc ford.md` takes the same project file, flags and doc comments as FORD and produces a
 clean, modern HTML site, fast. It runs from a single Fortran binary with no Python at runtime.
 
@@ -268,6 +273,20 @@ What is not supported stops with an error naming it, and the file is read as it 
   links (checked by script), accepted differences listed.
 - After that, move `ford` and `python` in `pixi.toml` to a `compare` feature, so the default env
   has no Python. Provide `ford` as a pixi task or symlink for scripts that call it by name.
+- Platforms: Windows, macOS and Linux are all required, and the bar for swapping includes the tests
+  and a corpus run on each, in CI. Known work:
+  - Shell commands through `execute_command_line`, in `sh` syntax: `mkdir -p`, `rm -rf`, `cp`, `cp -R`,
+    `[ -d ... ]`, `command -v dot`, single quotes, and `/dev/null` (`fdoc_site`, `fdoc_graphs`,
+    `fdoc_output`, `fdoc_project`, `fdoc_input`). Replace these with file operations in Fortran, or
+    through the C library, rather than one command per platform.
+  - POSIX functions: `realpath`, `getpid`, `usleep` and `isatty` in fdoc, and `opendir`, `readdir`,
+    `closedir` and `getcwd` in fformat, need Windows equivalents.
+  - Paths: backslashes, drive letters and case-insensitive names, in settings, `exclude` and URLs.
+  - Text: CRLF line endings, and UTF-8 paths.
+  - `execute_command_line(wait=.false.)` is expected to run in turn on Windows. Check that, and the
+    speed of graph layout there.
+  - A preprocessor default that works where `gfortran -E` does, and `curl` for external projects,
+    which may need to be optional.
 
 Suggested order: M0 → M1 → M2 → M3, then M4 and M5 together with a first usable site at the end of
 M5. M6–M8 are independent.
@@ -300,5 +319,5 @@ Targets, not results. `pixi run bench` tracks them from M2 on.
 | Fypp sources aren't valid Fortran, and Fypp is Python | `fdoc_fypp` ports what stdlib needs; what it lacks is reported as an error (see M8) |
 | Scaling past 4 threads is unknown; earlier numbers were affected by the defect | Reuse buffers in parallel stages; measure at M4 |
 | gfortran-only behavior | Only gfortran is supported through the pixi env for v1 |
-| Windows: `win-64` is in `pixi.toml`, but `ffmt_fs` binds POSIX `opendir`/`readdir`, untested there | Test at M0. If it fails, drop `win-64` until v1 or fix upstream |
+| Windows is required but untested: `win-64` is in `pixi.toml`, but `ffmt_fs` binds POSIX `opendir`/`readdir` | Test at M0. If it fails, drop `win-64` until v1 or fix upstream |
 | gfortran deferred-length defect reaches a parallel stage | A `check-threads` tool (with M4, the first parallel code) fails if parallel modules contain `slen.` symbols; retest `slen_race` on compiler upgrades |
