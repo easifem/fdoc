@@ -77,7 +77,6 @@ h2 + .item { border-top: 0; padding-top: 0; }
 .item > h3 { margin: 0 0 .2rem; font-size: 1rem; font-family: var(--mono); overflow-wrap: anywhere; }
 .badge { display: inline-block; font: 600 .68rem/1.5 var(--sans); padding: 0 .4rem; margin-left: .4rem; border-radius: 4px;
   background: var(--bg-soft); color: var(--muted); border: 1px solid var(--line); vertical-align: middle; }
-.badge.private { color: var(--warn); } .badge.deprecated { color: var(--bad); }
 table { border-collapse: collapse; width: 100%; font-size: .92rem; margin: .7rem 0 1rem; }
 th { text-align: left; font-weight: 600; color: var(--muted); }
 th, td { padding: .35rem .7rem .35rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -150,7 +149,8 @@ td.default { font-family: var(--mono); font-size: .84em; min-width: 11rem; max-w
   background: hsla(var(--h), var(--s), var(--attr-l), .12); border: 1px solid hsla(var(--h), var(--s), var(--attr-l), .35); }
 .attr-in, .attr-out, .attr-inout, .attr-optional, .attr-pointer, .attr-allocatable, .attr-value, .attr-target,
 .attr-dimension, .attr-contiguous, .attr-volatile, .attr-asynchronous, .attr-save, .attr-parameter,
-.attr-protected, .attr-codimension, .attr-private { --s: 62%; }
+.attr-protected, .attr-codimension, .attr-private, .attr-generic, .attr-deferred, .attr-nopass, .attr-pass,
+.attr-non, .attr-deprecated, .attr-subroutine, .attr-function, .attr-interface { --s: 62%; }
 .attr-in { --h: 210; } .attr-out { --h: 25; } .attr-inout { --h: 275; }
 .attr-optional { --h: 180; } .attr-pointer { --h: 0; } .attr-allocatable { --h: 125; } .attr-value { --h: 45; }
 .attr-target { --h: 325; } .attr-dimension { --h: 85; } .attr-contiguous { --h: 150; } .attr-volatile { --h: 345; }
@@ -158,3 +158,10 @@ td.default { font-family: var(--mono); font-size: .84em; min-width: 11rem; max-w
 .attr-codimension { --h: 105; }
 .graph text { stroke: none; }
 .attr-private { --h: 15; --s: 40%; }
+.attr-generic { --h: 265; } .attr-deferred { --h: 35; } .attr-nopass { --h: 200; } .attr-pass { --h: 160; }
+.attr-non { --h: 55; } .attr-deprecated { --h: 355; } .attr-subroutine { --h: 155; } .attr-function { --h: 188; }
+.attr-interface { --h: 258; }
+td.binds { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; max-width: 20rem; }
+.listing th { white-space: nowrap; }
+.listing td.link { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; }
+.item h3 .attr, h1 .attr { margin-left: .5rem; vertical-align: middle; }

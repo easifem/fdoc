@@ -30,6 +30,10 @@ character(len=*), parameter :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'So
                                                         'Abstract Interfaces', 'Derived Types', 'Programs', 'Block Data', &
                                                         'Namelists']
 
+character(len=*), parameter :: LIST_NOUN(NUM_LISTS) = [character(len=18) :: 'File', 'Module', 'Procedure', &
+                                                       'Abstract Interface', 'Type', 'Program', 'Block Data Unit', &
+                                                       'Namelist']
+
 type :: index_list_t
     !! Entities, by index.
     integer, allocatable :: ids(:)              !! the entities
@@ -639,7 +643,7 @@ subroutine entity_title(site, id, word, b)
         call html_escape(display_name(e), b, .false.)
         if (allocated(e%permission)) then
             if (e%permission /= 'public' .and. e%kind /= E_MODULE .and. e%kind /= E_SUBMODULE .and. e%kind /= E_FILE .and. &
-                e%kind /= E_PROGRAM) call add(b, '<span class="badge private">'//e%permission//'</span>')
+                e%kind /= E_PROGRAM) call badge(e%permission, b)
         end if
         call add(b, '</h1>'//achar(10))
         open = .false.
@@ -654,7 +658,7 @@ subroutine entity_title(site, id, word, b)
             case ('deprecated')
                 if (.not. open) call add(b, '<div class="meta">')
                 open = .true.
-                call add(b, '<span class="badge deprecated">deprecated</span>')
+                call badge('deprecated', b)
             end select
         end do
         if (open) call add(b, '</div>'//achar(10))
@@ -797,6 +801,45 @@ subroutine argument_table(site, ids, components, b)
     call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
 end subroutine argument_table
 
+!> Write a table of type-bound procedures.
+subroutine binding_table(site, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: ids(:)           !! the bindings
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k, j
+
+    call add(b, '<table class="arguments">'//achar(10)//'<thead><tr><th>Name</th><th>Binds to</th><th>Attributes</th>')
+    call add(b, '<th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
+    do k = 1, size(ids)
+        associate (t => site%p%list%box(ids(k))%e)
+            call add(b, '<tr id="')
+            call anchor(site, ids(k), b)
+            call add(b, '"><td class="name">')
+            call html_escape(t%name, b, .false.)
+            call add(b, '</td><td class="binds">')
+            if (allocated(t%proto_text)) then
+                call link_to(site, t%proto_id, t%proto_text, b)
+            else if (allocated(t%binding_ids) .and. .not. t%deferred) then
+                do j = 1, size(t%binding_ids)
+                    if (j > 1) call add(b, ', ')
+                    call link_to(site, t%binding_ids(j), t%bindings(j)%s, b)
+                end do
+            end if
+            call add(b, '</td><td class="attributes">')
+            if (t%generic) call badge('generic', b)
+            if (t%deferred) call badge('deferred', b)
+            if (t%permission /= 'public') call badge(t%permission, b)
+            do j = 1, size(t%attribs)
+                call badge(t%attribs(j)%s, b)
+            end do
+            call add(b, '</td><td>')
+            if (allocated(t%html)) call add(b, t%html)
+            call add(b, '</td></tr>'//achar(10))
+        end associate
+    end do
+    call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
+end subroutine binding_table
+
 !> Write the attributes of argument `e`.
 subroutine argument_attributes(e, b)
     type(entity_t), intent(in) :: e     !! the argument
@@ -910,7 +953,7 @@ subroutine summary_item(site, id, b)
         call add(b, '"><h3>')
         call link_to(site, id, e%name, b)
         if (allocated(e%permission)) then
-            if (e%permission /= 'public') call add(b, '<span class="badge private">'//e%permission//'</span>')
+            if (e%permission /= 'public') call badge(e%permission, b)
         end if
         call add(b, '</h3>'//achar(10))
         select case (e%kind)
@@ -1385,29 +1428,7 @@ subroutine type_body(site, id, variables, bindings, finals, b)
         end if
         if (size(bindings) > 0) then
             call add(b, '<h2 id="bindings">Type-bound procedures</h2>'//achar(10))
-            do k = 1, size(bindings)
-                associate (t => site%p%list%box(bindings(k))%e)
-                    call add(b, '<div class="item" id="')
-                    call anchor(site, bindings(k), b)
-                    call add(b, '"><h3>')
-                    call html_escape(t%name, b, .false.)
-                    if (t%generic) call add(b, '<span class="badge">generic</span>')
-                    if (t%deferred) call add(b, '<span class="badge">deferred</span>')
-                    if (t%permission /= 'public') call add(b, '<span class="badge private">'//t%permission//'</span>')
-                    call add(b, '</h3>'//achar(10))
-                    if (allocated(t%html)) call add(b, t%html)
-                    if (allocated(t%binding_ids)) then
-                        call add(b, '<ul class="chips">')
-                        do j = 1, size(t%binding_ids)
-                            call add(b, '<li>')
-                            call link_to(site, t%binding_ids(j), t%bindings(j)%s, b)
-                            call add(b, '</li>')
-                        end do
-                        call add(b, '</ul>')
-                    end if
-                    call add(b, achar(10)//'</div>'//achar(10))
-                end associate
-            end do
+            call binding_table(site, bindings, b)
         end if
         if (size(finals) > 0) then
             call add(b, '<h2 id="final">Final procedures</h2>'//achar(10)//'<ul class="chips">')
@@ -1509,6 +1530,56 @@ subroutine site_side(site, here, prefix, full, b)
     end do
 end subroutine site_side
 
+!> Write the columns of a list page between the name and the description.
+subroutine list_columns(site, which, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: which            !! the list
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (e => site%p%list%box(id)%e)
+        select case (which)
+        case (LIST_MODULES, LIST_PROGRAMS, LIST_BLOCKDATA)
+            call location(e%file)
+        case (LIST_PROCEDURES)
+            call location(e%parent)
+            call add(b, '<td>')
+            select case (e%kind)
+            case (E_SUBROUTINE, E_FUNCTION)
+                if (e%iface /= IFACE_NONE) then
+                    call badge('interface', b)
+                else
+                    call badge(merge('function  ', 'subroutine', e%kind == E_FUNCTION), b)
+                end if
+            case (E_INTERFACE)
+                call badge('interface', b)
+            case default
+                call badge('procedure', b)
+            end select
+            call add(b, '</td>')
+        case (LIST_ABSINT, LIST_NAMELISTS)
+            call location(e%parent)
+        case (LIST_TYPES)
+            call location(e%parent)
+            call add(b, '<td class="link">')
+            if (allocated(e%extends)) call link_to(site, e%extends_id, e%extends, b)
+            call add(b, '</td>')
+        end select
+    end associate
+
+contains
+
+    !> Write a column linking to entity `where`.
+    subroutine location(where)
+        integer, intent(in) :: where    !! the entity
+
+        call add(b, '<td class="link">')
+        if (where > 0) call link_to(site, where, display_name(site%p%list%box(where)%e), b)
+        call add(b, '</td>')
+    end subroutine location
+
+end subroutine list_columns
+
 !> Render list page `which`.
 subroutine list_page(site, which, html)
     type(site_t), intent(in) :: site                    !! the site
@@ -1523,10 +1594,18 @@ subroutine list_page(site, which, html)
     call site_side(site, which, '../', .true., b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
     call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
-    do k = 1, size(site%graphs%graphs)
-        if (site%graphs%graphs(k)%list_page == which) call write_graph(site, k, b)
-    end do
-    call add(b, '<table class="listing">'//achar(10)//'<tbody>'//achar(10))
+    call add(b, '<table class="listing">'//achar(10)//'<thead><tr><th>'//trim(LIST_NOUN(which))//'</th>')
+    select case (which)
+    case (LIST_MODULES, LIST_PROGRAMS, LIST_BLOCKDATA)
+        call add(b, '<th>Source File</th>')
+    case (LIST_PROCEDURES)
+        call add(b, '<th>Location</th><th>Type</th>')
+    case (LIST_ABSINT, LIST_NAMELISTS)
+        call add(b, '<th>Location</th>')
+    case (LIST_TYPES)
+        call add(b, '<th>Location</th><th>Extends</th>')
+    end select
+    call add(b, '<th>Description</th></tr></thead>'//achar(10)//'<tbody>'//achar(10))
     do k = 1, size(site%members(which)%ids)
         associate (id => site%members(which)%ids(k))
             call entity_url(site%p%list, id, url)
@@ -1534,12 +1613,17 @@ subroutine list_page(site, which, html)
             call html_escape(url, b, .true.)
             call add(b, '">')
             call html_escape(display_name(site%p%list%box(id)%e), b, .false.)
-            call add(b, '</a></td><td>')
+            call add(b, '</a></td>')
+            call list_columns(site, which, id, b)
+            call add(b, '<td>')
             if (allocated(site%p%list%box(id)%e%summary)) call add(b, site%p%list%box(id)%e%summary)
             call add(b, '</td></tr>'//achar(10))
         end associate
     end do
     call add(b, '</tbody>'//achar(10)//'</table>'//achar(10))
+    do k = 1, size(site%graphs%graphs)
+        if (site%graphs%graphs(k)%list_page == which) call write_graph(site, k, b)
+    end do
     call page_foot(site, b)
     call take(b, html)
 end subroutine list_page
