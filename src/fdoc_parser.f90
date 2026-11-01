@@ -623,6 +623,7 @@ subroutine doxygen_meta(line, moved)
     character(len=len(line)) :: text
     integer :: at, stop_at
 
+    if (len(line) == 0) return
     text = adjustl(line)
     if (text(1:1) /= '@') return
     stop_at = index(trim(text), ' ')

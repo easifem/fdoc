@@ -171,6 +171,7 @@ pixi run check-docs      # check that every routine and argument is documented
 pixi run check-threads   # check that code running in parallel is thread-safe
 pixi run check-standard  # check that the code is standard Fortran, with no extensions
 pixi run check-links doc # check the links of a generated site
+pixi run test-projects   # run fdoc on real projects, each pinned to a commit
 pixi run gen-assets      # regenerate src/fdoc_assets.f90 after changing assets/
 ```
 

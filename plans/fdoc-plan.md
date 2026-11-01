@@ -287,7 +287,7 @@ What is not supported stops with an error naming it, and the file is read as it 
 - After that, move `ford` and `python` in `pixi.toml` to a `compare` feature, so the default env
   has no Python. Provide `ford` as a pixi task or symlink for scripts that call it by name.
 - Platforms: Windows, macOS and Linux are all required, and the bar for swapping includes the tests
-  and a corpus run on each, in CI. Known work:
+  and `pixi run test-projects` on each, in CI, where Windows does not count yet. Known work:
   - Shell commands through `execute_command_line`, in `sh` syntax: `mkdir -p`, `rm -rf`, `cp`, `cp -R`,
     `[ -d ... ]`, `command -v dot`, single quotes, and `/dev/null` (`fdoc_site`, `fdoc_graphs`,
     `fdoc_output`, `fdoc_project`, `fdoc_input`). Replace these with file operations in Fortran, or

@@ -69,3 +69,4 @@ Testing/
 
 .DS_Store
 /doc
+*.pyc

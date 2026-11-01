@@ -444,7 +444,8 @@ subroutine stash_fenced_code(t, lines, options)
             fence = lines(k)%s(1:1)
             do j = k + 1, size(lines)
                 m = fence_length(lines(j)%s)
-                if (m >= n .and. lines(j)%s(1:1) == fence .and. len(strip(lines(j)%s(m + 1:))) == 0) exit
+                if (m < n) cycle
+                if (lines(j)%s(1:1) == fence .and. len(strip(lines(j)%s(m + 1:))) == 0) exit
             end do
             if (j > size(lines)) j = 0
         end if
