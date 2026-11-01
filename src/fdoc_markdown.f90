@@ -1783,7 +1783,8 @@ recursive subroutine render_heading(t, tag, attrs, text, options, out)
     call add(out, '</'//tag//'>')
 end subroutine render_heading
 
-!> An id for a heading with text `html`, not used before.
+!> An id for a heading with text `html`, not used before. Like Python-Markdown's `slugify`, this drops
+!> punctuation and turns each run of blanks and hyphens into one hyphen.
 subroutine unique_id(t, html, id)
     type(tree_t), intent(inout) :: t                !! the conversion
     character(len=*), intent(in) :: html            !! the heading
@@ -1791,31 +1792,40 @@ subroutine unique_id(t, html, id)
     type(buffer_t) :: b
     character(len=:), allocatable :: base
     character(len=12) :: number
-    logical :: in_tag, last_blank
-    integer :: k, n
+    logical :: in_tag, separated, hyphen
+    integer :: k, n, semicolon
 
     in_tag = .false.
-    last_blank = .false.
-    do k = 1, len(html)
+    separated = .false.
+    hyphen = .false.
+    k = 0
+    do while (k < len(html))
+        k = k + 1
         associate (c => html(k:k))
             if (c == '<') in_tag = .true.
             if (in_tag) then
                 if (c == '>') in_tag = .false.
                 cycle
             end if
-            if (index(WORD_CHARS//'-', c) > 0) then
-                if (last_blank .and. b%n > 0) call add(b, '-')
-                last_blank = .false.
+            if (c == '&') then
+                semicolon = index(html(k:min(k + 9, len(html))), ';')
+                if (semicolon > 0) k = k + semicolon - 1
+            else if (c == '-' .or. c == ' ' .or. c == achar(9) .or. c == achar(10)) then
+                separated = .true.
+                hyphen = hyphen .or. c == '-'
+            else if (index(WORD_CHARS, c) > 0) then
+                if (separated .and. (b%n > 0 .or. hyphen)) call add(b, '-')
+                separated = .false.
+                hyphen = .false.
                 call add(b, lower_one(c))
-            else if (c == ' ') then
-                last_blank = .true.
             end if
         end associate
     end do
+    if (hyphen) call add(b, '-')
     call take(b, base)
     id = base
     n = 0
-    do while (contains_string(t%ids, id))
+    do while (contains_string(t%ids, id) .or. len(id) == 0)
         n = n + 1
         write (number, '(i0)') n
         id = base//'_'//trim(number)

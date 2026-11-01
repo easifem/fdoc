@@ -5,7 +5,7 @@ A documentation generator for modern Fortran, written in modern Fortran.
 fdoc reads the same project files and doc comments as [FORD](https://github.com/Fortran-FOSS-Programmers/ford), so it can take over from FORD on an existing project without changing the code. It runs from a single binary, with no Python, and generates a site 50 to 130 times faster.
 
 * **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
-* **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, so existing links keep working.
+* **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, apart from a few [listed below](#differences-from-ford), so existing links keep working.
 * **Clean output.** Light and dark themes, a layout that works on a phone, and instant search with typo tolerance. The site needs no framework, and its CSS and JavaScript are built into the program.
 * **Small output.** Sites take about a third of the space of FORD's.
 
@@ -109,6 +109,7 @@ end function add
 * **Whole-project graphs of more than 400 nodes are left out,** with a warning, as they are slow to lay out and hard to read. The setting `graph_project_maxnodes` changes the limit.
 * **Text after a `<`, as in `x<y`, is kept.** FORD's Markdown drops it.
 * **`externalize: false` is honored.** FORD's command line default overrides it.
+* **A few page URLs differ.** A generic interface named after its only procedure gets its own page in `interface/`, where FORD uses `proc/`, and that can shift the `~2` numbers of other pages with the same name.
 * **Calls are found from tokens,** so fdoc finds a few that FORD's regular expressions miss.
 
 ## Benchmarks

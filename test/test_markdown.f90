@@ -128,6 +128,14 @@ subroutine test_toc(error)
     call expect(error, '[TOC]'//NL//NL//'# One Two', '<div class="toc">'//NL//'<ul>'//NL// &
                 '<li><a href="#one-two">One Two</a></li>'//NL//'</ul>'//NL//'</div>'//NL// &
                 '<h1 id="one-two">One Two</h1>', options)
+    if (allocated(error)) return
+    call expect(error, '# `and` - bitwise', '<h1 id="and-bitwise"><code>and</code> - bitwise</h1>', options)
+    if (allocated(error)) return
+    call expect(error, '# C++ & co!', '<h1 id="c-co">C++ &amp; co!</h1>', options)
+    if (allocated(error)) return
+    call expect(error, '# a  --  b', '<h1 id="a-b">a  --  b</h1>', options)
+    if (allocated(error)) return
+    call expect(error, '# x_y - Z', '<h1 id="x_y-z">x_y - Z</h1>', options)
 end subroutine test_toc
 
 !> Checks: typographic punctuation.

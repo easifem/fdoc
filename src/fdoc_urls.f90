@@ -8,7 +8,7 @@ use fdoc_model
 implicit none
 private
 
-public :: page_name, object_word, entity_url, link_context_t, resolve_link, url_quote
+public :: page_name, object_word, entity_url, link_context_t, resolve_link, url_quote, is_shown
 
 type :: link_context_t
     !! Where a `[[name]]` link is being read.
@@ -249,6 +249,35 @@ integer function find_anywhere(list, name, entity) result(found)
     end do
 end function find_anywhere
 
+!> True if `item` and everything that holds it are shown.
+pure logical function is_shown(list, item)
+    type(entity_list_t), intent(in) :: list !! the entities
+    integer, intent(in) :: item             !! the entity
+    integer :: k
+
+    is_shown = .true.
+    k = item
+    do while (k > 0)
+        if (.not. list%box(k)%e%visible) is_shown = .false.
+        k = list%box(k)%e%parent
+    end do
+end function is_shown
+
+!> Replace `item` by what holds it, if it is inside something not shown, which has no page.
+pure subroutine shown_entity(list, item)
+    type(entity_list_t), intent(in) :: list !! the entities
+    integer, intent(inout) :: item          !! the entity
+    integer :: k, parent
+
+    if (allocated(list%box(item)%e%external_url)) return
+    k = item
+    do while (k > 0)
+        parent = list%box(k)%e%parent
+        if (.not. list%box(k)%e%visible .and. parent > 0) item = parent
+        k = parent
+    end do
+end subroutine shown_entity
+
 !> Find what a `[[name]]` link means: see [[link_resolver]] in [[fdoc_markdown]].
 subroutine resolve_link(data, name, entity, child, child_entity, url, text, found)
     class(*), intent(in) :: data                        !! a [[link_context_t]]
@@ -287,6 +316,7 @@ subroutine resolve_link(data, name, entity, child, child_entity, url, text, foun
                 label = data%list%box(item)%e%name
             end if
         end if
+        call shown_entity(data%list, item)
         call entity_url(data%list, item, url)
         ! something not shown has no anchor to go to: link to the page around it
         do while (len(url) == 0 .and. data%list%box(item)%e%parent > 0)

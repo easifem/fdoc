@@ -3,6 +3,7 @@ module test_parser
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_model
 use fdoc_parser, only: parse_file
+use fdoc_project, only: project_t, prune
 use fdoc_settings, only: settings_t, new_settings
 use fdoc_util, only: join, lowercase
 implicit none
@@ -34,7 +35,8 @@ subroutine collect_parser(testsuite)
                 new_unittest("several bindings on a line", test_several_bindings), &
                 new_unittest("common blocks", test_common), &
                 new_unittest("calls", test_calls), &
-                new_unittest("calls through associate", test_associate_calls) &
+                new_unittest("calls through associate", test_associate_calls), &
+                new_unittest("private modules stay visible", test_private_module) &
                 ]
 end subroutine collect_parser
 
@@ -76,6 +78,25 @@ subroutine test_post_doc(error)
     if (allocated(error)) return
     call check(error, join(l%box(m)%e%doc, '|'), ' first| second')
 end subroutine test_post_doc
+
+!> Checks: a `private` statement hides what a module holds, not the module.
+subroutine test_private_module(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(project_t) :: p
+    integer :: m, x
+
+    call parse('module m'//NL//'private'//NL//'integer :: x'//NL//'end module m'//NL, p%list)
+    call prune(p, new_settings())
+    m = find(p%list, E_MODULE, 'm')
+    call check(error, m > 0)
+    if (allocated(error)) return
+    call check(error, p%list%box(m)%e%visible, 'the module is shown')
+    if (allocated(error)) return
+    x = find(p%list, E_VARIABLE, 'x')
+    call check(error, x > 0)
+    if (allocated(error)) return
+    call check(error, .not. p%list%box(x)%e%visible, 'its private variable is not')
+end subroutine test_private_module
 
 !> Checks: doc comments before a statement.
 subroutine test_pre_doc(error)

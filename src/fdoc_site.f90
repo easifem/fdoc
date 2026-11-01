@@ -11,7 +11,7 @@ use fdoc_project, only: project_t
 use fdoc_pages, only: page_t
 use fdoc_graphs, only: graph_set_t, build_graphs
 use json_module, only: json_core, json_value
-use fdoc_urls, only: entity_url, object_word, page_name, url_quote
+use fdoc_urls, only: entity_url, object_word, page_name, url_quote, is_shown
 use fdoc_highlight, only: highlight_fortran
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
 use fdoc_progress, only: progress_start, progress_tick, progress_finish
@@ -295,7 +295,7 @@ subroutine link_to(site, id, name, b)
     url = ''
     if (id > 0) then
         associate (e => site%p%list%box(id)%e)
-            if (e%visible .or. allocated(e%external_url)) call entity_url(site%p%list, id, url)
+            if (is_shown(site%p%list, id) .or. allocated(e%external_url)) call entity_url(site%p%list, id, url)
         end associate
     end if
     if (len(url) == 0) then

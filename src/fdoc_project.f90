@@ -726,7 +726,7 @@ subroutine prune(p, s)
             if (.not. allocated(e%permission)) cycle
             associate (parent => p%list%box(e%parent)%e)
                 if (e%kind == E_VARIABLE .and. e%var_role /= VAR_PLAIN) cycle
-                if (allocated(parent%display)) then
+                if (allocated(parent%display) .and. .not. is_program_unit(e%kind)) then
                     if (.not. contains_string(parent%display, e%permission)) e%visible = .false.
                 end if
                 if (s%hide_undoc .and. size(e%doc) == 0) e%visible = .false.
@@ -737,5 +737,12 @@ subroutine prune(p, s)
         end associate
     end do
 end subroutine prune
+
+!> True if entities of `kind` are program units. The permission of a module is what its members get
+!> by default, so `display` says nothing about whether the module itself is shown.
+pure logical function is_program_unit(kind)
+    integer, intent(in) :: kind     !! the kind of entity
+    is_program_unit = kind == E_MODULE .or. kind == E_SUBMODULE .or. kind == E_PROGRAM .or. kind == E_BLOCKDATA
+end function is_program_unit
 
 end module fdoc_project
