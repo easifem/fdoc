@@ -265,3 +265,13 @@
     });
   });
 })();
+
+// a link to something inside a closed section opens the section
+function openTarget() {
+  var id = decodeURIComponent(location.hash.slice(1));
+  var target = id && document.getElementById(id);
+  var section = target && target.closest('details');
+  if (section) { section.open = true; target.scrollIntoView(); }
+}
+window.addEventListener('hashchange', openTarget);
+window.addEventListener('DOMContentLoaded', openTarget);

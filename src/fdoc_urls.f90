@@ -5,10 +5,11 @@ module fdoc_urls
 !! deferred-length string (see `example/slen_race.f90`).
 use fdoc_util
 use fdoc_model
+use fdoc_buffer, only: buffer_t, add, html_escape
 implicit none
 private
 
-public :: page_name, object_word, entity_url, link_context_t, resolve_link, url_quote, index_entity_names, is_shown
+public :: page_name, object_word, entity_url, entity_anchor, link_context_t, resolve_link, url_quote, index_entity_names, is_shown
 
 type :: link_context_t
     !! Where a `[[name]]` link is being read.
@@ -82,6 +83,20 @@ subroutine object_word(e, word)
     end select
     if (is_procedure(e%kind) .and. e%iface /= IFACE_NONE) word = 'interface'
 end subroutine object_word
+
+!> Write the anchor of an entity in a page.
+subroutine entity_anchor(list, id, b)
+    type(entity_list_t), intent(in) :: list !! the entities
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    character(len=:), allocatable :: word, name, quoted
+
+    call object_word(list%box(id)%e, word)
+    call page_name(list%box(id)%e%name, name)
+    call url_quote(name, quoted)
+    call add(b, word//'-')
+    call html_escape(quoted, b, .true.)
+end subroutine entity_anchor
 
 !> The URL of an entity relative to the root of the site, or `''`.
 recursive subroutine entity_url(list, id, url)

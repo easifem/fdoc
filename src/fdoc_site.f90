@@ -9,8 +9,9 @@ use fdoc_project, only: project_t
 use fdoc_pages, only: page_t
 use fdoc_graphs, only: graph_set_t, build_graphs
 use json_module, only: json_core, json_value
-use fdoc_urls, only: entity_url, object_word, page_name, url_quote, is_shown
+use fdoc_urls, only: entity_url, entity_anchor, object_word, page_name, url_quote, is_shown
 use fdoc_highlight, only: highlight_fortran
+use fdoc_generics, only: write_call_forms
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
 use fdoc_progress, only: progress_start, progress_tick, progress_finish
 use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path
@@ -910,13 +911,8 @@ subroutine anchor(site, id, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the entity
     type(buffer_t), intent(inout) :: b      !! the HTML
-    character(len=:), allocatable :: word, name, quoted
 
-    call object_word(site%p%list%box(id)%e, word)
-    call page_name(site%p%list%box(id)%e%name, name)
-    call url_quote(name, quoted)
-    call add(b, word//'-')
-    call html_escape(quoted, b, .true.)
+    call entity_anchor(site%p%list, id, b)
 end subroutine anchor
 
 !> Write the graphs of entity `id`.
@@ -1478,10 +1474,26 @@ subroutine interface_body(site, id, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the interface
     type(buffer_t), intent(inout) :: b      !! the HTML
+    integer, allocatable :: specifics(:)
+    logical :: forms
     integer :: k
 
     associate (e => site%p%list%box(id)%e)
+        allocate (specifics(0))
+        do k = 1, size(e%more%modproc_ids)
+            if (e%more%modproc_ids(k) > 0) call push_int(specifics, e%more%modproc_ids(k))
+        end do
+        do k = 1, size(e%children)
+            if (site%p%list%box(e%children(k))%e%kind == E_NONE) cycle
+            if (allocated(site%p%list%box(e%children(k))%e%more%args)) call push_int(specifics, e%children(k))
+        end do
+        call write_call_forms(site%p%list, e%name, specifics, b, forms)
+
         call add(b, '<h2 id="procedures">Procedures</h2>'//achar(10))
+        if (forms) then
+            call add(b, '<details class="specifics"><summary>All '//trim(int_text(size(specifics)))// &
+                     ' procedures</summary>'//achar(10))
+        end if
         do k = 1, size(e%more%modproc_ids)
             if (e%more%modproc_ids(k) == 0) then
                 call add(b, '<div class="item"><h3>')
@@ -1495,6 +1507,7 @@ subroutine interface_body(site, id, b)
             if (site%p%list%box(e%children(k))%e%kind == E_NONE) cycle
             if (allocated(site%p%list%box(e%children(k))%e%more%args)) call summary_item(site, e%children(k), b)
         end do
+        if (forms) call add(b, '</details>'//achar(10))
     end associate
 end subroutine interface_body
 

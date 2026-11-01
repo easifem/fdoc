@@ -90,6 +90,13 @@ td.name { font-family: var(--mono); font-size: .88em; width: 24%; overflow-wrap:
 .alert-danger { border-color: var(--bad); } .alert-history { border-color: var(--hist); }
 blockquote { margin: 1rem 0; padding: 0 1rem; color: var(--muted); border-left: 3px solid var(--line); }
 img { max-width: 100%; }
+details.specifics { margin: .5rem 0 1rem; } details.specifics summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+details.specifics .item:first-of-type { border-top: 0; }
+.form { margin: 1rem 0 1.6rem; } .form .sig { margin-bottom: .4rem; }
+table.forms { width: auto; margin: .4rem 0 .5rem; } table.forms td.type, table.forms td.name { width: auto; white-space: nowrap; }
+table.forms td.rank, table.forms th.rank { text-align: center; padding-right: 1rem; white-space: nowrap; }
+table.forms td.rank a { text-decoration: none; }
+.fixed { color: var(--muted); font-size: .88rem; margin: .2rem 0 0; }
 details.source { margin: 1rem 0; } details.source summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .35rem; padding: 0; list-style: none; margin: .5rem 0 1rem; }
 .chips li { font-family: var(--mono); font-size: .82rem; background: var(--bg-soft); border: 1px solid var(--line);

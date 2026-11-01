@@ -78,44 +78,50 @@ subroutine asset_fdoc_css(b)
         //'; font-size: .9rem; }'//NL//'.alert-warning { border-color: var(--warn); } .alert-success { border-color: var' &
         //'(--ok); }'//NL//'.alert-danger { border-color: var(--bad); } .alert-history { border-color: var(--hist); }'//NL &
         //'blockquote { margin: 1rem 0; padding: 0 1rem; color: var(--muted); border-left: 3px solid var(--line); }'//NL &
-        //'img { max-width: 100%; }'//NL//'details.source { margin: 1rem 0; } details.source summary { cursor: pointer; ' &
-        //'color: var(--muted); font-size: .9rem; }'//NL//'.chips { display: flex; flex-wrap: wrap; gap: .35rem; padding' &
-        //': 0; list-style: none; margin: .5rem 0 1rem; }'//NL//'.chips li { font-family: var(--mono); font-size: .82rem' &
-        //'; background: var(--bg-soft); border: 1px solid var(--line);'//NL//'  border-radius: 5px; padding: 0 .45rem; ' &
-        //'}'//NL//'.listing td:first-child { font-family: var(--mono); font-size: .9em; white-space: nowrap; }'//NL//'.' &
-        //'listing td p { margin: 0; }'//NL//'.hero { background: var(--bg-soft); border: 1px solid var(--line); border-' &
-        //'radius: 10px; padding: .9rem 1.2rem 1rem;'//NL//'  margin-bottom: 1.4rem; }'//NL//'.hero { position: relative' &
-        //'; }'//NL//'.hero h1 { margin-right: 10rem; }'//NL//'.hero .meta { margin-bottom: .4rem; align-items: center; ' &
-        //'}'//NL//'.project-links { position: absolute; top: 1.1rem; right: 1.2rem; display: flex; gap: .55rem; }'//NL//'.' &
-        //'author-links { display: inline-flex; gap: .45rem; align-items: center; }'//NL//'.author-links:empty, .project' &
-        //'-links:empty { display: none; }'//NL//'.icon-link { display: inline-block; width: 1.1rem; height: 1.1rem; bac' &
-        //'kground: var(--muted);'//NL//'  -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / co' &
-        //'ntain no-repeat; }'//NL//'.project-links .icon-link { width: 1.35rem; height: 1.35rem; }'//NL//'.icon-link:ho' &
-        //'ver { background: var(--accent); }'//NL//'.grid { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0' &
-        //' 0; }'//NL//'.card { background: var(--bg); }'//NL//'.card { border: 1px solid var(--line); border-radius: 99' &
-        //'9px; padding: .05rem .65rem; color: var(--text); font-size: .84rem; white-space: nowrap; }'//NL//'.card:hover' &
-        //' { border-color: var(--accent); text-decoration: none; }'//NL//'.card b { margin-right: .3rem; font-weight: 6' &
-        //'50; } .card span { color: var(--muted); }'//NL//'pre.source { padding-left: 0; counter-reset: line; line-heig' &
-        //'ht: 1.45; }'//NL//'.ln { display: inline-block; width: 3.6em; margin-right: 1em; text-align: right; color: va' &
-        //'r(--muted); opacity: .6; user-select: none; }'//NL//'.ln::before { counter-increment: line; content: counter(' &
-        //'line); }'//NL//'.ln:target { color: var(--accent); opacity: 1; font-weight: 700; }'//NL//'footer { margin-top' &
-        //': 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }'//NL//'@' &
-        //'media (max-width: 860px) {'//NL//'  .layout { grid-template-columns: minmax(0, 1fr); }'//NL//'  aside.side { ' &
-        //'position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }'//NL &
+        //'img { max-width: 100%; }'//NL//'details.specifics { margin: .5rem 0 1rem; } details.specifics summary { curso' &
+        //'r: pointer; color: var(--muted); font-size: .9rem; }'//NL//'details.specifics .item:first-of-type { border-to' &
+        //'p: 0; }'//NL//'.form { margin: 1rem 0 1.6rem; } .form .sig { margin-bottom: .4rem; }'//NL//'table.forms { wid' &
+        //'th: auto; margin: .4rem 0 .5rem; } table.forms td.type, table.forms td.name { width: auto; white-space: nowra' &
+        //'p; }'//NL//'table.forms td.rank, table.forms th.rank { text-align: center; padding-right: 1rem; white-space: ' &
+        //'nowrap; }'//NL//'table.forms td.rank a { text-decoration: none; }'//NL//'.fixed { color: var(--muted); font-s' &
+        //'ize: .88rem; margin: .2rem 0 0; }'//NL//'details.source { margin: 1rem 0; } details.source summary { cursor: ' &
+        //'pointer; color: var(--muted); font-size: .9rem; }'//NL//'.chips { display: flex; flex-wrap: wrap; gap: .35rem' &
+        //'; padding: 0; list-style: none; margin: .5rem 0 1rem; }'//NL//'.chips li { font-family: var(--mono); font-siz' &
+        //'e: .82rem; background: var(--bg-soft); border: 1px solid var(--line);'//NL//'  border-radius: 5px; padding: 0' &
+        //' .45rem; }'//NL//'.listing td:first-child { font-family: var(--mono); font-size: .9em; white-space: nowrap; }' &
+        //NL//'.listing td p { margin: 0; }'//NL//'.hero { background: var(--bg-soft); border: 1px solid var(--line); bo' &
+        //'rder-radius: 10px; padding: .9rem 1.2rem 1rem;'//NL//'  margin-bottom: 1.4rem; }'//NL//'.hero { position: rel' &
+        //'ative; }'//NL//'.hero h1 { margin-right: 10rem; }'//NL//'.hero .meta { margin-bottom: .4rem; align-items: cen' &
+        //'ter; }'//NL//'.project-links { position: absolute; top: 1.1rem; right: 1.2rem; display: flex; gap: .55rem; }'//NL &
+        //'.author-links { display: inline-flex; gap: .45rem; align-items: center; }'//NL//'.author-links:empty, .projec' &
+        //'t-links:empty { display: none; }'//NL//'.icon-link { display: inline-block; width: 1.1rem; height: 1.1rem; ba' &
+        //'ckground: var(--muted);'//NL//'  -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / c' &
+        //'ontain no-repeat; }'//NL//'.project-links .icon-link { width: 1.35rem; height: 1.35rem; }'//NL//'.icon-link:h' &
+        //'over { background: var(--accent); }'//NL//'.grid { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem ' &
+        //'0 0; }'//NL//'.card { background: var(--bg); }'//NL//'.card { border: 1px solid var(--line); border-radius: 9' &
+        //'99px; padding: .05rem .65rem; color: var(--text); font-size: .84rem; white-space: nowrap; }'//NL//'.card:hove' &
+        //'r { border-color: var(--accent); text-decoration: none; }'//NL//'.card b { margin-right: .3rem; font-weight: ' &
+        //'650; } .card span { color: var(--muted); }'//NL//'pre.source { padding-left: 0; counter-reset: line; line-hei' &
+        //'ght: 1.45; }'//NL//'.ln { display: inline-block; width: 3.6em; margin-right: 1em; text-align: right; color: v' &
+        //'ar(--muted); opacity: .6; user-select: none; }'//NL//'.ln::before { counter-increment: line; content: counter' &
+        //'(line); }'//NL//'.ln:target { color: var(--accent); opacity: 1; font-weight: 700; }'//NL//'footer { margin-to' &
+        //'p: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }'//NL &
+        //'@media (max-width: 860px) {'//NL//'  .layout { grid-template-columns: minmax(0, 1fr); }'//NL//'  aside.side {' &
+        //' position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }'//NL &
         //'  main { padding: 1.25rem 1rem 3rem; }'//NL//'}'//NL//'@media print { header.top, aside.side, .theme, .copy {' &
         //' display: none; } .layout { display: block; } }'//NL//'.search { position: relative; flex: 0 1 15rem; }'//NL//'.' &
         //'search input { width: 100%; height: 2rem; padding: 0 .6rem; color: var(--text); background: var(--bg-soft);'//NL &
         //'  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: .88rem; }'//NL//'.search input' &
         //':focus { outline: 2px solid var(--accent); outline-offset: -1px; }'//NL//'.search .results { display: none; p' &
-        //'osition: absolute; top: 2.4rem; right: 0; width: min(30rem, 90vw); max-height: 70vh;'//NL//'  overflow-y: aut' &
-        //'o; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;'//NL//'  box-shadow: 0 8px 24px ' &
+        //'osition: absolute; top: 2.4rem; right: 0; width: min(30rem, 90vw); max-height: 70vh;'//NL//'  overflow-y: aut')
+    call add(b, &
+        'o; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;'//NL//'  box-shadow: 0 8px 24px ' &
         //'rgba(0, 0, 0, .18); }'//NL//'.results a, .search-page a { display: block; padding: .45rem .7rem; color: var(-' &
         //'-text); border-bottom: 1px solid var(--line); }'//NL//'.results a:hover, .results a.on, .search-page a:hover ' &
         //'{ background: var(--accent-soft); text-decoration: none; }'//NL//'.results b, .search-page b { font-family: v' &
         //'ar(--mono); font-size: .88rem; font-weight: 600; }'//NL//'.results small, .search-page small { display: block' &
-        //'; color: var(--muted); }'//NL//'aside.tree ul ul { margin-left: .8rem; }'//NL//'.graph { position: relative; ')
-    call add(b, &
-        'overflow: auto; max-height: 34rem; margin: .4rem 0 1rem; padding: .5rem;'//NL//'  border: 1px solid var(--lin' &
+        //'; color: var(--muted); }'//NL//'aside.tree ul ul { margin-left: .8rem; }'//NL//'.graph { position: relative; ' &
+        //'overflow: auto; max-height: 34rem; margin: .4rem 0 1rem; padding: .5rem;'//NL//'  border: 1px solid var(--lin' &
         //'e); border-radius: 8px; background: var(--bg-soft); cursor: grab; }'//NL//'.graph.dragging { cursor: grabbing' &
         //'; user-select: none; }'//NL//'.graph svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }'//NL &
         //'.graph.zoomed svg { max-width: none; }'//NL//'.graph .zoom { position: sticky; top: 0; left: 0; float: right;' &
@@ -301,7 +307,11 @@ subroutine asset_fdoc_js(b)
         //'n (event) {'//NL//'        if (!start) return;'//NL//'        box.scrollLeft = start[2] - (event.clientX - st' &
         //'art[0]);'//NL//'        box.scrollTop = start[3] - (event.clientY - start[1]);'//NL//'      });'//NL//'      ' &
         //'window.addEventListener("mouseup", function () { start = null; box.classList.remove("dragging"); });'//NL//' ' &
-        //'   });'//NL//'  });'//NL//'})();'//NL)
+        //'   });'//NL//'  });'//NL//'})();'//NL//NL//'// a link to something inside a closed section opens the section'//NL &
+        //'function openTarget() {'//NL//'  var id = decodeURIComponent(location.hash.slice(1));'//NL//'  var target = i' &
+        //'d && document.getElementById(id);'//NL//'  var section = target && target.closest(''details'');'//NL//'  if (' &
+        //'section) { section.open = true; target.scrollIntoView(); }'//NL//'}'//NL//'window.addEventListener(''hashchan' &
+        //'ge'', openTarget);'//NL//'window.addEventListener(''DOMContentLoaded'', openTarget);'//NL)
 end subroutine asset_fdoc_js
 
 end module fdoc_assets
