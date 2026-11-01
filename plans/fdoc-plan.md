@@ -3,8 +3,8 @@
 Scope: **free-form Fortran only for now.** Fixed-form input is deferred (see M8).
 
 **Requirement: fdoc must run on Windows, macOS and Linux.** This applies to the program, its tests and
-its output, not only to the build. Code must not depend on a Unix shell or POSIX-only functions
-unless a tested alternative exists for each platform. It has only been tested on macOS so far; what
+its output, not only to the build. Commands that depend on the shell belong in `fdoc_shell`, and code
+must not depend on POSIX-only functions unless a tested alternative exists for each platform. It has only been tested on macOS so far; what
 stands in the way is listed in M9.
 
 **Requirement: portable, standard Fortran.** fdoc must be able to build with other compilers, such as
@@ -288,10 +288,8 @@ What is not supported stops with an error naming it, and the file is read as it 
   has no Python. Provide `ford` as a pixi task or symlink for scripts that call it by name.
 - Platforms: Windows, macOS and Linux are all required, and the bar for swapping includes the tests
   and `pixi run test-projects` on each, in CI, where Windows does not count yet. Known work:
-  - Shell commands through `execute_command_line`, in `sh` syntax: `mkdir -p`, `rm -rf`, `cp`, `cp -R`,
-    `[ -d ... ]`, `command -v dot`, single quotes, and `/dev/null` (`fdoc_site`, `fdoc_graphs`,
-    `fdoc_output`, `fdoc_project`, `fdoc_input`). Replace these with file operations in Fortran, or
-    through the C library, rather than one command per platform.
+  - File system commands are in `fdoc_shell`, which picks the command for the platform at run time, as
+    standard Fortran cannot create or copy directories. `curl` for external projects is still needed.
   - POSIX functions: `usleep` and `isatty` in fdoc, and `opendir`, `readdir`, `closedir` and `getcwd`
     in fformat, need checking on Windows.
   - Paths: backslashes, drive letters and case-insensitive names, in settings, `exclude` and URLs.

@@ -8,6 +8,7 @@ use fdoc_model
 use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t, public_symbols, symbol_t
 use fdoc_urls, only: entity_url, object_word
+use fdoc_shell, only: make_directory
 implicit none
 private
 
@@ -40,7 +41,7 @@ subroutine write_modules(p, s, stat, errmsg)
     end do
     call json%serialize(root, text)
     call json%destroy(root)
-    call execute_command_line("mkdir -p '"//s%output_dir//"'", exitstat=stat)
+    call make_directory(s%output_dir, stat)
     call write_file(join_path(s%output_dir, 'modules.json'), text, stat, errmsg)
 end subroutine write_modules
 

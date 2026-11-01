@@ -3,6 +3,7 @@ module test_fypp
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use ffmt_io, only: write_file
 use fdoc_fypp, only: fypp_process
+use fdoc_shell, only: make_directory
 use fdoc_util, only: string_t
 implicit none
 private
@@ -39,7 +40,7 @@ subroutine run(source, output, stat, errmsg)
     type(string_t) :: defines(1), includes(0)
 
     defines(1)%s = 'MAXRANK=3'
-    call execute_command_line('mkdir -p '//DIRECTORY)
+    call make_directory(DIRECTORY, stat)
     call write_file(DIRECTORY//'/a.fypp', source, stat, errmsg)
     if (stat /= 0) return
     call fypp_process(DIRECTORY//'/a.fypp', defines, includes, output, stat, errmsg)

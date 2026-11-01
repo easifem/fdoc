@@ -12,6 +12,7 @@ use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t
 use fdoc_urls, only: entity_url
 use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
+use fdoc_shell, only: make_directory, remove_directory, program_exists
 implicit none
 private
 
@@ -478,8 +479,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
         if (any([(p%list%box(k)%e%meta(n)%key == 'graph', n=1, size(p%list%box(k)%e%meta))])) any_wanted = .true.
     end do
     if (.not. any_wanted) return
-    call execute_command_line('command -v dot > /dev/null 2>&1', exitstat=status)
-    if (status /= 0) then
+    if (.not. program_exists('dot')) then
         call warn('graphs need Graphviz, and dot was not found: leaving them out')
         return
     end if
@@ -528,7 +528,8 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     call unique_tag(tag)
     directory = s%output_dir//'/.graphs-'//trim(tag)
     if (allocated(s%graph_dir)) directory = s%graph_dir
-    call execute_command_line("rm -rf '"//directory//"' && mkdir -p '"//directory//"'", exitstat=status)
+    call remove_directory(directory)
+    call make_directory(directory, status)
     do k = 1, n
         call write_file(trim(file_name(directory, k, '')), files(k)%text, stat, errmsg)
         if (stat /= 0) return
@@ -548,7 +549,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
     do k = 1, n
         if (.not. found(k)) call warn('no layout for a graph of '//files(k)%title)
     end do
-    if (.not. allocated(s%graph_dir)) call execute_command_line("rm -rf '"//directory//"'")
+    if (.not. allocated(s%graph_dir)) call remove_directory(directory)
 
 contains
 

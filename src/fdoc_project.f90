@@ -9,6 +9,7 @@ use ffmt_fs, only: parent_directory
 use fdoc_input, only: find_sources, load_source, runs_command, expand_includes
 use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
 use fdoc_parser, only: parse_file
+use fdoc_shell, only: make_directory, quoted, quoted_path
 implicit none
 private
 
@@ -221,8 +222,8 @@ subroutine load_external_project(p, s, url)
         base = url
         if (.not. ends_with(base, '/')) base = base//'/'
         fetched = s%output_dir//'/.external-modules.json'
-        call execute_command_line("mkdir -p '"//s%output_dir//"'", exitstat=status)
-        call execute_command_line("curl -fsSL -o '"//fetched//"' '"//base//"modules.json'", exitstat=status)
+        call make_directory(s%output_dir, status)
+        call execute_command_line('curl -fsSL -o '//quoted_path(fetched)//' '//quoted(base//'modules.json'), exitstat=status)
         path = fetched
         if (status /= 0) then
             call warn("Could not open external URL '"//url//"'")

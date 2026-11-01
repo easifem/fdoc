@@ -15,6 +15,8 @@ use fdoc_urls, only: entity_url, object_word, page_name, url_quote, is_shown
 use fdoc_highlight, only: highlight_fortran
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
 use fdoc_progress, only: progress_start, progress_tick, progress_finish
+use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path
+use ffmt_fs, only: is_directory
 implicit none
 private
 
@@ -49,6 +51,11 @@ type :: site_t
     type(graph_set_t) :: graphs                 !! the graphs
     type(index_list_t), allocatable :: graphs_of(:) !! the graphs of each entity
 end type site_t
+
+!> The directories of a site.
+character(len=*), parameter :: SITE_DIRECTORIES(*) = [character(len=10) :: 'css', 'js', 'lists', 'module', 'proc', &
+                                                      'type', 'interface', 'program', 'blockdata', 'namelist', &
+                                                      'sourcefile', 'search', 'page']
 
 contains
 
@@ -1865,11 +1872,11 @@ end subroutine license_text
 subroutine page_directories(directory, pages)
     character(len=*), intent(in) :: directory   !! the output directory
     type(page_t), intent(in) :: pages(:)        !! the pages
-    integer :: k, at
+    integer :: k, at, status
 
     do k = 1, size(pages)
         at = index(pages(k)%path, '/', back=.true.)
-        if (at > 0) call execute_command_line("mkdir -p '"//directory//"/page/"//pages(k)%path(:at - 1)//"'")
+        if (at > 0) call make_directory(directory//'/page/'//pages(k)%path(:at - 1), status)
     end do
 end subroutine page_directories
 
@@ -1878,12 +1885,11 @@ subroutine copy_page_files(s, directory, pages)
     type(settings_t), intent(in) :: s           !! the settings
     character(len=*), intent(in) :: directory   !! the output directory
     type(page_t), intent(in) :: pages(:)        !! the pages
-    integer :: k, j
+    integer :: k, j, status
 
     do k = 1, size(pages)
         do j = 1, size(pages(k)%copies)
-            call execute_command_line("cp -R '"//s%page_dir//"/"//pages(k)%copies(j)%s//"' '"//directory//"/page/"// &
-                                      pages(k)%copies(j)%s//"'")
+            call copy_path(s%page_dir//'/'//pages(k)%copies(j)%s, directory//'/page/'//pages(k)%copies(j)%s, status)
         end do
     end do
 end subroutine copy_page_files
@@ -1976,10 +1982,11 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     count = 0
 
     directory = s%output_dir
-    call execute_command_line("mkdir -p '"//directory//"' && cd '"//directory// &
-                              "' && mkdir -p css js lists module proc type interface program blockdata "// &
-                              "namelist sourcefile search page", &
-                              exitstat=stat)
+    call make_directory(directory, stat)
+    do k = 1, size(SITE_DIRECTORIES)
+        if (stat /= 0) exit
+        call make_directory(directory//'/'//trim(SITE_DIRECTORIES(k)), stat)
+    end do
     if (stat /= 0) then
         errmsg = 'could not create '//directory
         return
@@ -2025,11 +2032,13 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
         if (stat /= 0) return
     end if
     call copy_page_files(s, directory, pages_in)
-    if (allocated(s%css)) call execute_command_line("cp '"//s%css//"' '"//directory//"/css/user.css'")
-    if (allocated(s%favicon)) call execute_command_line("cp '"//s%favicon//"' '"//directory//"/favicon.png'")
+    if (allocated(s%css)) call copy_file(s%css, directory//'/css/user.css', k)
+    if (allocated(s%favicon)) call copy_file(s%favicon, directory//'/favicon.png', k)
     if (allocated(s%media_dir)) then
-        call execute_command_line("[ -d '"//s%media_dir//"' ] && rm -rf '"//directory//"/media' && cp -R '"//s%media_dir// &
-                                  "' '"//directory//"/media'", exitstat=k)
+        if (is_directory(s%media_dir)) then
+            call remove_directory(directory//'/media')
+            call copy_path(s%media_dir, directory//'/media', k)
+        end if
     end if
 end subroutine write_site
 

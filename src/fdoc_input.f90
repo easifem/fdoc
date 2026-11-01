@@ -9,6 +9,7 @@ use fdoc_fypp, only: fypp_process
 use fdoc_util
 use fdoc_settings, only: settings_t
 use fdoc_progress, only: warn
+use fdoc_shell, only: quoted, quoted_path, temporary_directory
 implicit none
 private
 
@@ -155,12 +156,12 @@ function preprocessor_command(s, path) result(command)
     command = s%preprocessor
     if (starts_word(command, 'pcpp')) command = 'gfortran -E -cpp -D__GFORTRAN__'
     do k = 1, size(s%macro)
-        if (len(strip(s%macro(k)%s)) > 0) command = command//" '-D"//strip(s%macro(k)%s)//"'"
+        if (len(strip(s%macro(k)%s)) > 0) command = command//' '//quoted('-D'//strip(s%macro(k)%s))
     end do
     do k = 1, size(s%include)
-        command = command//" '-I"//s%include(k)%s//"'"
+        command = command//' '//quoted('-I'//s%include(k)%s)
     end do
-    command = command//" '"//path//"'"
+    command = command//' '//quoted_path(path)
 end function preprocessor_command
 
 !> Replace `text` by the output of the preprocessor for `path`, or keep it if that fails.
@@ -170,17 +171,15 @@ subroutine preprocess(s, path, text)
     character(len=:), allocatable, intent(inout) :: text  !! the text
     character(len=:), allocatable :: output, errors, command, directory, result, msg
     character(len=32) :: tag
-    integer :: exit_code, stat, n, unit
+    integer :: exit_code, stat, unit
 
-    call get_environment_variable('TMPDIR', length=n)
-    allocate (character(len=n) :: directory)
-    if (n > 0) call get_environment_variable('TMPDIR', directory)
-    if (n == 0) directory = '/tmp'
+    call temporary_directory(directory)
     call unique_tag(tag)
     output = join_path(directory, 'fdoc-'//trim(tag)//'.out')
     errors = join_path(directory, 'fdoc-'//trim(tag)//'.err')
     command = preprocessor_command(s, path)
-    call execute_command_line(command//" > '"//output//"' 2> '"//errors//"'", exitstat=exit_code, cmdstat=stat)
+    call execute_command_line(command//' > '//quoted_path(output)//' 2> '//quoted_path(errors), exitstat=exit_code, &
+                              cmdstat=stat)
     if (stat == 0 .and. exit_code == 0) then
         call read_file(output, result, stat, msg)
         if (stat == 0) call move_alloc(result, text)

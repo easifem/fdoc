@@ -3,6 +3,7 @@ module test_project_file
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_project_file, only: parse_metadata, metadata_t, load_project
 use fdoc_settings, only: settings_t
+use fdoc_shell, only: make_directory
 use ffmt_io, only: write_file
 use fdoc_util, only: join
 implicit none
@@ -114,7 +115,7 @@ subroutine test_fpm_no_table(error)
     character(len=:), allocatable :: body, msg
     integer :: stat
 
-    call execute_command_line('mkdir -p '//DIRECTORY)
+    call make_directory(DIRECTORY, stat)
     call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL, stat, msg)
     call check(error, stat, 0)
     if (allocated(error)) return
@@ -130,7 +131,7 @@ subroutine test_fpm_table(error)
     character(len=:), allocatable :: body, msg
     integer :: stat
 
-    call execute_command_line('mkdir -p '//DIRECTORY)
+    call make_directory(DIRECTORY, stat)
     call write_file(DIRECTORY//'/fpm.toml', 'name = "x"'//NL//'[extra.fdoc]'//NL//'project = "Mine"'//NL// &
                     'front_page = "Hello"'//NL//'[extra.ford]'//NL//'project = "Not this"'//NL, stat, msg)
     call check(error, stat, 0)

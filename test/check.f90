@@ -8,6 +8,7 @@ use test_cli, only: collect_cli
 use test_parser, only: collect_parser
 use test_markdown, only: collect_markdown
 use test_fypp, only: collect_fypp
+use test_shell, only: collect_shell
 implicit none
 
 type(testsuite_type), allocatable :: testsuites(:)
@@ -20,7 +21,8 @@ testsuites = [ &
              new_testsuite("cli", collect_cli), &
              new_testsuite("parser", collect_parser), &
              new_testsuite("markdown", collect_markdown), &
-             new_testsuite("fypp", collect_fypp) &
+             new_testsuite("fypp", collect_fypp), &
+             new_testsuite("shell", collect_shell) &
              ]
 do is = 1, size(testsuites)
     write (error_unit, '(a)') '# Testing: '//testsuites(is)%name
