@@ -37,9 +37,36 @@ subroutine collect_parser(testsuite)
                 new_unittest("calls", test_calls), &
                 new_unittest("calls through associate", test_associate_calls), &
                 new_unittest("private modules stay visible", test_private_module), &
-                new_unittest("variables share what they do not use", test_shared_part) &
+                new_unittest("variables share what they do not use", test_shared_part), &
+                new_unittest("procedures that keep state", test_saved_state) &
                 ]
 end subroutine collect_parser
+
+!> Checks: each way for a procedure to keep state is seen, and what only looks like one is not.
+subroutine test_saved_state(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    type(entity_list_t) :: l
+
+    call parse('subroutine a'//NL//'integer, save :: n'//NL//'end subroutine a'//NL// &
+               'subroutine b'//NL//'integer :: n = 1'//NL//'end subroutine b'//NL// &
+               'subroutine c'//NL//'integer :: n'//NL//'save'//NL//'end subroutine c'//NL// &
+               'subroutine d'//NL//'integer :: n'//NL//'data n /1/'//NL//'end subroutine d'//NL// &
+               'subroutine e'//NL//'integer, parameter :: n = 1'//NL//'integer :: m'//NL//'end subroutine e'//NL// &
+               'subroutine f'//NL//'integer :: n'//NL//'common /blk/ n'//NL//'end subroutine f'//NL, l)
+    call check(error, l%box(find(l, E_SUBROUTINE, 'a'))%e%more%saved_state, 'the save attribute')
+    if (allocated(error)) return
+    call check(error, l%box(find(l, E_SUBROUTINE, 'b'))%e%more%saved_state, 'an initial value')
+    if (allocated(error)) return
+    call check(error, l%box(find(l, E_SUBROUTINE, 'c'))%e%more%saved_state, 'a save statement')
+    if (allocated(error)) return
+    call check(error, l%box(find(l, E_SUBROUTINE, 'd'))%e%more%saved_state, 'a data statement')
+    if (allocated(error)) return
+    call check(error, .not. l%box(find(l, E_SUBROUTINE, 'e'))%e%more%saved_state, 'a parameter is not state')
+    if (allocated(error)) return
+    call check(error, l%box(find(l, E_SUBROUTINE, 'f'))%e%more%common_block, 'a common block')
+    if (allocated(error)) return
+    call check(error, .not. l%box(find(l, E_SUBROUTINE, 'a'))%e%more%common_block, 'no common block')
+end subroutine test_saved_state
 
 !> Parse `text` with default settings.
 subroutine parse(text, list)

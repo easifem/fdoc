@@ -96,6 +96,7 @@ end function add
 * Tables of arguments, components and variables showing intent and attributes as coloured badges.
 * Graphs of module use, procedure calls, type inheritance and file dependencies, with links, zoom and panning.
 * Syntax highlighted Fortran source.
+* Badges for what procedures are, such as `pure` or `recursive`, and for those that keep state between calls, with arguments coloured by intent.
 * Generic interfaces shown as call forms, with a table of the types and ranks each form takes and what it returns.
 * A search box. Press `/` to use it.
 * `modules.json`, so that other projects can link to this one. fdoc and FORD can read each other's.

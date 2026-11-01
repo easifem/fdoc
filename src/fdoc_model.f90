@@ -91,6 +91,8 @@ type, public :: entity_more_t
     type(string_t), allocatable :: bindings(:)  !! what it is bound to
     character(len=:), allocatable :: proto_text !! the interface in `procedure(...)`, if any
     integer, allocatable :: binding_ids(:)      !! what each of `bindings` is, once found
+    logical :: saved_state = .false.            !! a procedure that keeps values between calls
+    logical :: common_block = .false.          !! a procedure with a common block
 end type entity_more_t
 
 type, public :: entity_t

@@ -670,6 +670,7 @@ subroutine entity_title(site, id, word, b)
         call breadcrumbs(site, id, b)
         call add(b, '<h1><span class="kind">'//word//'</span>')
         call html_escape(display_name(e), b, .false.)
+        call procedure_badges(e, b)
         if (allocated(e%permission)) then
             if (e%permission /= 'public' .and. e%kind /= E_MODULE .and. e%kind /= E_SUBMODULE .and. e%kind /= E_FILE .and. &
                 e%kind /= E_PROGRAM) call badge(e%permission, b)
@@ -768,7 +769,7 @@ subroutine signature(site, id, b)
         call html_escape(e%name, b, .false.)
         if (allocated(e%more%args)) then
             call add(b, '(')
-            call html_escape(join(e%more%args, ', '), b, .false.)
+            call signature_arguments(site, e, b)
             call add(b, ')')
         end if
         if (e%kind == E_FUNCTION) then
@@ -788,6 +789,35 @@ subroutine signature(site, id, b)
         call add(b, '</div>'//achar(10))
     end associate
 end subroutine signature
+
+!> Write the arguments of procedure `e`, each in the colour of its intent, as in the table of arguments.
+subroutine signature_arguments(site, e, b)
+    type(site_t), intent(in) :: site        !! the site
+    type(entity_t), intent(in) :: e         !! the procedure
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer :: k, id
+
+    do k = 1, size(e%more%args)
+        if (k > 1) call add(b, ', ')
+        id = 0
+        if (allocated(e%more%arg_ids)) then
+            if (size(e%more%arg_ids) == size(e%more%args)) id = e%more%arg_ids(k)
+        end if
+        if (id > 0) then
+            if (allocated(site%p%list%box(id)%e%intent)) then
+                if (len(site%p%list%box(id)%e%intent) > 0) then
+                    associate (intent => site%p%list%box(id)%e%intent)
+                        call add(b, '<span class="intent attr-'//intent//'" title="intent('//intent//')">')
+                        call html_escape(e%more%args(k)%s, b, .false.)
+                        call add(b, '</span>')
+                    end associate
+                    cycle
+                end if
+            end if
+        end if
+        call html_escape(e%more%args(k)%s, b, .false.)
+    end do
+end subroutine signature_arguments
 
 !> Write a table of dummy arguments, or with `components` of other variables, such as the components
 !> of a type. Those have no intent, and may have a default value and a permission.
@@ -923,6 +953,51 @@ subroutine badge(text, b)
     call add(b, '</span>')
 end subroutine badge
 
+!> Write the attributes of procedure `e` that say how it behaves, as badges. Anything else is left out.
+subroutine procedure_badges(e, b)
+    type(entity_t), intent(in) :: e     !! the entity
+    type(buffer_t), intent(inout) :: b  !! the HTML
+    integer :: k
+
+    if (.not. is_procedure(e%kind)) return
+    if (allocated(e%attribs)) then
+        do k = 1, size(e%attribs)
+            select case (lowercase(e%attribs(k)%s))
+            case ('pure')
+                call explained_badge('pure', 'Has no side effects', b)
+            case ('impure')
+                call explained_badge('impure', 'May have side effects', b)
+            case ('elemental')
+                call explained_badge('elemental', 'Works on each element of arrays of any rank', b)
+            case ('recursive')
+                call explained_badge('recursive', 'May call itself', b)
+            case ('non_recursive')
+                call explained_badge('non_recursive', 'Must not call itself', b)
+            end select
+        end do
+    end if
+    if (allocated(e%more%bind_c)) call explained_badge('bind(C)', 'Can be called from C', b)
+    if (e%more%saved_state) then
+        call explained_badge('saved state', 'Keeps values between calls, so calls from several threads at once may conflict', b)
+    end if
+    if (e%more%common_block) then
+        call explained_badge('common', 'Uses a common block, so calls from several threads at once may conflict', b)
+    end if
+end subroutine procedure_badges
+
+!> Write `text` as a badge, with an explanation for when the pointer is over it.
+subroutine explained_badge(text, explanation, b)
+    character(len=*), intent(in) :: text        !! the attribute
+    character(len=*), intent(in) :: explanation !! what it means
+    type(buffer_t), intent(inout) :: b          !! the HTML
+    type(buffer_t) :: item
+    character(len=:), allocatable :: html
+
+    call badge(text, item)
+    call take(item, html)
+    call add(b, html(:index(html, '>') - 1)//' title="'//explanation//'"'//html(index(html, '>'):))
+end subroutine explained_badge
+
 !> Write the anchor of entity `id`.
 subroutine anchor(site, id, b)
     type(site_t), intent(in) :: site        !! the site
@@ -1000,6 +1075,7 @@ subroutine summary_item(site, id, b)
         call anchor(site, id, b)
         call add(b, '"><h3>')
         call link_to(site, id, e%name, b)
+        call procedure_badges(e, b)
         if (allocated(e%permission)) then
             if (e%permission /= 'public') call badge(e%permission, b)
         end if
@@ -1688,6 +1764,7 @@ subroutine list_columns(site, which, id, b)
             case default
                 call badge('procedure', b)
             end select
+            call procedure_badges(e, b)
             call add(b, '</td>')
         case (LIST_ABSINT, LIST_NAMELISTS)
             call location(e%parent)

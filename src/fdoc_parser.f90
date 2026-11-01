@@ -1197,7 +1197,10 @@ logical function is_attribute_statement(low)
         if (.not. starts_word(low, trim(ATTRIBUTE_WORDS(k)))) cycle
         n = len_trim(ATTRIBUTE_WORDS(k))
         compact = strip(low(n + 1:))
-        if (len(compact) == 0) return
+        if (len(compact) == 0) then
+            is_attribute_statement = trim(ATTRIBUTE_WORDS(k)) == 'save'
+            return
+        end if
         ! not an assignment to a variable named like the attribute
         is_attribute_statement = compact(1:1) /= '=' .and. compact(1:1) /= '%'
         return
@@ -1220,9 +1223,11 @@ subroutine read_attribute_statement(u, line, low)
         rest = line(close + 1:)
     else
         at = verify(low, 'abcdefghijklmnopqrstuvwxyz_')
+        if (at == 0) at = len(low) + 1
         attr = low(:at - 1)
         rest = line(at:)
     end if
+    if (is_procedure(u%kind) .and. (attr == 'data' .or. attr == 'save')) u%more%saved_state = .true.
     if (attr == 'data' .or. attr == 'save' .and. len(strip(rest)) == 0) return
     if (.not. allocated(u%more%pending)) return
     rest = strip(rest)
@@ -1309,6 +1314,10 @@ subroutine read_declaration(list, unit, line, doc, s)
     names = top_split(rest, ',')
     do k = 1, size(names)
         call parse_declarator(names(k)%s, name, dimension, initial, points)
+        ! what is initialized in a declaration in a procedure is saved, even with no `save`
+        if (is_procedure(list%box(unit)%e%kind) .and. .not. parameter) then
+            if (allocated(initial) .or. contains_string(kept, 'save')) list%box(unit)%e%more%saved_state = .true.
+        end if
         id = list%add(E_VARIABLE, unit)
         associate (v => list%box(id)%e)
             call move_alloc(name, v%name)
@@ -1458,6 +1467,7 @@ subroutine read_common(list, unit, line, doc, s)
         end if
         next = top_index(rest, '/')
         a = merge(next - 1, len(rest), next > 0)
+        if (is_procedure(list%box(unit)%e%kind)) list%box(unit)%e%more%common_block = .true.
         id = list%add(E_COMMON, unit)
         associate (c => list%box(id)%e)
             c%name = name
