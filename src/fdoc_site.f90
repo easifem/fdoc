@@ -1691,18 +1691,33 @@ subroutine index_page(site, front, html)
             call html_escape(s%summary, b, .false.)
             call add(b, '</div>'//achar(10))
         end if
-        call add(b, '<div class="meta">')
+        call add(b, '<div class="project-links">')
+        call icon_link(s%project_github, 'github', 'Source on GitHub', b)
+        call icon_link(s%project_gitlab, 'gitlab', 'Source on GitLab', b)
+        call icon_link(s%project_bitbucket, 'bitbucket', 'Source on Bitbucket', b)
+        call icon_link(s%project_sourceforge, 'sourceforge', 'Source on SourceForge', b)
+        call icon_link(s%project_website, 'website', 'Project website', b)
+        call icon_link(s%project_download, 'download', 'Download', b)
+        call add(b, '</div>'//achar(10)//'<div class="meta">')
         if (allocated(s%author)) then
             call add(b, '<span>')
             call html_escape(s%author, b, .false.)
             call add(b, '</span>')
         end if
-        call project_link(s%project_github, 'GitHub', b)
-        call project_link(s%project_gitlab, 'GitLab', b)
-        call project_link(s%project_bitbucket, 'Bitbucket', b)
-        call project_link(s%project_sourceforge, 'SourceForge', b)
-        call project_link(s%project_website, 'Website', b)
-        call project_link(s%project_download, 'Download', b)
+        call add(b, '<span class="author-links">')
+        call icon_link(s%github, 'github', 'Author on GitHub', b)
+        call icon_link(s%gitlab, 'gitlab', 'Author on GitLab', b)
+        call icon_link(s%bitbucket, 'bitbucket', 'Author on Bitbucket', b)
+        call icon_link(s%linkedin, 'linkedin', 'Author on LinkedIn', b)
+        call icon_link(s%twitter, 'twitter', 'Author on X', b)
+        call icon_link(s%facebook, 'facebook', 'Author on Facebook', b)
+        call icon_link(s%website, 'website', 'Author website', b)
+        if (allocated(s%email)) then
+            call add(b, '<a class="icon-link icon-email" title="Email the author" aria-label="Email the author" href="mailto:')
+            call html_escape(s%email, b, .true.)
+            call add(b, '"></a>')
+        end if
+        call add(b, '</span>')
         call add(b, '</div>'//achar(10)//'<div class="grid">')
         do k = 1, NUM_LISTS
             if (size(site%members(k)%ids) == 0) cycle
@@ -1717,17 +1732,18 @@ subroutine index_page(site, front, html)
     call take(b, html)
 end subroutine index_page
 
-!> Write a link to `url` if it is set.
-subroutine project_link(url, label, b)
+!> Write an icon linking to `url`, if it is set.
+subroutine icon_link(url, icon, label, b)
     character(len=:), allocatable, intent(in) :: url    !! the address
-    character(len=*), intent(in) :: label               !! the text
+    character(len=*), intent(in) :: icon                !! the icon
+    character(len=*), intent(in) :: label               !! what it links to
     type(buffer_t), intent(inout) :: b                  !! the HTML
 
     if (.not. allocated(url)) return
-    call add(b, '<span><a href="')
+    call add(b, '<a class="icon-link icon-'//icon//'" title="'//label//'" aria-label="'//label//'" href="')
     call html_escape(url, b, .true.)
-    call add(b, '">'//label//'</a></span>')
-end subroutine project_link
+    call add(b, '"></a>')
+end subroutine icon_link
 
 !> The end of every page.
 subroutine make_footer(s, footer)
