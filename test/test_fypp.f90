@@ -2,11 +2,10 @@ module test_fypp
 !! The port of Fypp.
 use omp_lib, only: omp_get_thread_num
 use testdrive, only: new_unittest, unittest_type, error_type, check
-use ffmt_io, only: write_file
 use fdoc_buffer, only: int_text
 use fdoc_fypp, only: fypp_process
 use fdoc_shell, only: make_directory
-use fdoc_util, only: string_t
+use fdoc_util, only: string_t, write_whole_file
 implicit none
 private
 
@@ -47,9 +46,7 @@ subroutine run(source, output, stat, errmsg)
     thread = int_text(omp_get_thread_num())
     defines(1)%s = 'MAXRANK=3'
     call make_directory(DIRECTORY, stat)
-    !$omp critical (file_io)
-    call write_file(DIRECTORY//'/a'//trim(thread)//'.fypp', source, stat, errmsg)
-    !$omp end critical (file_io)
+    call write_whole_file(DIRECTORY//'/a'//trim(thread)//'.fypp', source, stat, errmsg)
     if (stat /= 0) return
     call fypp_process(DIRECTORY//'/a'//trim(thread)//'.fypp', defines, includes, output, stat, errmsg)
 end subroutine run

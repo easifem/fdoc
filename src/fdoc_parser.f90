@@ -118,7 +118,7 @@ subroutine parse_file(path, text, s, list)
             end do
             current = stack(top)
             caller = nearest_caller(list, stack, top)
-            if (caller > 0) call statement_calls(src, k, views(k), info, list%box(caller)%e, associations, level)
+            if (caller > 0) call statement_calls(views(k), info, list%box(caller)%e, associations, level)
             select case (info%role)
             case (ROLE_OPEN)
                 id = 0
@@ -222,9 +222,7 @@ pure function leading_text(v, j) result(text)
 end function leading_text
 
 !> Add the procedures that a statement refers to to `e%more%calls`.
-subroutine statement_calls(src, item, v, info, e, associations, level)
-    type(source_t), intent(in) :: src                   !! the source
-    integer, intent(in) :: item                         !! the statement
+subroutine statement_calls(v, info, e, associations, level)
     type(statement_view_t), intent(in) :: v             !! the statement's tokens
     type(stmt_info_t), intent(in) :: info               !! its classification
     type(entity_t), intent(inout) :: e                  !! the entity it is in
@@ -718,7 +716,7 @@ subroutine open_unit(list, parent, construct, line, item, src, doc, s, id)
         list%box(id)%e%name = words
         list%box(id)%e%permission = 'public'
     case (C_SUBROUTINE, C_FUNCTION)
-        call open_procedure(list, parent, line, doc, s, id)
+        call open_procedure(list, parent, line, id)
     case (C_PROCEDURE)
         id = list%add(E_MODPROC, parent)
         words = strip(line(index(low, 'procedure') + 9:))
@@ -835,12 +833,10 @@ subroutine read_type_statement(e, line)
 end subroutine read_type_statement
 
 !> Create the entity for a `subroutine` or `function` statement.
-subroutine open_procedure(list, parent, line, doc, s, id)
+subroutine open_procedure(list, parent, line, id)
     type(entity_list_t), intent(inout) :: list  !! the entities
     integer, intent(in) :: parent               !! the entity around it
     character(len=*), intent(in) :: line        !! the statement
-    type(doc_lines_t), intent(in) :: doc        !! the statement's documentation
-    type(settings_t), intent(in) :: s           !! the settings
     integer, intent(out) :: id                  !! the new entity, or 0
     type(procedure_header_t) :: h
     type(parsed_type_t) :: t
@@ -902,7 +898,7 @@ subroutine close_unit(list, id, s)
         call apply_attributes(list, id)
         call attach_arguments(list, id)
     case (E_INTERFACE)
-        call close_interface(list, id, s)
+        call close_interface(list, id)
     end select
 end subroutine close_unit
 
@@ -1084,10 +1080,9 @@ end function implicit_variable
 
 !> Finish an interface block. All but generic interfaces dissolve, leaving their bodies in the unit
 !> around them.
-subroutine close_interface(list, id, s)
+subroutine close_interface(list, id)
     type(entity_list_t), intent(inout) :: list  !! the entities
     integer, intent(in) :: id                   !! the interface
-    type(settings_t), intent(in) :: s           !! the settings
     integer :: parent, c, child, kind_of_body
 
     if (list%box(id)%e%generic) return
@@ -1096,7 +1091,7 @@ subroutine close_interface(list, id, s)
     do c = 1, size(list%box(id)%e%children)
         child = list%box(id)%e%children(c)
         associate (e => list%box(child)%e)
-            if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION) cycle
+            if (.not. is_procedure(e%kind)) cycle
             e%iface = kind_of_body
             e%parent = parent
             e%permission = list%box(id)%e%permission

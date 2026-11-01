@@ -31,9 +31,9 @@ module fdoc_fypp
 !! DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
 !! IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
 !! OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-use ffmt_io, only: read_file
-use fdoc_buffer, only: buffer_t, add, take
-use fdoc_util, only: string_t, name_index_t, index_find, index_set
+use fdoc_buffer, only: buffer_t, add, take, int_text
+use fdoc_util, only: string_t, name_index_t, index_find, index_set, read_whole_file, is_digit, digits_value, &
+                     last_separator
 implicit none
 private
 
@@ -326,12 +326,6 @@ elemental logical function starts_name(ch)
     character, intent(in) :: ch     !! the character
     starts_name = (ch >= 'a' .and. ch <= 'z') .or. (ch >= 'A' .and. ch <= 'Z') .or. ch == '_'
 end function starts_name
-
-!> True if `ch` is a digit.
-elemental logical function is_digit(ch)
-    character, intent(in) :: ch     !! the character
-    is_digit = ch >= '0' .and. ch <= '9'
-end function is_digit
 
 !> True if `ch` can be part of a name.
 elemental logical function in_name(ch)
@@ -1096,9 +1090,7 @@ recursive subroutine parse_file(c, path)
     character(len=:), allocatable :: text, errmsg
     integer :: stat
 
-    !$omp critical (file_io)
-    call read_file(path, text, stat, errmsg)
-    !$omp end critical (file_io)
+    call read_whole_file(path, text, stat, errmsg)
     if (stat /= 0) then
         call fail(c, 'cannot read '//path)
         return
@@ -1548,7 +1540,7 @@ recursive subroutine include_directive(c, param, path)
         return
     end if
     name = param(2:len(param) - 1)
-    slash = max(index(path, '/', back=.true.), index(path, '\', back=.true.))
+    slash = last_separator(path)
     candidate = path(:slash)//name
     !$omp critical (file_io)
     inquire (file=candidate, exist=exists)
@@ -1758,7 +1750,6 @@ pure recursive subroutine write_value(v, quoted, b)
     type(value_t), intent(in) :: v      !! the value
     logical, intent(in) :: quoted       !! true for `repr()`
     type(buffer_t), intent(inout) :: b  !! where it goes
-    character(len=12) :: digits
     integer :: k, step
 
     select case (v%kind)
@@ -1768,8 +1759,7 @@ pure recursive subroutine write_value(v, quoted, b)
         call add(b, merge('True ', 'False', v%number /= 0))
         if (v%number /= 0) b%n = b%n - 1
     case (V_INT)
-        call write_int(v%number, digits, k)
-        call add(b, digits(k:))
+        call add(b, trim(int_text(v%number)))
     case (V_STR)
         if (quoted) call add(b, "'")
         call add(b, v%text)
@@ -1787,28 +1777,6 @@ pure recursive subroutine write_value(v, quoted, b)
         call add(b, merge(']', ')', v%kind == V_LIST))
     end select
 end subroutine write_value
-
-!> Write integer `number` at the end of `digits`, from position `first`.
-pure subroutine write_int(number, digits, first)
-    integer, intent(in) :: number               !! the integer
-    character(len=*), intent(out) :: digits     !! the digits
-    integer, intent(out) :: first               !! where they start
-    integer :: rest
-
-    digits = ''
-    first = len(digits) + 1
-    rest = abs(number)
-    do
-        first = first - 1
-        digits(first:first) = achar(iachar('0') + mod(rest, 10))
-        rest = rest/10
-        if (rest == 0) exit
-    end do
-    if (number < 0) then
-        first = first - 1
-        digits(first:first) = '-'
-    end if
-end subroutine write_int
 
 !> The items of `v`, which is iterated over.
 subroutine items_of(c, v, list)
@@ -2456,7 +2424,7 @@ subroutine format_string(c, text, args, v)
     type(value_t), intent(out) :: v             !! the result
     type(buffer_t) :: b
     character(len=:), allocatable :: joined
-    integer :: i, close, field, automatic, k
+    integer :: i, close, field, automatic, status
 
     i = 1
     automatic = 0
@@ -2475,14 +2443,11 @@ subroutine format_string(c, text, args, v)
             field = automatic
             automatic = automatic + 1
         else
-            field = 0
-            do k = i + 1, i + close - 2
-                if (.not. is_digit(text(k:k))) then
-                    call fail(c, 'the format is not supported: '//text)
-                    return
-                end if
-                field = 10*field + iachar(text(k:k)) - iachar('0')
-            end do
+            call digits_value(text(i + 1:i + close - 2), field, status)
+            if (status /= 0) then
+                call fail(c, 'the format is not supported: '//text)
+                return
+            end if
         end if
         if (field >= size(args)) then
             call fail(c, 'a format has too few arguments: '//text)

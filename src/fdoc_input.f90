@@ -2,7 +2,6 @@ module fdoc_input
 !! Finding, reading and preprocessing source files.
 use iso_c_binding, only: c_int
 use ffmt_fs, only: is_directory, parent_directory, join_path
-use ffmt_io, only: read_file
 use ffmt_walk, only: collect_files
 use fregex, only: regex_t, regex, re_escape
 use fdoc_fypp, only: fypp_process
@@ -13,7 +12,7 @@ use fdoc_shell, only: quoted, quoted_path, temporary_directory, run_command
 implicit none
 private
 
-public :: find_sources, load_source, expand_includes, is_fixed_form, needs_fypp, runs_command
+public :: find_sources, load_source, expand_includes, needs_fypp, runs_command
 
 integer, parameter :: MAX_INCLUDE_DEPTH = 32
 
@@ -25,13 +24,6 @@ pure function extension_of(path) result(ext)
     character(len=merge(0, len(path) - index(path, '.', back=.true.), index(path, '.', back=.true.) == 0)) :: ext
     ext = path(len(path) - len(ext) + 1:)
 end function extension_of
-
-!> True if `path` has one of the fixed-form extensions.
-logical function is_fixed_form(s, path)
-    type(settings_t), intent(in) :: s       !! the settings
-    character(len=*), intent(in) :: path    !! the file
-    is_fixed_form = contains_string(s%fixed_extensions, extension_of(path))
-end function is_fixed_form
 
 !> True if `path` goes through Fypp, which is Python, so that [[fdoc_fypp]] takes its place.
 logical function needs_fypp(s, path)
@@ -118,9 +110,7 @@ subroutine load_source(s, path, raw, text, stat, errmsg)
     integer, intent(out) :: stat                        !! nonzero on failure
     character(len=:), allocatable, intent(out) :: errmsg  !! what is wrong
 
-    !$omp critical (file_io)
-    call read_file(path, raw, stat, errmsg)
-    !$omp end critical (file_io)
+    call read_whole_file(path, raw, stat, errmsg)
     if (stat /= 0) return
     text = raw
     if (needs_fypp(s, path)) then
@@ -171,7 +161,7 @@ subroutine preprocess(s, path, text)
     character(len=:), allocatable, intent(inout) :: text  !! the text
     character(len=:), allocatable :: output, errors, command, directory, result, msg
     character(len=32) :: tag
-    integer :: exit_code, stat, unit
+    integer :: exit_code, stat
 
     call temporary_directory(directory)
     call unique_tag(tag)
@@ -180,15 +170,13 @@ subroutine preprocess(s, path, text)
     command = preprocessor_command(s, path)
     call run_command(command//' > '//quoted_path(output)//' 2> '//quoted_path(errors), exit_code)
     if (exit_code == 0) then
-        call read_file(output, result, stat, msg)
+        call read_whole_file(output, result, stat, msg)
         if (stat == 0) call move_alloc(result, text)
     else
         call warn('preprocessing failed, reverting to the file itself: '//command)
     end if
-    open (newunit=unit, file=output, status='old', iostat=stat)
-    if (stat == 0) close (unit, status='delete')
-    open (newunit=unit, file=errors, status='old', iostat=stat)
-    if (stat == 0) close (unit, status='delete')
+    call remove_file(output)
+    call remove_file(errors)
 end subroutine preprocess
 
 !> Replace `include` lines in `text` by the files they name, found in `directory` or `search`.
@@ -213,7 +201,7 @@ recursive subroutine expand_includes(search, directory, text, depth)
             call warn('Can not find include file "'//name//'"')
             cycle
         end if
-        call read_file(found, contents, stat, msg)
+        call read_whole_file(found, contents, stat, msg)
         if (stat /= 0) cycle
         call expand_includes(search, parent_directory(found), contents, depth + 1)
         lines(k)%s = contents

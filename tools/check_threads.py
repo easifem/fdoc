@@ -27,6 +27,8 @@ PARALLEL = [
     "fdoc_buffer",
     "fdoc_progress",
     "fdoc_graphs",
+    "fdoc_svg",
+    "fdoc_dot",
     "ffmt_lexer",
     "ffmt_statements",
     "ffmt_constructs",

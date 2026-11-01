@@ -32,7 +32,7 @@ subroutine page_name(name, out)
         case ('>'); out = out//'gt'
         case ('/'); out = out//'SLASH'
         case ('*'); out = out//'ASTERISK'
-        case ('A':'Z'); out = out//achar(iachar(name(k:k)) + 32)
+        case ('A':'Z'); out = out//lower_char(name(k:k))
         case default; out = out//name(k:k)
         end select
     end do
@@ -80,7 +80,7 @@ subroutine object_word(e, word)
     case (E_COMMON); word = 'common'
     case default; word = ''
     end select
-    if ((e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION) .and. e%iface /= IFACE_NONE) word = 'interface'
+    if (is_procedure(e%kind) .and. e%iface /= IFACE_NONE) word = 'interface'
 end subroutine object_word
 
 !> The URL of an entity relative to the root of the site, or `''`.
@@ -150,7 +150,7 @@ pure logical function of_class(e, entity)
     case ('type')
         of_class = e%kind == E_TYPE
     case ('procedure', 'proc')
-        of_class = e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION
+        of_class = is_procedure(e%kind)
     case ('subroutine')
         of_class = e%kind == E_SUBROUTINE
     case ('function')
@@ -194,7 +194,7 @@ logical function matches(list, id, name, entity)
         if (.not. allocated(e%name) .or. e%kind == E_NONE) return
         if (.not. of_class(e, entity)) return
         if (e%kind == E_FILE) then
-            at = index(e%name, '/', back=.true.)
+            at = last_separator(e%name)
             file_name = e%name(at + 1:)
             matches = lowercase(file_name) == name
             return
@@ -252,7 +252,7 @@ subroutine index_entity_names(list)
     do k = 1, list%n
         associate (e => list%box(k)%e)
             if (.not. top_level(e%kind) .or. .not. allocated(e%name)) cycle
-            at = merge(index(e%name, '/', back=.true.), 0, e%kind == E_FILE)
+            at = merge(last_separator(e%name), 0, e%kind == E_FILE)
             first = index_find(list%names, lowercase(e%name(at + 1:)))
             if (first == 0) then
                 call index_set(list%names, lowercase(e%name(at + 1:)), k)

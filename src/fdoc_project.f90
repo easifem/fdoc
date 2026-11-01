@@ -13,7 +13,7 @@ use fdoc_shell, only: make_directory, quoted, quoted_path, run_command
 implicit none
 private
 
-public :: load_project_sources, correlate, prune, public_symbols, find_module, read_use_spec, find_symbol
+public :: load_project_sources, correlate, prune, public_symbols, find_symbol
 
 type, public :: symbol_t
     !! An entity under the name it is known by in some scope.
@@ -239,8 +239,7 @@ subroutine load_external_project(p, s, url)
     call json%initialize()
     call json%load(path, root)
     if (remote) then
-        open (newunit=k, file=fetched, status='old', iostat=status)
-        if (status == 0) close (k, status='delete')
+        call remove_file(fetched)
     end if
     if (json%failed()) then
         call json%clear_exceptions()
@@ -258,8 +257,7 @@ subroutine load_external_project(p, s, url)
     end if
     call json%destroy(root)
     if (remote) then
-        open (newunit=n, file=path, status='old', iostat=status)
-        if (status == 0) close (n, status='delete')
+        call remove_file(path)
     end if
 end subroutine load_external_project
 
@@ -367,10 +365,10 @@ pure logical function in_category(e, category)
 
     select case (category)
     case (1)
-        in_category = e%kind == E_INTERFACE .or. ((e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION .or. &
+        in_category = e%kind == E_INTERFACE .or. ((is_procedure(e%kind) .or. &
                                                    e%kind == E_MODPROC) .and. e%iface /= IFACE_ABSTRACT)
     case (2)
-        in_category = (e%kind == E_SUBROUTINE .or. e%kind == E_FUNCTION) .and. e%iface == IFACE_ABSTRACT
+        in_category = is_procedure(e%kind) .and. e%iface == IFACE_ABSTRACT
     case (3)
         in_category = e%kind == E_TYPE
     case default
@@ -674,7 +672,7 @@ subroutine generic_bodies(p, which, id)
         do b = 1, size(p%list%box(child)%e%children)
             body = p%list%box(child)%e%children(b)
             associate (e => p%list%box(body)%e)
-                if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION) cycle
+                if (.not. is_procedure(e%kind)) cycle
                 if (e%permission == 'public' .or. e%permission == 'protected') then
                     call add_symbol(p%pub(which)%procs, lowercase(e%name), body)
                 end if
@@ -773,7 +771,7 @@ subroutine prune(p, s)
                     if (.not. contains_string(parent%display, e%permission)) e%visible = .false.
                 end if
                 if (s%hide_undoc .and. size(e%doc) == 0) e%visible = .false.
-                if ((parent%kind == E_SUBROUTINE .or. parent%kind == E_FUNCTION) .and. .not. parent%internals) then
+                if (is_procedure(parent%kind) .and. .not. parent%internals) then
                     e%visible = .false.
                 end if
             end associate

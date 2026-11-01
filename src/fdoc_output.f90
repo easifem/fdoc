@@ -1,7 +1,6 @@
 module fdoc_output
 !! Writing the documentation.
 use json_module, only: json_core, json_value
-use ffmt_io, only: write_file
 use ffmt_fs, only: join_path
 use fdoc_util
 use fdoc_model
@@ -42,7 +41,7 @@ subroutine write_modules(p, s, stat, errmsg)
     call json%serialize(root, text)
     call json%destroy(root)
     call make_directory(s%output_dir, stat)
-    call write_file(join_path(s%output_dir, 'modules.json'), text, stat, errmsg)
+    call write_whole_file(join_path(s%output_dir, 'modules.json'), text, stat, errmsg)
 end subroutine write_modules
 
 !> The JSON form of entity `id`, for `modules.json`.
@@ -55,7 +54,6 @@ recursive subroutine entity_json(json, p, id, key, module_index, node)
     type(json_value), pointer, intent(out) :: node  !! the result
     character(len=:), allocatable :: word, url
     type(json_value), pointer :: array
-    integer :: k
 
     call json%create_object(node, key)
     associate (e => p%list%box(id)%e)

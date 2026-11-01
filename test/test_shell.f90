@@ -2,7 +2,7 @@ module test_shell
 !! File system operations, on real files, so that they are checked on each platform.
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use ffmt_fs, only: is_directory
-use ffmt_io, only: read_file, write_file
+use fdoc_util, only: read_whole_file, write_whole_file
 use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path, program_exists, &
                       run_command, temporary_directory
 implicit none
@@ -45,9 +45,7 @@ subroutine test_directories(error)
     call make_directory(MADE//'/a/b', stat)
     call check(error, stat, 0, 'making it again is fine')
     if (allocated(error)) return
-    !$omp critical (file_io)
-    call write_file(MADE//'/a/b/f.txt', 'x', stat, msg)
-    !$omp end critical (file_io)
+    call write_whole_file(MADE//'/a/b/f.txt', 'x', stat, msg)
     call check(error, stat, 0)
     if (allocated(error)) return
     call remove_directory(MADE)
@@ -64,25 +62,19 @@ subroutine test_copies(error)
     call make_directory(COPIED//'/from/sub', stat)
     call check(error, stat, 0)
     if (allocated(error)) return
-    !$omp critical (file_io)
-    call write_file(COPIED//'/from/sub/f.txt', 'hello', stat, msg)
-    !$omp end critical (file_io)
+    call write_whole_file(COPIED//'/from/sub/f.txt', 'hello', stat, msg)
     call check(error, stat, 0)
     if (allocated(error)) return
     call copy_file(COPIED//'/from/sub/f.txt', COPIED//'/g.txt', stat)
     call check(error, stat, 0)
     if (allocated(error)) return
-    !$omp critical (file_io)
-    call read_file(COPIED//'/g.txt', text, stat, msg)
-    !$omp end critical (file_io)
+    call read_whole_file(COPIED//'/g.txt', text, stat, msg)
     call check(error, stat == 0 .and. text == 'hello', 'a file')
     if (allocated(error)) return
     call copy_path(COPIED//'/from', COPIED//'/to', stat)
     call check(error, stat, 0)
     if (allocated(error)) return
-    !$omp critical (file_io)
-    call read_file(COPIED//'/to/sub/f.txt', text, stat, msg)
-    !$omp end critical (file_io)
+    call read_whole_file(COPIED//'/to/sub/f.txt', text, stat, msg)
     call check(error, stat == 0 .and. text == 'hello', 'a directory')
     if (allocated(error)) return
     call copy_path(COPIED//'/g.txt', COPIED//'/h.txt', stat)

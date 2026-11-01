@@ -10,7 +10,6 @@ module fdoc_markdown
 !! Documentation is rendered in parallel, so nothing here calls a function returning a deferred-length
 !! string (see `example/slen_race.f90`).
 use fdoc_util
-use ffmt_io, only: read_file
 use fdoc_buffer
 use fdoc_highlight, only: highlight_fortran
 use fdoc_progress, only: warn
@@ -149,7 +148,7 @@ recursive subroutine markdown_to_html(source, options, html)
     call expand_file_includes(lines, options, 1)
     call admonition_lines(lines)
     if (allocated(options%aliases)) call substitute_aliases(lines, options%aliases)
-    call stash_fenced_code(t, lines, options)
+    call stash_fenced_code(t, lines)
     call stash_html_blocks(t, lines, options)
     call collect_definitions(t, lines)
     text = join(lines, NL)
@@ -210,9 +209,7 @@ recursive subroutine expand_file_includes(lines, options, depth)
         ! not `join_path`, which returns a deferred-length string
         path = strip(lines(k)%s(a + 2:a + b))
         if (.not. starts_with(path, '/')) path = options%base_path//'/'//path
-        !$omp critical (file_io)
-        call read_file(path, contents, stat, msg)
-        !$omp end critical (file_io)
+        call read_whole_file(path, contents, stat, msg)
         if (stat /= 0) then
             call warn('could not include '//path)
             call push(out, lines(k)%s)
@@ -411,7 +408,7 @@ subroutine unstash(t, html)
                 i = i + 1
                 cycle
             end if
-            call read_digits(html(i + 1:i + j - 2), number, ios)
+            call digits_value(html(i + 1:i + j - 2), number, ios)
             if (ios == 0 .and. number >= 1 .and. number <= size(t%stash)) then
                 call add(b, t%stash(number)%s)
                 changed = .true.
@@ -424,10 +421,9 @@ subroutine unstash(t, html)
 end subroutine unstash
 
 !> Replace fenced code blocks by placeholders.
-subroutine stash_fenced_code(t, lines, options)
+subroutine stash_fenced_code(t, lines)
     type(tree_t), intent(inout) :: t                        !! the conversion
     type(string_t), allocatable, intent(inout) :: lines(:)  !! the lines
-    type(markdown_options_t), intent(in) :: options         !! what rendering depends on
     type(string_t), allocatable :: out(:)
     character(len=:), allocatable :: info, html, placeholder, lang
     type(buffer_t) :: code
@@ -1820,7 +1816,7 @@ subroutine unique_id(t, html, id)
                 if (separated .and. (b%n > 0 .or. hyphen)) call add(b, '-')
                 separated = .false.
                 hyphen = .false.
-                call add(b, lower_one(c))
+                call add(b, lower_char(c))
             end if
         end associate
     end do
@@ -1835,32 +1831,6 @@ subroutine unique_id(t, html, id)
     end do
     call push(t%ids, id)
 end subroutine unique_id
-
-!> The value of `text`, which should be digits. This is not an internal `read`, as it runs in parallel.
-pure subroutine read_digits(text, value, stat)
-    character(len=*), intent(in) :: text    !! the text
-    integer, intent(out) :: value           !! its value
-    integer, intent(out) :: stat            !! nonzero if it is not a number
-    integer :: k
-
-    value = 0
-    stat = merge(1, 0, len(text) == 0)
-    do k = 1, len(text)
-        if (text(k:k) < '0' .or. text(k:k) > '9') then
-            stat = 1
-            return
-        end if
-        value = 10*value + iachar(text(k:k)) - iachar('0')
-    end do
-end subroutine read_digits
-
-!> `c` in lowercase.
-elemental function lower_one(c) result(l)
-    character, intent(in) :: c  !! the character
-    character :: l
-    l = c
-    if (c >= 'A' .and. c <= 'Z') l = achar(iachar(c) + 32)
-end function lower_one
 
 !> Replace the `[TOC]` marker by the table of contents.
 subroutine insert_toc(t, html)
@@ -2025,7 +1995,7 @@ recursive subroutine render_footnotes(t, options, out)
         id = t%notes(k)%id
         call markdown_to_html(t%notes(k)%text, options, html)
         back = '&#160;<a class="footnote-backref" href="#fnref:'//id//'" title="Jump back to footnote '// &
-               trim(number_text(k))//' in the text">&#8617;</a>'
+               trim(int_text(k))//' in the text">&#8617;</a>'
         at = index(html, '</p>', back=.true.)
         if (at > 0) then
             html = html(:at - 1)//back//html(at:)
@@ -2038,13 +2008,6 @@ recursive subroutine render_footnotes(t, options, out)
     end do
     call add(out, '</ol>'//NL//'</div>')
 end subroutine render_footnotes
-
-!> `k` as text, in a fixed width.
-pure function number_text(k) result(text)
-    integer, intent(in) :: k    !! the number
-    character(len=12) :: text
-    text = int_text(k)
-end function number_text
 
 !> Write inline Markdown `text` as HTML.
 recursive subroutine inline(t, text, options, out, depth)
@@ -2064,7 +2027,7 @@ recursive subroutine inline(t, text, options, out, depth)
             used = index(text(i:), ETX)
             if (used > 0) call add(out, text(i:i + used - 1))
         case ('\')
-            call inline_backslash(t, text, i, out, used)
+            call inline_backslash(text, i, out, used)
         case ('`')
             call inline_code(text, i, out, used)
         case ('[')
@@ -2116,8 +2079,7 @@ recursive subroutine inline(t, text, options, out, depth)
 end subroutine inline
 
 !> Handle a backslash: math, or an escaped character.
-subroutine inline_backslash(t, text, i, out, used)
-    type(tree_t), intent(in) :: t           !! the conversion
+subroutine inline_backslash(text, i, out, used)
     character(len=*), intent(in) :: text    !! the text
     integer, intent(in) :: i                !! where it is
     type(buffer_t), intent(inout) :: out    !! the HTML
@@ -2253,7 +2215,7 @@ subroutine encoded(text, out)
     integer :: k
 
     do k = 1, len(text)
-        call add(out, '&#'//trim(number_text(iachar(text(k:k))))//';')
+        call add(out, '&#'//trim(int_text(iachar(text(k:k))))//';')
     end do
 end subroutine encoded
 
@@ -2421,7 +2383,7 @@ recursive subroutine inline_bracket(t, text, i, options, out, depth, used)
                     if (t%notes(k)%id == text(i + 2:i + close - 2)) then
                         t%notes(k)%used = .true.
                         call add(out, '<sup id="fnref:'//t%notes(k)%id//'"><a class="footnote-ref" href="#fn:'// &
-                                 t%notes(k)%id//'">'//trim(number_text(k))//'</a></sup>')
+                                 t%notes(k)%id//'">'//trim(int_text(k))//'</a></sup>')
                         used = close
                         return
                     end if

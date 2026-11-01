@@ -3,12 +3,15 @@ module fdoc_util
 use, intrinsic :: iso_fortran_env, only: int64
 use ffmt_strings, only: string_t, lowercase
 use ffmt_fs, only: absolute_path, join_path
+use ffmt_io, only: read_file, write_file
 implicit none
 private
 
 public :: string_t, lowercase
 public :: name_index_t, index_find, index_set
 public :: unique_tag
+public :: read_whole_file, write_whole_file, remove_file, last_separator
+public :: is_digit, digits_value, lower_char, lower_in_place
 public :: strip, starts_with, ends_with, split_lines, split_words, split_on, join, push, contains_string
 public :: parse_bool, parse_int, expand_vars, strftime, resolve_path, sort_strings
 public :: top_split, top_index, closing_paren, remove_blanks, starts_word, word_at, push_int
@@ -25,6 +28,93 @@ type :: name_index_t
 end type name_index_t
 
 contains
+
+!> Read all of file `path`. This can be called from parallel code, as all file I/O of threads has to
+!> take turns: libgfortran 16 can crash otherwise (see `example/io_race.f90`).
+subroutine read_whole_file(path, text, stat, errmsg)
+    character(len=*), intent(in) :: path                    !! the file
+    character(len=:), allocatable, intent(out) :: text      !! its contents, or `''`
+    integer, intent(out) :: stat                            !! nonzero on failure
+    character(len=:), allocatable, intent(out) :: errmsg    !! what is wrong
+
+    !$omp critical (file_io)
+    call read_file(path, text, stat, errmsg)
+    !$omp end critical (file_io)
+end subroutine read_whole_file
+
+!> Replace the contents of file `path`. This can be called from parallel code.
+subroutine write_whole_file(path, text, stat, errmsg)
+    character(len=*), intent(in) :: path                    !! the file
+    character(len=*), intent(in) :: text                    !! its new contents
+    integer, intent(out) :: stat                            !! nonzero on failure
+    character(len=:), allocatable, intent(out) :: errmsg    !! what is wrong
+
+    !$omp critical (file_io)
+    call write_file(path, text, stat, errmsg)
+    !$omp end critical (file_io)
+end subroutine write_whole_file
+
+!> Delete file `path`, if it can be. This can be called from parallel code.
+subroutine remove_file(path)
+    character(len=*), intent(in) :: path    !! the file
+    integer :: unit, status
+
+    !$omp critical (file_io)
+    open (newunit=unit, file=path, status='old', iostat=status)
+    if (status == 0) close (unit, status='delete', iostat=status)
+    !$omp end critical (file_io)
+end subroutine remove_file
+
+!> The position of the last separator in `path`, `/` or `\`, or 0.
+pure integer function last_separator(path)
+    character(len=*), intent(in) :: path    !! the path
+
+    last_separator = max(index(path, '/', back=.true.), index(path, '\', back=.true.))
+end function last_separator
+
+!> True if `c` is a digit.
+elemental logical function is_digit(c)
+    character, intent(in) :: c  !! the character
+
+    is_digit = c >= '0' .and. c <= '9'
+end function is_digit
+
+!> The value of `text`, without an internal `read`, as those take a lock.
+pure subroutine digits_value(text, value, stat)
+    character(len=*), intent(in) :: text    !! the digits
+    integer, intent(out) :: value           !! their value
+    integer, intent(out) :: stat            !! nonzero if there are none, or something else
+    integer :: k
+
+    value = 0
+    stat = merge(1, 0, len(text) == 0)
+    do k = 1, len(text)
+        if (.not. is_digit(text(k:k))) then
+            stat = 1
+            return
+        end if
+        value = 10*value + iachar(text(k:k)) - iachar('0')
+    end do
+end subroutine digits_value
+
+!> `c` in lowercase.
+elemental function lower_char(c) result(l)
+    character, intent(in) :: c  !! the character
+    character :: l
+
+    l = c
+    if (c >= 'A' .and. c <= 'Z') l = achar(iachar(c) + 32)
+end function lower_char
+
+!> Make `text` lowercase, without a temporary, for text too long for the stack of a thread.
+pure subroutine lower_in_place(text)
+    character(len=*), intent(inout) :: text !! the text
+    integer :: k
+
+    do k = 1, len(text)
+        text(k:k) = lower_char(text(k:k))
+    end do
+end subroutine lower_in_place
 
 !> A number, as text, that another run at the same time is very unlikely to get, for temporary names.
 subroutine unique_tag(tag)

@@ -6,7 +6,7 @@ use ffmt_fs, only: is_directory
 implicit none
 private
 
-public :: is_windows, quoted, quoted_path, make_directory, remove_directory, copy_file, copy_path
+public :: quoted, quoted_path, make_directory, remove_directory, copy_file, copy_path
 public :: program_exists, temporary_directory, run_command
 
 contains

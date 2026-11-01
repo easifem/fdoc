@@ -1,7 +1,6 @@
 module fdoc_pages
 !! Static pages: a tree of Markdown files under `page_dir`, each directory with an `index.md`.
 use ffmt_fs, only: list_directory, dir_entry_t, is_directory, ENTRY_DIR
-use ffmt_io, only: read_file
 use fdoc_util
 use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t
@@ -156,9 +155,9 @@ subroutine read_page(p, s, base, path, target, parent, depth, pages, ordered, sk
     allocate (ordered(0))
     skip = s%copy_subdir
     do k = 1, size(skip)
-        skip(k)%s = skip(k)%s(index(skip(k)%s, '/', back=.true.) + 1:)
+        skip(k)%s = skip(k)%s(last_separator(skip(k)%s) + 1:)
     end do
-    call read_file(path, text, stat, msg)
+    call read_whole_file(path, text, stat, msg)
     if (stat /= 0) then
         call warn('could not read '//path//': '//msg)
         return

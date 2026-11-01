@@ -1,8 +1,6 @@
 module fdoc_site
-!! Writing the HTML site. Pages are rendered in parallel, each to text in memory, and written after, so
-!! nothing that renders a page calls a function returning a deferred-length string (see
-!! `example/slen_race.f90`).
-use ffmt_io, only: write_file
+!! Writing the HTML site. Pages are rendered and written in parallel, so nothing that renders a page
+!! calls a function returning a deferred-length string (see `example/slen_race.f90`).
 use fdoc_util
 use fdoc_buffer
 use fdoc_model
@@ -77,7 +75,7 @@ subroutine assign_pages(p)
                 cycle
             end select
             if (e%kind == E_FILE) then
-                at = index(e%name, '/', back=.true.)
+                at = last_separator(e%name)
                 call page_name(e%name(at + 1:), name)
                 e%page = name
             end if
@@ -88,7 +86,7 @@ subroutine assign_pages(p)
             if (count > 1) then
                 call page_name(e%name, name)
                 if (e%kind == E_FILE) name = e%page
-                e%page = name//'~'//trim(number(count))
+                e%page = name//'~'//trim(int_text(count))
             end if
         end associate
     end do
@@ -99,15 +97,8 @@ pure integer function display_length(e)
     type(entity_t), intent(in) :: e     !! the entity
 
     display_length = len(e%name)
-    if (e%kind == E_FILE) display_length = len(e%name) - index(e%name, '/', back=.true.)
+    if (e%kind == E_FILE) display_length = len(e%name) - last_separator(e%name)
 end function display_length
-
-!> `k` as text, in a fixed width.
-pure function number(k) result(text)
-    integer, intent(in) :: k    !! the number
-    character(len=12) :: text
-    text = int_text(k)
-end function number
 
 !> The members of each list page, in the order of the `sort` setting.
 subroutine collect_lists(site)
@@ -660,7 +651,7 @@ pure function letter_class(letter) result(class)
     character :: class
 
     class = '_'
-    if (len(letter) == 1) class = achar(iachar(letter) + 32)
+    if (len(letter) == 1) class = lower_char(letter)
 end function letter_class
 
 !> Write the title of an entity's page, with what is known about it.
@@ -727,7 +718,7 @@ pure function display_name(e) result(name)
     integer :: at
 
     at = 0
-    if (e%kind == E_FILE) at = index(e%name, '/', back=.true.)
+    if (e%kind == E_FILE) at = last_separator(e%name)
     name = e%name(at + 1:)
 end function display_name
 
@@ -1094,7 +1085,7 @@ subroutine locate_sources(site)
     file = 0
     do k = 1, site%p%list%n
         associate (e => site%p%list%box(k)%e)
-            if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION .and. e%kind /= E_TYPE) cycle
+            if (.not. is_procedure(e%kind) .and. e%kind /= E_TYPE) cycle
             if (allocated(e%external_url) .or. .not. e%visible) cycle
             if (.not. wants_source(site, k)) cycle
             n = n + 1
@@ -1126,9 +1117,7 @@ subroutine locate_in_file(site, ids)
 
     ! on the heap and lowered in place, as a whole file would not fit on the stack of a thread
     low = site%p%list%box(site%p%list%box(ids(1))%e%file)%e%source_text
-    do k = 1, len(low)
-        if (low(k:k) >= 'A' .and. low(k:k) <= 'Z') low(k:k) = achar(iachar(low(k:k)) + 32)
-    end do
+    call lower_in_place(low)
     call construct_lines(low, starts, stops)
     cursor = 1
     do k = 1, size(ids)
@@ -1517,7 +1506,7 @@ subroutine type_body(site, id, variables, bindings, finals, b)
     integer, intent(in) :: bindings(:)      !! its bindings
     integer, intent(in) :: finals(:)        !! its final procedures
     type(buffer_t), intent(inout) :: b      !! the HTML
-    integer :: k, j
+    integer :: k
 
     associate (e => site%p%list%box(id)%e)
         if (allocated(e%more%extends)) then
@@ -1589,7 +1578,7 @@ subroutine page_outline(site, id, b)
     type(buffer_t), intent(inout) :: b      !! the HTML
 
     associate (e => site%p%list%box(id)%e)
-        if (e%kind /= E_SUBROUTINE .and. e%kind /= E_FUNCTION .and. e%kind /= E_MODPROC) return
+        if (.not. is_procedure(e%kind) .and. e%kind /= E_MODPROC) return
         call add(b, '<h4>On this page</h4><ul>')
         if (allocated(e%more%arg_ids)) then
             if (size(e%more%arg_ids) > 0) call add(b, '<li><a href="#arguments">Arguments</a></li>')
@@ -1637,7 +1626,7 @@ subroutine site_side(site, here, prefix, full, b)
         end do
         if (limit < size(site%members(k)%ids)) then
             call add(b, '<li><a class="more" href="'//prefix//'lists/'//trim(LIST_FILE(k))//'.html">All '// &
-                     trim(number(size(site%members(k)%ids)))//'&hellip;</a></li>')
+                     trim(int_text(size(site%members(k)%ids)))//'&hellip;</a></li>')
         end if
         call add(b, '</ul>'//achar(10))
     end do
@@ -1792,7 +1781,7 @@ subroutine index_page(site, front, html)
         do k = 1, NUM_LISTS
             if (size(site%members(k)%ids) == 0) cycle
             call add(b, '<a class="card" href="lists/'//trim(LIST_FILE(k))//'.html"><b>'// &
-                     trim(number(size(site%members(k)%ids)))//'</b><span>'//trim(LIST_TITLE(k))//'</span></a>')
+                     trim(int_text(size(site%members(k)%ids)))//'</b><span>'//trim(LIST_TITLE(k))//'</span></a>')
         end do
         call add(b, '</div>'//achar(10)//'</div>'//achar(10)//'<div class="doc">'//achar(10))
         call add(b, front)
@@ -1875,7 +1864,7 @@ subroutine page_directories(directory, pages)
     integer :: k, at, status
 
     do k = 1, size(pages)
-        at = index(pages(k)%path, '/', back=.true.)
+        at = last_separator(pages(k)%path)
         if (at > 0) call make_directory(directory//'/page/'//pages(k)%path(:at - 1), status)
     end do
 end subroutine page_directories
@@ -1936,9 +1925,7 @@ subroutine write_entity_page(site, id, directory, stat)
 
     call entity_page(site, id, html)
     call entity_url(site%p%list, id, url)
-    !$omp critical (file_io)
-    call write_file(directory//'/'//url, html, stat, errmsg)
-    !$omp end critical (file_io)
+    call write_whole_file(directory//'/'//url, html, stat, errmsg)
 end subroutine write_entity_page
 
 !> Write the whole site.
@@ -2014,21 +2001,21 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
         call progress_tick()
         if (.not. allocated(pages(k)%s)) cycle
         count = count + 1
-        call write_file(directory//'/'//paths(k)%s, pages(k)%s, stat, errmsg)
+        call write_whole_file(directory//'/'//paths(k)%s, pages(k)%s, stat, errmsg)
         if (stat /= 0) return
     end do
     call progress_finish()
     call asset_fdoc_css(b)
     call take(b, url)
-    call write_file(directory//'/css/fdoc.css', url, stat, errmsg)
+    call write_whole_file(directory//'/css/fdoc.css', url, stat, errmsg)
     if (stat /= 0) return
     call asset_fdoc_js(b)
     call take(b, url)
-    call write_file(directory//'/js/fdoc.js', url, stat, errmsg)
+    call write_whole_file(directory//'/js/fdoc.js', url, stat, errmsg)
     if (stat /= 0) return
     if (s%search) then
         call search_index(site, url)
-        call write_file(directory//'/search/index.js', url, stat, errmsg)
+        call write_whole_file(directory//'/search/index.js', url, stat, errmsg)
         if (stat /= 0) return
     end if
     call copy_page_files(s, directory, pages_in)

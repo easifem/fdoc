@@ -7,6 +7,8 @@ use fdoc_util, only: string_t, push, push_int, name_index_t
 implicit none
 private
 
+public :: is_procedure
+
 ! entity kinds
 integer, parameter, public :: E_NONE = 0
 integer, parameter, public :: E_FILE = 1          !! a source file
@@ -180,6 +182,13 @@ end type entity_list_t
 type(entity_more_t), target, save, public :: no_more
 
 contains
+
+!> True if `kind` is a subroutine or function.
+elemental logical function is_procedure(kind)
+    integer, intent(in) :: kind     !! one of the `E_*` constants
+
+    is_procedure = kind == E_SUBROUTINE .or. kind == E_FUNCTION
+end function is_procedure
 
 !> Add an entity of kind `kind` inside `parent`, returning its index.
 integer function list_add(self, kind, parent) result(id)

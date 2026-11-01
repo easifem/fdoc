@@ -11,7 +11,6 @@ module fdoc_project_file
 use tomlf, only: toml_table, toml_array, toml_keyval, toml_key, toml_value, toml_error, toml_load, toml_loads, &
                  get_value, len
 use tomlf_constants, only: toml_type
-use ffmt_io, only: read_file
 use ffmt_fs, only: join_path, parent_directory
 use ffmt_strings, only: to_s
 use fdoc_util
@@ -160,7 +159,7 @@ subroutine load_project(path, directory, s, body, stat, errmsg)
     end if
     text = ''
     if (len(file) > 0) then
-        call read_file(file, text, stat, errmsg)
+        call read_whole_file(file, text, stat, errmsg)
         if (stat /= 0) return
     end if
     call load_fpm_settings(join_path(directory, 'fpm.toml'), s, found, front, stat, errmsg)
@@ -233,7 +232,7 @@ subroutine load_fpm_settings(path, s, found, front, stat, errmsg)
     call get_value(table, 'front_page', front)
     call get_value(table, 'front_page_file', file)
     if (allocated(file)) then
-        call read_file(join_path(parent_directory(path), file), front, stat, errmsg)
+        call read_whole_file(join_path(parent_directory(path), file), front, stat, errmsg)
         if (stat /= 0) return
     end if
     call apply_table(table, s, stat, errmsg)
