@@ -97,6 +97,7 @@ end function add
 * Graphs of module use, procedure calls, type inheritance and file dependencies, with links, zoom and panning.
 * Syntax highlighted Fortran source.
 * Badges for what procedures are, such as `pure` or `recursive`, and for those that keep state between calls, with arguments coloured by intent.
+* A logo on the main page, from the `logo` setting, which is a path to an image.
 * Generic interfaces shown as call forms, with a table of the types and ranks each form takes and what it returns.
 * A search box. Press `/` to use it.
 * `modules.json`, so that other projects can link to this one. fdoc and FORD can read each other's.
@@ -104,6 +105,7 @@ end function add
 ## Differences from FORD
 
 * **Fixed-form source is not supported yet.** Those files are skipped with a warning.
+* **`logo` is fdoc's own setting.** FORD doesn't have it.
 * **`html_template_dir` has no effect**, because there are no templates. The HTML is different too, so CSS written for FORD's pages needs rewriting. `css:` still adds your own style sheet.
 * **Of the Python-Markdown extensions in `md_extensions`,** only `toc` and `smarty` are available. Others are skipped with a warning.
 * **fdoc doesn't run Python programs.** `pcpp` is replaced by `gfortran -E -cpp` when it's the preprocessor.

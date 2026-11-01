@@ -13,7 +13,7 @@ use fdoc_urls, only: entity_url, entity_anchor, object_word, page_name, url_quot
 use fdoc_highlight, only: highlight_fortran
 use fdoc_generics, only: write_call_forms
 use fdoc_assets, only: asset_fdoc_css, asset_fdoc_js
-use fdoc_progress, only: progress_start, progress_tick, progress_finish
+use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
 use fdoc_shell, only: make_directory, remove_directory, copy_file, copy_path
 use ffmt_fs, only: is_directory
 implicit none
@@ -705,6 +705,25 @@ subroutine entity_title(site, id, word, b)
         end if
     end associate
 end subroutine entity_title
+
+!> The name in the site of the file of the `logo` setting: `logo`, with its extension, or `''` if there
+!> is no such file.
+subroutine logo_name(s, name)
+    type(settings_t), intent(in) :: s                   !! the settings
+    character(len=:), allocatable, intent(out) :: name  !! the name
+    logical :: found
+    integer :: at
+
+    name = ''
+    if (.not. allocated(s%logo)) return
+    !$omp critical (file_io)
+    inquire (file=s%logo, exist=found)
+    !$omp end critical (file_io)
+    if (.not. found) return
+    at = max(index(s%logo, '.', back=.true.), last_separator(s%logo) + 1)
+    name = 'logo'//s%logo(at:)
+    if (index(name, '.') == 0) name = 'logo'
+end subroutine logo_name
 
 !> Write what contains entity `id`, from its source file down, each with a link to its page.
 subroutine breadcrumbs(site, id, b)
@@ -1843,13 +1862,23 @@ subroutine index_page(site, front, html)
     character(len=*), intent(in) :: front               !! the project file's text as HTML
     character(len=:), allocatable, intent(out) :: html  !! the page
     type(buffer_t) :: b
+    character(len=:), allocatable :: name
     integer :: k
 
     associate (s => site%s)
         call page_head(site, s%project, 0, '', index(front, 'math/tex') > 0, b)
         call add(b, '<aside class="side">'//achar(10))
         call site_side(site, 0, '', .false., b)
-        call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<div class="hero">'//achar(10)//'<h1>')
+        call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
+        call logo_name(s, name)
+        if (len(name) > 0) then
+            call add(b, '<div class="hero with-logo">'//achar(10)//'<img class="hero-logo" src="')
+            call html_escape(name, b, .true.)
+            call add(b, '" alt="">'//achar(10))
+        else
+            call add(b, '<div class="hero">'//achar(10))
+        end if
+        call add(b, '<h1>')
         call html_escape(s%project, b, .false.)
         call add(b, '</h1>'//achar(10))
         if (allocated(s%summary)) then
@@ -2128,6 +2157,12 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     call copy_page_files(s, directory, pages_in)
     if (allocated(s%css)) call copy_file(s%css, directory//'/css/user.css', k)
     if (allocated(s%favicon)) call copy_file(s%favicon, directory//'/favicon.png', k)
+    call logo_name(s, url)
+    if (len(url) > 0) then
+        call copy_file(s%logo, directory//'/'//url, k)
+    else if (allocated(s%logo)) then
+        call warn('the logo '//s%logo//' was not found, so the main page has none')
+    end if
     if (allocated(s%media_dir)) then
         if (is_directory(s%media_dir)) then
             call remove_directory(directory//'/media')

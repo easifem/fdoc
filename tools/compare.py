@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FORD_MISSES = {("ffmt_format/format_text", "same_code")}
 
 # Not expected to agree: the time of the run, packaged paths, defaults that are fdoc's own.
-IGNORED = {"creation_date", "favicon", "parallel", "extra_filetypes_lexer"}
+IGNORED = {"creation_date", "favicon", "logo", "parallel", "extra_filetypes_lexer"}
 
 
 def fdoc_binary() -> str:

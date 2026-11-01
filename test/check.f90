@@ -10,6 +10,7 @@ use test_markdown, only: collect_markdown
 use test_fypp, only: collect_fypp
 use test_shell, only: collect_shell
 use test_graphs, only: collect_graphs
+use test_site, only: collect_site
 implicit none
 
 type(testsuite_type), allocatable :: testsuites(:)
@@ -24,7 +25,8 @@ testsuites = [ &
              new_testsuite("markdown", collect_markdown), &
              new_testsuite("fypp", collect_fypp), &
              new_testsuite("shell", collect_shell), &
-             new_testsuite("graphs", collect_graphs) &
+             new_testsuite("graphs", collect_graphs), &
+             new_testsuite("site", collect_site) &
              ]
 do is = 1, size(testsuites)
     write (error_unit, '(a)') '# Testing: '//testsuites(is)%name

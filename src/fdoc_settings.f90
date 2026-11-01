@@ -20,7 +20,7 @@ character(len=*), parameter :: STRING_OPTIONS = &
     ' project_sourceforge project_url project_website revision sort summary terms_of_service_url twitter version'// &
     ' website year '
 character(len=*), parameter :: PATH_OPTIONS = &
-    ' css favicon graph_dir mathjax_config md_base_dir media_dir output_dir page_dir '
+    ' css favicon graph_dir logo mathjax_config md_base_dir media_dir output_dir page_dir '
 character(len=*), parameter :: LOGICAL_OPTIONS = &
     ' coloured_edges dbg doxygen externalize fixed_length_limit force graph hide_undoc incl_src lower preprocess'// &
     ' print_creation_date proc_internals quiet search show_proc_parent source warn '
@@ -54,7 +54,7 @@ type, public :: settings_t
     character(len=:), allocatable :: twitter, version, website
     character(len=:), allocatable :: creation_date, docmark, docmark_alt, encoding, predocmark, predocmark_alt
     character(len=:), allocatable :: preprocessor, project, project_url, sort, year
-    character(len=:), allocatable :: css, favicon, graph_dir, mathjax_config, md_base_dir, media_dir, output_dir, page_dir
+    character(len=:), allocatable :: css, favicon, graph_dir, logo, mathjax_config, md_base_dir, media_dir, output_dir, page_dir
     character(len=:), allocatable :: directory          !! the project's directory
     logical :: coloured_edges = .false., dbg = .true., doxygen = .true., externalize = .true.
     logical :: fixed_length_limit = .true., force = .false., graph = .false., hide_undoc = .false., incl_src = .true.
@@ -252,6 +252,7 @@ subroutine set_text(s, key, value)
     case ('year'); s%year = value
     case ('css'); s%css = value
     case ('favicon'); s%favicon = value
+    case ('logo'); s%logo = value
     case ('graph_dir'); s%graph_dir = value
     case ('mathjax_config'); s%mathjax_config = value
     case ('md_base_dir'); s%md_base_dir = value
@@ -428,6 +429,7 @@ subroutine finish_settings(s, directory, stat, errmsg)
     call normalise(s%css)
     call normalise(s%favicon)
     call normalise(s%graph_dir)
+    call normalise(s%logo)
     call normalise(s%mathjax_config)
     call normalise(s%md_base_dir)
     call normalise(s%media_dir)
@@ -497,6 +499,7 @@ function dump_settings(s) result(text)
     call put_text('google_plus', s%google_plus)
     call put_text('graph_dir', s%graph_dir)
     call put_text('license', s%license)
+    call put_text('logo', s%logo)
     call put_text('linkedin', s%linkedin)
     call put_text('mathjax_config', s%mathjax_config)
     call put_text('md_base_dir', s%md_base_dir)
