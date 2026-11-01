@@ -1103,8 +1103,34 @@ recursive subroutine parse_file(c, path)
         call fail(c, 'cannot read '//path)
         return
     end if
+    call without_carriage_returns(text)
     call parse_text(c, text, path)
 end subroutine parse_file
+
+!> Turn the line ends of `text` into a line feed, as Python does when it reads text.
+pure subroutine without_carriage_returns(text)
+    character(len=:), allocatable, intent(inout) :: text    !! the text
+    integer :: from, to
+
+    if (index(text, achar(13)) == 0) return
+    to = 0
+    do from = 1, len(text)
+        if (text(from:from) == achar(13)) then
+            if (from == len(text)) then
+                to = to + 1
+                text(to:to) = NL
+                cycle
+            end if
+            if (text(from + 1:from + 1) == NL) cycle
+            to = to + 1
+            text(to:to) = NL
+            cycle
+        end if
+        to = to + 1
+        text(to:to) = text(from:from)
+    end do
+    text = text(:to)
+end subroutine without_carriage_returns
 
 !> The position of the end of the line with position `from`: of its newline, or after the last line.
 pure integer function end_of_line(text, from) result(at)
@@ -1522,7 +1548,7 @@ recursive subroutine include_directive(c, param, path)
         return
     end if
     name = param(2:len(param) - 1)
-    slash = index(path, '/', back=.true.)
+    slash = max(index(path, '/', back=.true.), index(path, '\', back=.true.))
     candidate = path(:slash)//name
     !$omp critical (file_io)
     inquire (file=candidate, exist=exists)

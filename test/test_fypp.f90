@@ -13,6 +13,7 @@ private
 public :: collect_fypp
 
 character, parameter :: NL = achar(10)
+character, parameter :: CR = achar(13)
 character(len=*), parameter :: DIRECTORY = 'build/test_fypp'
 
 contains
@@ -165,6 +166,8 @@ subroutine test_continuation(error)
     call expect(error, '#:set a = [1, &'//NL//'  & 2, &'//NL//'    3]'//NL//'${a}$', '[1, 2, 3]')
     if (allocated(error)) return
     call expect(error, '#:for i in [1] # a comment'//NL//'$:i'//NL//'#:endfor'//NL, '1'//NL)
+    if (allocated(error)) return
+    call expect(error, '#:set a = 1'//CR//NL//'#:if a == 1'//CR//NL//'${a}$'//CR//NL//'#:endif'//CR//NL, '1'//NL)
 end subroutine test_continuation
 
 !> Checks: long lines are folded only if they hold something evaluated.

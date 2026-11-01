@@ -78,8 +78,9 @@ def main():
         if result.returncode != 0:
             problems.append(f"fdoc exited with {result.returncode}: {result.stderr[-500:]}")
         else:
-            if "preprocessing failed" in result.stdout + result.stderr:
-                problems.append("a file could not be preprocessed")
+            failed = [line for line in (result.stdout + result.stderr).splitlines() if "preprocessing failed" in line]
+            if failed:
+                problems.append(f"{len(failed)} files could not be preprocessed, as in: {failed[0][:300]}")
             count, _, broken, _ = check(site)
             if count != pages:
                 problems.append(f"{count} pages, expected {pages}")
