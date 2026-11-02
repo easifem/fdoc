@@ -373,8 +373,8 @@ subroutine add_node(p, id, root, g, place)
     logical, intent(in) :: root         !! true for the entity the graph is about
     type(layout_t), intent(inout) :: g  !! the description
     integer, intent(out) :: place       !! its number in `g`
-    character(len=:), allocatable :: url, colour, name, outline
-    integer :: at
+    character(len=:), allocatable :: url, colour, name, outline, owner_url, owner_colour
+    integer :: at, owner
 
     associate (e => p%list%box(id)%e)
         select case (e%kind)
@@ -394,8 +394,10 @@ subroutine add_node(p, id, root, g, place)
             at = last_separator(name)
             name = name(at + 1:)
         end if
-        if (e%kind == E_BOUNDPROC) name = p%list%box(e%parent)%e%name//'%'//name
-        if (e%bound_to > 0) name = p%list%box(e%bound_to)%e%name//'%'//name
+        ! what belongs to a type is drawn joined to it, with a link to each
+        owner = 0
+        if (e%kind == E_BOUNDPROC) owner = e%parent
+        if (e%bound_to > 0) owner = e%bound_to
         url = ''
         if (e%visible .or. allocated(e%external_url)) call entity_url(p%list, id, url)
         if (.not. e%visible .and. .not. allocated(e%external_url)) colour = '#8a93a5'
@@ -403,9 +405,29 @@ subroutine add_node(p, id, root, g, place)
         if (len(url) > 0 .and. .not. allocated(e%external_url)) url = '../'//url
         outline = ''
         if (root) outline = '#f0a868'
-        call g%add_node(name, place, fill=colour, link=url, outline=outline)
+        if (owner > 0) then
+            call node_link(p, owner, owner_url)
+            owner_colour = merge('#a15c00', '#8a93a5', len(owner_url) > 0)
+            call g%add_node(name, place, fill=colour, link=url, outline=outline, owner=p%list%box(owner)%e%name, &
+                            owner_fill=owner_colour, owner_link=owner_url)
+        else
+            call g%add_node(name, place, fill=colour, link=url, outline=outline)
+        end if
     end associate
 end subroutine add_node
+
+!> The link of entity `id` from a page, or `''` if it has no page.
+subroutine node_link(p, id, url)
+    type(project_t), intent(in) :: p                    !! the project
+    integer, intent(in) :: id                           !! the entity
+    character(len=:), allocatable, intent(out) :: url   !! the link
+
+    url = ''
+    associate (e => p%list%box(id)%e)
+        if (e%visible .or. allocated(e%external_url)) call entity_url(p%list, id, url)
+        if (len(url) > 0 .and. .not. allocated(e%external_url)) url = '../'//url
+    end associate
+end subroutine node_link
 
 !> Add an edge to a description.
 subroutine add_edge(s, relation, from, to, places, g)

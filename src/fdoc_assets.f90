@@ -332,63 +332,63 @@ subroutine asset_fdoc_js(b)
         //'on swatch(style) {'//NL//'        var mark = document.createElement("span");'//NL//'        mark.className = ' &
         //'"graph-key-mark";'//NL//'        Object.keys(style).forEach(function (name) { mark.style[name] = style[name];' &
         //' });'//NL//'        return mark;'//NL//'      }'//NL//'      COLOURS.forEach(function (c) {'//NL//'        if' &
-        //' (svg.querySelector(''rect[fill="'' + c[0] + ''"]'')) entry(swatch({ background: c[0] }), c[1]);'//NL//'     ' &
-        //' });'//NL//'      if (svg.querySelector(''rect[stroke="#f0a868"]'')) entry(swatch({ border: "2px solid #f0a86' &
-        //'8" }), "This page");'//NL//'      if (svg.querySelector("path[stroke-dasharray]")) {'//NL//'        entry(swa' &
-        //'tch({ height: "0", borderRadius: "0", borderTop: "2px dashed #8a93a5" }), "Component of a type");'//NL//'    ' &
-        //'  }'//NL//'      var button = document.createElement("button");'//NL//'      button.textContent = "?";'//NL//' ' &
-        //'     button.title = "Key to the colours";'//NL//'      button.setAttribute("aria-label", "Key to the colours"' &
-        //');'//NL//'      button.setAttribute("aria-expanded", "false");'//NL//'      button.addEventListener("click", ' &
-        //'function () {'//NL//'        key.hidden = !key.hidden;'//NL//'        button.setAttribute("aria-expanded", St' &
-        //'ring(!key.hidden));'//NL//'      });'//NL//'      zoom.appendChild(button);'//NL//'      box.parentNode.inser' &
-        //'tBefore(key, box.nextSibling);'//NL//'    }'//NL//NL//'    document.querySelectorAll(".graph").forEach(functi' &
-        //'on (box) {'//NL//'      var svg = box.querySelector("svg");'//NL//'      if (!svg) return;'//NL//'      var w' &
-        //'idth = svg.width.baseVal.value, height = svg.height.baseVal.value, scale = 1;'//NL//'      function set(value' &
-        //') {'//NL//'        scale = Math.max(0.25, Math.min(6, value));'//NL//'        box.classList.add("zoomed");'//NL &
-        //'        svg.style.width = width * scale + "px";'//NL//'        svg.style.height = height * scale + "px";'//NL &
-        //'      }'//NL//'      var zoom = document.createElement("div");'//NL//'      zoom.className = "zoom";'//NL//' ' &
-        //'     [["+", 1.3], ["\u2212", 1 / 1.3]].forEach(function (b) {'//NL//'        var button = document.createElem' &
-        //'ent("button");'//NL//'        button.textContent = b[0];'//NL//'        button.setAttribute("aria-label", b[1' &
-        //'] > 1 ? "Zoom in" : "Zoom out");'//NL//'        button.addEventListener("click", function () { set(scale * b[' &
-        //'1]); });'//NL//'        zoom.appendChild(button);'//NL//'      });'//NL//'      box.insertBefore(zoom, svg);'//NL &
-        //'      addKey(box, svg, zoom);'//NL//'      var fit = box.clientWidth / width;'//NL//'      if (fit > 0 && fit' &
-        //' < 0.75) set(0.75);'//NL//'      var start = null;'//NL//'      box.addEventListener("mousedown", function (e' &
-        //'vent) {'//NL//'        if (event.target.closest("a, button")) return;'//NL//'        start = [event.clientX, ' &
-        //'event.clientY, box.scrollLeft, box.scrollTop];'//NL//'        box.classList.add("dragging");'//NL//'      });' &
-        //NL//'      window.addEventListener("mousemove", function (event) {'//NL//'        if (!start) return;'//NL//' ' &
-        //'       box.scrollLeft = start[2] - (event.clientX - start[0]);'//NL//'        box.scrollTop = start[3] - (eve' &
-        //'nt.clientY - start[1]);'//NL//'      });'//NL//'      window.addEventListener("mouseup", function () { start ' &
-        //'= null; box.classList.remove("dragging"); });'//NL//'    });'//NL//'  });'//NL//'})();'//NL//NL//'// a link t' &
-        //'o something inside a closed section opens the section'//NL//'function openTarget() {'//NL//'  var id = decode' &
-        //'URIComponent(location.hash.slice(1));'//NL//'  var target = id && document.getElementById(id);'//NL//'  var s' &
-        //'ection = target && target.closest(''details'');'//NL//'  if (section) { section.open = true; target.scrollInt' &
-        //'oView(); }'//NL//'}'//NL//'window.addEventListener(''hashchange'', openTarget);'//NL//'window.addEventListene' &
-        //'r(''DOMContentLoaded'', openTarget);'//NL//NL//'// clicking a heading of a sortable table sorts it by that co' &
-        //'lumn'//NL//'window.addEventListener(''DOMContentLoaded'', function () {'//NL//'  document.querySelectorAll(''' &
-        //'table.sortable'').forEach(function (table) {'//NL//'    var headings = table.querySelectorAll(''thead th'');'//NL &
-        //'    headings.forEach(function (th, column) {'//NL//'      th.addEventListener(''click'', function () {'//NL//' ' &
-        //'       var body = table.tBodies[0];'//NL//'        var numeric = th.classList.contains(''num'');'//NL//'     ' &
-        //'   var up = th.hasAttribute(''aria-sort'') ? th.getAttribute(''aria-sort'') === ''descending'' : !numeric;'//NL &
-        //'        var key = function (row) {'//NL//'          var cell = row.cells[column];'//NL//'          return num' &
-        //'eric ? Number(cell.dataset.sort) : cell.textContent.toLowerCase();'//NL//'        };'//NL//'        var rows ' &
-        //'= Array.prototype.slice.call(body.rows);'//NL//'        rows.sort(function (a, b) {'//NL//'          var x = ' &
-        //'key(a), y = key(b);'//NL//'          return (x < y ? -1 : x > y ? 1 : 0) * (up ? 1 : -1);'//NL//'        });'//NL &
-        //'        rows.forEach(function (row) { body.appendChild(row); });'//NL//'        headings.forEach(function (ot' &
-        //'her) { other.removeAttribute(''aria-sort''); });'//NL//'        th.setAttribute(''aria-sort'', up ? ''ascendi' &
-        //'ng'' : ''descending'');'//NL//'      });'//NL//'    });'//NL//'  });'//NL//'});'//NL//NL//'// the sidebar hol' &
-        //'ds all of the list of this page, and shows where this page is in it'//NL//'(function () {'//NL//'  var script' &
-        //' = document.currentScript;'//NL//'  var root = script ? script.src.replace(/js\/fdoc\.js.*$/, "") : "";'//NL//NL &
-        //'  document.addEventListener("DOMContentLoaded", function () {'//NL//'    var side = document.querySelector("a' &
-        //'side.side");'//NL//'    if (!side) return;'//NL//'    var headings = side.querySelectorAll("h4"), height = 0;' &
-        //NL//'    headings.forEach(function (h) { h.style.top = height + "px"; height += h.offsetHeight; });'//NL//'   ' &
-        //' headings.forEach(function (h) { height -= h.offsetHeight; h.style.bottom = height + "px"; });'//NL//'    var' &
-        //' list = side.querySelector("ul[data-list]");'//NL//'    if (!list || !window.FDOC_SIDEBAR) return;'//NL//'   ' &
-        //' list.innerHTML = (window.FDOC_SIDEBAR[list.dataset.list] || "").replace(/href="@/g, ''href="'' + root);'//NL &
-        //'    var here = location.href.split("#")[0];'//NL//'    var links = list.querySelectorAll("a");'//NL//'    for' &
-        //' (var k = 0; k < links.length; k++) {'//NL//'      if (links[k].href !== here) continue;'//NL//'      links[k' &
-        //'].classList.add("current");'//NL//'      links[k].setAttribute("aria-current", "page");'//NL//'      side.scr' &
-        //'ollTop = links[k].offsetTop - side.clientHeight / 2;'//NL//'      return;'//NL//'    }'//NL//'  });'//NL//'})' &
-        //'();'//NL)
+        //' (svg.querySelector(''rect[fill="'' + c[0] + ''"], path[fill="'' + c[0] + ''"]'')) entry(swatch({ background:' &
+        //' c[0] }), c[1]);'//NL//'      });'//NL//'      if (svg.querySelector(''rect[stroke="#f0a868"]'')) entry(swatc' &
+        //'h({ border: "2px solid #f0a868" }), "This page");'//NL//'      if (svg.querySelector("path[stroke-dasharray]"' &
+        //')) {'//NL//'        entry(swatch({ height: "0", borderRadius: "0", borderTop: "2px dashed #8a93a5" }), "Compo' &
+        //'nent of a type");'//NL//'      }'//NL//'      var button = document.createElement("button");'//NL//'      but' &
+        //'ton.textContent = "?";'//NL//'      button.title = "Key to the colours";'//NL//'      button.setAttribute("ar' &
+        //'ia-label", "Key to the colours");'//NL//'      button.setAttribute("aria-expanded", "false");'//NL//'      bu' &
+        //'tton.addEventListener("click", function () {'//NL//'        key.hidden = !key.hidden;'//NL//'        button.s' &
+        //'etAttribute("aria-expanded", String(!key.hidden));'//NL//'      });'//NL//'      zoom.appendChild(button);'//NL &
+        //'      box.parentNode.insertBefore(key, box.nextSibling);'//NL//'    }'//NL//NL//'    document.querySelectorAl' &
+        //'l(".graph").forEach(function (box) {'//NL//'      var svg = box.querySelector("svg");'//NL//'      if (!svg) ' &
+        //'return;'//NL//'      var width = svg.width.baseVal.value, height = svg.height.baseVal.value, scale = 1;'//NL//' ' &
+        //'     function set(value) {'//NL//'        scale = Math.max(0.25, Math.min(6, value));'//NL//'        box.clas' &
+        //'sList.add("zoomed");'//NL//'        svg.style.width = width * scale + "px";'//NL//'        svg.style.height =' &
+        //' height * scale + "px";'//NL//'      }'//NL//'      var zoom = document.createElement("div");'//NL//'      zo' &
+        //'om.className = "zoom";'//NL//'      [["+", 1.3], ["\u2212", 1 / 1.3]].forEach(function (b) {'//NL//'        v' &
+        //'ar button = document.createElement("button");'//NL//'        button.textContent = b[0];'//NL//'        button' &
+        //'.setAttribute("aria-label", b[1] > 1 ? "Zoom in" : "Zoom out");'//NL//'        button.addEventListener("click' &
+        //'", function () { set(scale * b[1]); });'//NL//'        zoom.appendChild(button);'//NL//'      });'//NL//'    ' &
+        //'  box.insertBefore(zoom, svg);'//NL//'      addKey(box, svg, zoom);'//NL//'      var fit = box.clientWidth / ' &
+        //'width;'//NL//'      if (fit > 0 && fit < 0.75) set(0.75);'//NL//'      var start = null;'//NL//'      box.add' &
+        //'EventListener("mousedown", function (event) {'//NL//'        if (event.target.closest("a, button")) return;'//NL &
+        //'        start = [event.clientX, event.clientY, box.scrollLeft, box.scrollTop];'//NL//'        box.classList.a' &
+        //'dd("dragging");'//NL//'      });'//NL//'      window.addEventListener("mousemove", function (event) {'//NL//' ' &
+        //'       if (!start) return;'//NL//'        box.scrollLeft = start[2] - (event.clientX - start[0]);'//NL//'    ' &
+        //'    box.scrollTop = start[3] - (event.clientY - start[1]);'//NL//'      });'//NL//'      window.addEventListe' &
+        //'ner("mouseup", function () { start = null; box.classList.remove("dragging"); });'//NL//'    });'//NL//'  });'//NL &
+        //'})();'//NL//NL//'// a link to something inside a closed section opens the section'//NL//'function openTarget(' &
+        //') {'//NL//'  var id = decodeURIComponent(location.hash.slice(1));'//NL//'  var target = id && document.getEle' &
+        //'mentById(id);'//NL//'  var section = target && target.closest(''details'');'//NL//'  if (section) { section.o' &
+        //'pen = true; target.scrollIntoView(); }'//NL//'}'//NL//'window.addEventListener(''hashchange'', openTarget);'//NL &
+        //'window.addEventListener(''DOMContentLoaded'', openTarget);'//NL//NL//'// clicking a heading of a sortable tab' &
+        //'le sorts it by that column'//NL//'window.addEventListener(''DOMContentLoaded'', function () {'//NL//'  docume' &
+        //'nt.querySelectorAll(''table.sortable'').forEach(function (table) {'//NL//'    var headings = table.querySelec' &
+        //'torAll(''thead th'');'//NL//'    headings.forEach(function (th, column) {'//NL//'      th.addEventListener(''' &
+        //'click'', function () {'//NL//'        var body = table.tBodies[0];'//NL//'        var numeric = th.classList.' &
+        //'contains(''num'');'//NL//'        var up = th.hasAttribute(''aria-sort'') ? th.getAttribute(''aria-sort'') ==' &
+        //'= ''descending'' : !numeric;'//NL//'        var key = function (row) {'//NL//'          var cell = row.cells[' &
+        //'column];'//NL//'          return numeric ? Number(cell.dataset.sort) : cell.textContent.toLowerCase();'//NL//' ' &
+        //'       };'//NL//'        var rows = Array.prototype.slice.call(body.rows);'//NL//'        rows.sort(function ' &
+        //'(a, b) {'//NL//'          var x = key(a), y = key(b);'//NL//'          return (x < y ? -1 : x > y ? 1 : 0) * ' &
+        //'(up ? 1 : -1);'//NL//'        });'//NL//'        rows.forEach(function (row) { body.appendChild(row); });'//NL &
+        //'        headings.forEach(function (other) { other.removeAttribute(''aria-sort''); });'//NL//'        th.setAt' &
+        //'tribute(''aria-sort'', up ? ''ascending'' : ''descending'');'//NL//'      });'//NL//'    });'//NL//'  });'//NL &
+        //'});'//NL//NL//'// the sidebar holds all of the list of this page, and shows where this page is in it'//NL//'(' &
+        //'function () {'//NL//'  var script = document.currentScript;'//NL//'  var root = script ? script.src.replace(/' &
+        //'js\/fdoc\.js.*$/, "") : "";'//NL//NL//'  document.addEventListener("DOMContentLoaded", function () {'//NL//' ' &
+        //'   var side = document.querySelector("aside.side");'//NL//'    if (!side) return;'//NL//'    var headings = s' &
+        //'ide.querySelectorAll("h4"), height = 0;'//NL//'    headings.forEach(function (h) { h.style.top = height + "px' &
+        //'"; height += h.offsetHeight; });'//NL//'    headings.forEach(function (h) { height -= h.offsetHeight; h.style' &
+        //'.bottom = height + "px"; });'//NL//'    var list = side.querySelector("ul[data-list]");'//NL//'    if (!list ' &
+        //'|| !window.FDOC_SIDEBAR) return;'//NL//'    list.innerHTML = (window.FDOC_SIDEBAR[list.dataset.list] || "").r' &
+        //'eplace(/href="@/g, ''href="'' + root);'//NL//'    var here = location.href.split("#")[0];'//NL//'    var link' &
+        //'s = list.querySelectorAll("a");'//NL//'    for (var k = 0; k < links.length; k++) {'//NL//'      if (links[k]' &
+        //'.href !== here) continue;'//NL//'      links[k].classList.add("current");'//NL//'      links[k].setAttribute(' &
+        //'"aria-current", "page");'//NL//'      side.scrollTop = links[k].offsetTop - side.clientHeight / 2;'//NL//'   ' &
+        //'   return;'//NL//'    }'//NL//'  });'//NL//'})();'//NL)
 end subroutine asset_fdoc_js
 
 end module fdoc_assets

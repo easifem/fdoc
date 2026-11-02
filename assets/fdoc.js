@@ -252,7 +252,7 @@
         return mark;
       }
       COLOURS.forEach(function (c) {
-        if (svg.querySelector('rect[fill="' + c[0] + '"]')) entry(swatch({ background: c[0] }), c[1]);
+        if (svg.querySelector('rect[fill="' + c[0] + '"], path[fill="' + c[0] + '"]')) entry(swatch({ background: c[0] }), c[1]);
       });
       if (svg.querySelector('rect[stroke="#f0a868"]')) entry(swatch({ border: "2px solid #f0a868" }), "This page");
       if (svg.querySelector("path[stroke-dasharray]")) {
