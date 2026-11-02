@@ -1,6 +1,16 @@
 module fdoc_project
 !! The whole project: loads and parses the files, merges them into one list of entities, and
 !! connects the entities with each other.
+!!
+!! ```mermaid
+!! graph TD
+!!   A["load_project_sources: one list of entities"] --> B
+!!   B["correlate: modules from elsewhere, use statements, public names, inheritance"] --> C
+!!   C["link_project: implementations, calls, bindings, submodules"] --> D
+!!   D["prune: hide what is not displayed"]
+!! ```
+!!
+!! Hiding comes last, so that names can still be found in what will not be shown.
 use json_module, only: json_core, json_value
 use fdoc_util
 use fdoc_model

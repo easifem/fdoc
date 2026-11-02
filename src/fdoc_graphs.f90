@@ -2,6 +2,20 @@ module fdoc_graphs
 !! Dependency graphs: which modules use which, what procedures call, how types extend each other and
 !! how files depend on each other. Graphs are laid out and drawn by fdot, in parallel, each by one
 !! thread.
+!!
+!! ```mermaid
+!! graph LR
+!!   A[Relations] --> B[List of graphs]
+!!   B --> C
+!!   subgraph each thread
+!!     C[Find what a graph holds] --> D[Layout with fdot]
+!!     D --> E[Drawing]
+!!   end
+!!   E --> F[Graphs of the pages]
+!! ```
+!!
+!! The relations and the list are made once, by one thread, and only read after that. Each thread has
+!! working space of its own, so a graph is built as it is drawn, and needs no files.
 use fdoc_util
 use fdoc_buffer
 use fdoc_model

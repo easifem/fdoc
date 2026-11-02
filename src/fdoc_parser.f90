@@ -2,6 +2,19 @@ module fdoc_parser
 !! Turning a source text into entities: fformat finds the statements and their structure, and this
 !! module reads the declarations and doc comments.
 !!
+!! ```mermaid
+!! graph LR
+!!   subgraph fformat
+!!     A[Source text] --> B[Tokens]
+!!     B --> C[Statements]
+!!     C --> D[Structure]
+!!   end
+!!   subgraph fdoc
+!!     D --> E[Doc comments]
+!!     E --> F[Entities of the file]
+!!   end
+!! ```
+!!
 !! Doc comments are attached to code statements. A statement's documentation is any `predocmark`
 !! block before it, then its inline comments, then the `docmark` lines after it.
 !!

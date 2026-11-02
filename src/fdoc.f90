@@ -1,5 +1,19 @@
 module fdoc
 !! The `fdoc` program: documentation for modern Fortran, from FORD project files.
+!!
+!! A run goes through these stages in turn. Those that work on many files or pages at once use threads,
+!! and those that connect things across the whole project use one.
+!!
+!! ```mermaid
+!! graph LR
+!!   A[Settings] --> B["Read files<br>(threads)"]
+!!   B --> C["Parse<br>(threads)"]
+!!   C --> D[Merge]
+!!   D --> E[Link]
+!!   E --> F["Markdown<br>(threads)"]
+!!   F --> G["Graphs<br>(threads)"]
+!!   G --> H["Pages<br>(threads)"]
+!! ```
 use iso_fortran_env, only: error_unit, output_unit
 use ffmt_fs, only: parent_directory
 use fdoc_util, only: string_t
