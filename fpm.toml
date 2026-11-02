@@ -54,3 +54,5 @@ md_extensions = ["markdown.extensions.toc"]
 front_page_file = "README.md"
 graph_project_maxnodes=1000
 logo = "./media/logo.svg"
+extra_mods = ["fdot:https://github.com/jacobwilliams/fdot"]
+external = ["fformat=https://jacobwilliams.github.io/fformat"]

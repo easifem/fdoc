@@ -314,7 +314,9 @@ recursive subroutine read_external(p, json, node, base, parent, id)
         call json%get(node, 'vartype', text, found)
         e%vartype = ''
         if (found) e%vartype = text
-        allocate (e%more%uses(0), e%more%public_list(0), e%attribs(0), e%doc(0), e%meta(0))
+        allocate (e%attribs(0), e%doc(0), e%meta(0))
+        ! variables share one read-only `no_more`
+        if (kind /= E_VARIABLE) allocate (e%more%uses(0), e%more%public_list(0))
         e%var_role = VAR_PLAIN
     end associate
     do k = 1, size(LISTS)

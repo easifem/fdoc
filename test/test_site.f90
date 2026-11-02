@@ -22,7 +22,8 @@ subroutine collect_site(testsuite)
     type(unittest_type), allocatable, intent(out) :: testsuite(:)   !! the tests
 
     testsuite = [new_unittest("logo", test_logo), new_unittest("logo that is missing", test_missing_logo), &
-                 new_unittest("lines of a source file", test_lines), new_unittest("list of source files", test_file_list)]
+                 new_unittest("lines of a source file", test_lines), new_unittest("list of source files", test_file_list), &
+                 new_unittest("external project", test_external)]
 end subroutine collect_site
 
 !> Write a project with the setting `logo: small.svg` in `root`, and run fdoc on it.
@@ -140,5 +141,37 @@ subroutine test_file_list(error)
     call check(error, index(text, '<tfoot><tr><td>Total</td><td class="num" data-sort="8">8</td>') > 0, 'the total')
     call remove_directory(ROOT)
 end subroutine test_file_list
+
+!> Checks: a `use` of a module of an external project links to it, with several variables in the module.
+subroutine test_external(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site external'
+    character(len=:), allocatable :: text, errmsg
+    type(string_t) :: args(2)
+    integer :: stat
+
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call make_directory(ROOT//'/other', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: uses'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          'external: other=./other'//NL//NL//'The project.'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the project file')
+    if (allocated(error)) return
+    call write_whole_file(ROOT//'/src/a.f90', 'module m'//NL//'use lib'//NL//'end module m'//NL, stat, errmsg)
+    call write_whole_file(ROOT//'/other/modules.json', '{"modules": [{"name": "lib", "obj": "module", '// &
+                          '"external_url": "./module/lib.html", "pub_vars": [{"name": "a", "obj": "variable"}, '// &
+                          '{"name": "b", "obj": "variable"}]}]}', stat, errmsg)
+    call check(error, stat, 0, 'the external project')
+    if (allocated(error)) return
+    args(1)%s = '-q'
+    args(2)%s = ROOT//'/ford.md'
+    call check(error, run(args), 0, 'the run')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/module/m.html', text, stat, errmsg)
+    call check(error, stat, 0, 'the page of the module')
+    if (allocated(error)) return
+    call check(error, index(text, 'module/lib.html">lib</a>') > 0, 'it links to the external module')
+    call remove_directory(ROOT)
+end subroutine test_external
 
 end module test_site
