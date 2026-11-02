@@ -1,5 +1,5 @@
 module fdoc_fypp
-!! A port to Fortran of the parts of Fypp, the preprocessor by Bálint Aradi, that the Fortran standard
+!! A port to Fortran of the parts of Fypp, the preprocessor by Balint Aradi, that the Fortran standard
 !! library needs, so that fdoc can read Fypp sources without running Python.
 !!
 !! Fypp's directives hold Python expressions. A small evaluator here covers the ones in use: literals,
@@ -11,7 +11,7 @@ module fdoc_fypp
 !! All state is in a [[fypp_t]] made for each file, so that files can be processed in parallel. As in
 !! the rest of fdoc, no function returns a deferred-length string (see `example/slen_race.f90`).
 !!
-!! Fypp is Copyright (c) 2016-2023 Bálint Aradi, Universität Bremen, and is distributed under the
+!! Fypp is Copyright (c) 2016-2023 Balint Aradi, Universitat Bremen, and is distributed under the
 !! BSD 2-clause license. This port follows its design and keeps its notice:
 !!
 !! Redistribution and use in source and binary forms, with or without modification, are permitted
@@ -931,7 +931,7 @@ recursive subroutine parse_fstring(c, text, id)
     integer, intent(out) :: id              !! the result
     type(buffer_t) :: b
     character(len=:), allocatable :: piece
-    integer :: i, close, item
+    integer :: i, close_brace, item
 
     id = new_expr(c, E_FSTRING)
     allocate (c%exprs(id)%args(0))
@@ -956,14 +956,14 @@ recursive subroutine parse_fstring(c, text, id)
             call move_alloc(piece, c%exprs(item)%value%text)
             call push_id(c%exprs(id)%args, item)
         end if
-        close = index(text(i:), '}')
-        if (close == 0) then
+        close_brace = index(text(i:), '}')
+        if (close_brace == 0) then
             call fail(c, 'an f-string is not closed: '//text)
             return
         end if
-        call compile(c, text(i + 1:i + close - 2), item)
+        call compile(c, text(i + 1:i + close_brace - 2), item)
         call push_id(c%exprs(id)%args, item)
-        i = i + close
+        i = i + close_brace
     end do
     call take(b, piece)
     if (len(piece) > 0) then
@@ -1152,7 +1152,7 @@ recursive subroutine parse_text(c, text, path)
     character(len=*), intent(in) :: text    !! the text
     character(len=*), intent(in) :: path    !! the file
     character(len=:), allocatable :: content
-    integer :: pos, start, n, q, e, close
+    integer :: pos, start, n, q, e, close_brace
     logical :: line_start
     character :: ch
 
@@ -1195,12 +1195,12 @@ recursive subroutine parse_text(c, text, path)
         else if (pos < n .and. index('$#@', ch) > 0) then
             if (text(pos + 1:pos + 1) == '{') then
                 e = end_of_line(text, pos)
-                close = index(text(pos + 2:e - 1), '}'//ch)
-                if (close > 0) then
+                close_brace = index(text(pos + 2:e - 1), '}'//ch)
+                if (close_brace > 0) then
                     call flush_text(c, text, start, pos - 1)
                     q = skip_blanks(text, pos + 2)
-                    content = trim_right(text(q:pos + close))
-                    pos = pos + close + 3
+                    content = trim_right(text(q:pos + close_brace))
+                    pos = pos + close_brace + 3
                     start = pos
                     call handle_directive(c, ch, content, .false., path)
                     cycle
@@ -1459,11 +1459,11 @@ subroutine def_directive(c, param)
     type(fypp_t), intent(inout) :: c            !! the state
     character(len=*), intent(in) :: param       !! what follows the directive
     type(scan_t) :: s
-    integer :: at, close, node, name, id, default
+    integer :: at, close_parentheses, node, name, id, default
 
     at = index(param, '(')
-    close = index(param, ')', back=.true.)
-    if (at == 0 .or. close < at) then
+    close_parentheses = index(param, ')', back=.true.)
+    if (at == 0 .or. close_parentheses < at) then
         call fail(c, 'cannot read the macro definition: '//param)
         return
     end if
@@ -1472,7 +1472,7 @@ subroutine def_directive(c, param)
     c%nodes(node)%name = name
     c%nodes(node)%source = param
     allocate (c%nodes(node)%block%targets(0), c%nodes(node)%block%args(0))
-    s%text = param(at + 1:close - 1)
+    s%text = param(at + 1:close_parentheses - 1)
     call next_token(c, s)
     do while (s%kind == T_NAME .and. .not. allocated(c%error))
         call intern(c, s%word, id)
@@ -1498,14 +1498,14 @@ subroutine call_directive(c, param, on_lines)
     character(len=*), intent(in) :: param       !! what follows the directive
     logical, intent(in) :: on_lines             !! true for a line directive
     type(scan_t) :: s
-    integer :: at, close, node, name, holder
+    integer :: at, close_parentheses, node, name, holder
 
     at = index(param, '(')
     if (at == 0) then
         at = len(param) + 1
-        close = at
+        close_parentheses = at
     else
-        close = index(param, ')', back=.true.)
+        close_parentheses = index(param, ')', back=.true.)
     end if
     call intern(c, trim_right(param(:at - 1)), name)
     node = new_node(c, N_CALL)
@@ -1513,8 +1513,8 @@ subroutine call_directive(c, param, on_lines)
     c%nodes(node)%on_lines = on_lines
     c%nodes(node)%source = param
     holder = new_expr(c, E_CALL)
-    if (close > at) then
-        s%text = param(at + 1:close - 1)
+    if (close_parentheses > at) then
+        s%text = param(at + 1:close_parentheses - 1)
         call next_token(c, s)
         call parse_arguments(c, s, holder, '')
         if (s%kind /= T_END) call fail(c, 'cannot read the arguments of: '//param)
@@ -2424,7 +2424,7 @@ subroutine format_string(c, text, args, v)
     type(value_t), intent(out) :: v             !! the result
     type(buffer_t) :: b
     character(len=:), allocatable :: joined
-    integer :: i, close, field, automatic, status
+    integer :: i, close_brace, field, automatic, status
 
     i = 1
     automatic = 0
@@ -2434,16 +2434,16 @@ subroutine format_string(c, text, args, v)
             i = i + 1
             cycle
         end if
-        close = index(text(i:), '}')
-        if (close == 0) then
+        close_brace = index(text(i:), '}')
+        if (close_brace == 0) then
             call fail(c, 'a format is not closed: '//text)
             return
         end if
-        if (close == 2) then
+        if (close_brace == 2) then
             field = automatic
             automatic = automatic + 1
         else
-            call digits_value(text(i + 1:i + close - 2), field, status)
+            call digits_value(text(i + 1:i + close_brace - 2), field, status)
             if (status /= 0) then
                 call fail(c, 'the format is not supported: '//text)
                 return
@@ -2454,7 +2454,7 @@ subroutine format_string(c, text, args, v)
             return
         end if
         call write_value(args(field + 1), .false., b)
-        i = i + close
+        i = i + close_brace
     end do
     call take(b, joined)
     call make_string(joined, v)
