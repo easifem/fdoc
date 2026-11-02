@@ -94,7 +94,7 @@ end function add
 
 * Pages for modules, submodules, procedures, interfaces, derived types, programs, block data, namelists and source files, plus static pages from `page_dir`.
 * Tables of arguments, components and variables showing intent and attributes as coloured badges.
-* Graphs of module use, procedure calls, type inheritance and file dependencies, with links, zoom and panning.
+* Graphs of module use, procedure calls, type inheritance and file dependencies, with links, zoom, panning and a key to the colours.
 * Syntax highlighted Fortran source.
 * Badges for what procedures are, such as `pure` or `recursive`, and for those that keep state between calls, with arguments coloured by intent.
 * A list of source files with their lines of code and comments, size and procedures, and totals, sorted by clicking a heading.

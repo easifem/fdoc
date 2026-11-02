@@ -366,7 +366,7 @@ pure subroutine grow_edges(w)
     call move_alloc(grown, w%to)
 end subroutine grow_edges
 
-!> Add node `id` to a description.
+!> Add node `id` to a description. The key to the graphs in `fdoc.js` lists these colours.
 subroutine add_node(p, id, root, g, place)
     type(project_t), intent(in) :: p    !! the project
     integer, intent(in) :: id           !! the entity

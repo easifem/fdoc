@@ -228,6 +228,49 @@
 })();
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
+    // what the colours of `add_node` in fdoc_graphs.f90 mean: keep the two the same
+    var COLOURS = [["#3657c9", "Module"], ["#5a78de", "Submodule"], ["#a61e69", "Program"], ["#1d7a55", "Subroutine"],
+      ["#0b7285", "Function"], ["#6a4fb3", "Interface"], ["#a15c00", "Derived type"], ["#7a6a2d", "Type-bound procedure"],
+      ["#5c6f2d", "Source file"], ["#646d7e", "External, or other"], ["#8a93a5", "Not documented"]];
+
+    // a button that shows what is in this drawing, under it, as a short drawing can't hold a popup
+    function addKey(box, svg, zoom) {
+      var key = document.createElement("div");
+      key.className = "graph-key";
+      key.hidden = true;
+      function entry(mark, text) {
+        var item = document.createElement("span");
+        item.className = "graph-key-item";
+        item.appendChild(mark);
+        item.appendChild(document.createTextNode(text));
+        key.appendChild(item);
+      }
+      function swatch(style) {
+        var mark = document.createElement("span");
+        mark.className = "graph-key-mark";
+        Object.keys(style).forEach(function (name) { mark.style[name] = style[name]; });
+        return mark;
+      }
+      COLOURS.forEach(function (c) {
+        if (svg.querySelector('rect[fill="' + c[0] + '"]')) entry(swatch({ background: c[0] }), c[1]);
+      });
+      if (svg.querySelector('rect[stroke="#f0a868"]')) entry(swatch({ border: "2px solid #f0a868" }), "This page");
+      if (svg.querySelector("path[stroke-dasharray]")) {
+        entry(swatch({ height: "0", borderRadius: "0", borderTop: "2px dashed #8a93a5" }), "Component of a type");
+      }
+      var button = document.createElement("button");
+      button.textContent = "?";
+      button.title = "Key to the colours";
+      button.setAttribute("aria-label", "Key to the colours");
+      button.setAttribute("aria-expanded", "false");
+      button.addEventListener("click", function () {
+        key.hidden = !key.hidden;
+        button.setAttribute("aria-expanded", String(!key.hidden));
+      });
+      zoom.appendChild(button);
+      box.parentNode.insertBefore(key, box.nextSibling);
+    }
+
     document.querySelectorAll(".graph").forEach(function (box) {
       var svg = box.querySelector("svg");
       if (!svg) return;
@@ -248,6 +291,7 @@
         zoom.appendChild(button);
       });
       box.insertBefore(zoom, svg);
+      addKey(box, svg, zoom);
       var fit = box.clientWidth / width;
       if (fit > 0 && fit < 0.75) set(0.75);
       var start = null;

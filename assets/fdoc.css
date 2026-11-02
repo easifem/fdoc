@@ -201,6 +201,11 @@ td.default { font-family: var(--mono); font-size: .84em; min-width: 11rem; max-w
 .attr-asynchronous { --h: 300; } .attr-save { --h: 60; } .attr-parameter { --h: 195; } .attr-protected { --h: 240; }
 .attr-codimension { --h: 105; }
 .graph text { stroke: none; }
+.graph-key { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: -.6rem 0 1rem; padding: .4rem .6rem;
+  color: var(--muted); font-size: .84rem; }
+.graph-key[hidden] { display: none; }
+.graph-key-item { display: inline-flex; align-items: center; gap: .4rem; }
+.graph-key-mark { display: inline-block; width: 1.1rem; height: .8rem; border-radius: 3px; }
 .attr-private { --h: 15; --s: 40%; }
 .attr-generic { --h: 265; } .attr-deferred { --h: 35; } .attr-nopass { --h: 200; } .attr-pass { --h: 160; }
 .attr-non { --h: 55; } .attr-deprecated { --h: 355; } .attr-subroutine { --h: 155; } .attr-function { --h: 188; }
