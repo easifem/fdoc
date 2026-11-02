@@ -309,7 +309,11 @@ window.addEventListener('DOMContentLoaded', function () {
 
   document.addEventListener("DOMContentLoaded", function () {
     var side = document.querySelector("aside.side");
-    var list = side && side.querySelector("ul[data-list]");
+    if (!side) return;
+    var headings = side.querySelectorAll("h4"), height = 0;
+    headings.forEach(function (h) { h.style.top = height + "px"; height += h.offsetHeight; });
+    headings.forEach(function (h) { height -= h.offsetHeight; h.style.bottom = height + "px"; });
+    var list = side.querySelector("ul[data-list]");
     if (!list || !window.FDOC_SIDEBAR) return;
     list.innerHTML = (window.FDOC_SIDEBAR[list.dataset.list] || "").replace(/href="@/g, 'href="' + root);
     var here = location.href.split("#")[0];

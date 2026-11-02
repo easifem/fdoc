@@ -38,10 +38,15 @@ header.top nav a:hover, header.top nav a.here { color: var(--text); text-decorat
   width: 2rem; height: 2rem; font-size: 1rem; line-height: 1; }
 .layout { display: grid; grid-template-columns: 17rem minmax(0, 1fr); max-width: 90rem; margin: 0 auto; }
 aside.side { position: sticky; top: 3.5rem; align-self: start; height: calc(100vh - 3.5rem); overflow-y: auto;
-  padding: 1.25rem 1rem 2rem 1.25rem; border-right: 1px solid var(--line); font-size: .9rem; }
+  padding: 0 1rem 0 1.25rem; border-right: 1px solid var(--line); font-size: .9rem; }
 aside.side h4 { margin: 1.1rem 0 .3rem; color: var(--muted); font-size: .72rem; letter-spacing: .06em;
   text-transform: uppercase; font-weight: 650; }
 aside.side h4:first-child { margin-top: 0; }
+/* fdoc.js sets top and bottom, so that headings stack at each edge instead of covering each other */
+aside.side h4 { position: sticky; z-index: 1; background: var(--bg); margin: 0 -.5rem; padding: .4rem .5rem; }
+aside.side h4:first-child { padding-top: 1.1rem; }
+aside.side h4:last-of-type { padding-bottom: .9rem; }
+aside.side ul { padding-bottom: .4rem; }
 aside.side ul { list-style: none; margin: 0; padding: 0; }
 aside.side li a { display: block; padding: .12rem .5rem; margin-left: -.5rem; border-radius: 5px; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -142,6 +147,8 @@ pre.source { padding-left: 0; counter-reset: line; line-height: 1.45; }
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }
 @media (max-width: 860px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
+  aside.side h4 { position: static; }
+  aside.side { padding-bottom: 1rem; }
   aside.side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
   main { padding: 1.25rem 1rem 3rem; }
 }
@@ -157,6 +164,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
 .results a:hover, .results a.on, .search-page a:hover { background: var(--accent-soft); text-decoration: none; }
 .results b, .search-page b { font-family: var(--mono); font-size: .88rem; font-weight: 600; }
 .results small, .search-page small { display: block; color: var(--muted); }
+aside.side.tree { padding-top: 1.25rem; padding-bottom: 2rem; }
 aside.tree ul ul { margin-left: .8rem; }
 .graph { position: relative; overflow: auto; max-height: 34rem; margin: .4rem 0 1rem; padding: .5rem;
   border: 1px solid var(--line); border-radius: 8px; background: var(--bg-soft); cursor: grab; }
