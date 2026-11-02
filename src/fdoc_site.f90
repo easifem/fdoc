@@ -27,6 +27,7 @@ integer, parameter :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIS
 integer, parameter :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
 integer, parameter :: NUM_LISTS = 8
 
+integer, parameter :: HERE_PAGES = -1   !! for `page_head`: a static page, not of a list
 integer, parameter :: MAX_NESTING = 16  !! how many levels of containers a page shows
 
 character(len=*), parameter :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
@@ -348,7 +349,7 @@ end subroutine write_type
 subroutine page_head(site, title, here, prefix, math, b)
     type(site_t), intent(in) :: site        !! the site
     character(len=*), intent(in) :: title   !! the title
-    integer, intent(in) :: here             !! the list page this belongs to, or 0
+    integer, intent(in) :: here             !! the list page this belongs to, `HERE_PAGES`, or 0
     character(len=*), intent(in) :: prefix  !! from the page to the root of the site: `../` or `''`
     logical, intent(in) :: math             !! true to load MathJax
     type(buffer_t), intent(inout) :: b      !! the HTML
@@ -393,7 +394,8 @@ subroutine page_head(site, title, here, prefix, math, b)
                      trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a>')
         end do
         if (size(site%pages) > 0) then
-            call add(b, '<a href="'//prefix//'page/index.html">')
+            call add(b, '<a'//trim(merge(' class="here"', '             ', here == HERE_PAGES))// &
+                     ' href="'//prefix//'page/index.html">')
             call html_escape(site%pages(1)%title, b, .false.)
             call add(b, '</a>')
         end if
@@ -418,7 +420,7 @@ subroutine static_page(site, k, html)
 
     associate (page => site%pages(k))
         prefix = repeat('../', page%depth + 1)
-        call page_head(site, page%title, 0, prefix, index(page%html, 'math/tex') > 0, b)
+        call page_head(site, page%title, HERE_PAGES, prefix, index(page%html, 'math/tex') > 0, b)
         call add(b, '<aside class="side tree">'//achar(10)//'<ul>')
         call page_links(site, 0, prefix, b)
         call add(b, '</ul>'//achar(10)//'</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
