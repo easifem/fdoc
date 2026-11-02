@@ -28,6 +28,7 @@ type, public :: args_t
     integer :: action = ACTION_RUN
     character(len=:), allocatable :: project_file
     character(len=:), allocatable :: config             !! `--config`, not allocated if not given
+    logical :: progress_lines = .false.                 !! `--progress-lines`
     type(option_t), allocatable :: options(:)
 end type args_t
 
@@ -59,6 +60,7 @@ function usage() result(text)
            '      --externalize        write modules.json for other projects (default)'//NL// &
            '      --no-externalize     do not write modules.json'//NL// &
            '  -q, --quiet              suppress normal output'//NL// &
+           '      --progress-lines     report progress as lines for another program to read'//NL// &
            '      --debug              show details of fatal errors'//NL// &
            '      --config TOML        other options, as TOML with ; between lines'//NL// &
            '      --dump-settings      print the settings as JSON and stop'//NL// &
@@ -114,6 +116,7 @@ subroutine parse_args(args, parsed, stat, errmsg)
         select case (name)
         case ('-h', '--help'); parsed%action = ACTION_HELP
         case ('-V', '--version'); parsed%action = ACTION_VERSION
+        case ('--progress-lines'); parsed%progress_lines = .true.
         case ('--dump-settings'); parsed%action = ACTION_DUMP
         case ('--dump-links'); parsed%action = ACTION_DUMP_LINKS
         case ('--markdown-list')

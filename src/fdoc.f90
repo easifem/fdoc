@@ -90,7 +90,9 @@ integer function run(args) result(status)
         return
     end if
 
-    if (parsed%action /= ACTION_DUMP_LINKS .and. .not. s%quiet) call progress_enable()
+    if (parsed%action /= ACTION_DUMP_LINKS .and. (parsed%progress_lines .or. .not. s%quiet)) then
+        call progress_enable(parsed%progress_lines)
+    end if
     call warn_unsupported(s)
     call load_project_sources(s, p, stat, errmsg)
     if (stat /= 0) then

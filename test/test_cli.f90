@@ -3,7 +3,7 @@ module test_cli
 use testdrive, only: new_unittest, unittest_type, error_type, check
 use fdoc_cli, only: args_t, parse_args, ACTION_VERSION
 use fdoc_util, only: string_t
-use fdoc_progress, only: bar_text
+use fdoc_progress, only: bar_text, progress_line
 use fdoc_pages, only: page_file
 implicit none
 private
@@ -21,6 +21,7 @@ subroutine collect_cli(testsuite)
                 new_unittest("errors", test_errors), &
                 new_unittest("version needs no project file", test_version), &
                 new_unittest("progress bar", test_bar), &
+                new_unittest("progress lines", test_progress_lines), &
                 new_unittest("names of static pages", test_page_names) &
                 ]
 end subroutine collect_cli
@@ -94,6 +95,26 @@ subroutine test_version(error)
     if (allocated(error)) return
     call check(error, a%action, ACTION_VERSION)
 end subroutine test_version
+
+!> Checks: the lines for another program, and the option that turns them on.
+subroutine test_progress_lines(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    type(args_t) :: parsed
+    character(len=64) :: line
+    integer :: stat
+    character(len=:), allocatable :: msg
+
+    call progress_line(7, 'Laying out graphs', 83, 1198, line)
+    call check(error, trim(line), '[  7%] Laying out graphs 83/1198')
+    if (allocated(error)) return
+    call progress_line(100, 'Parsing files', 2, 2, line)
+    call check(error, trim(line), '[100%] Parsing files 2/2')
+    if (allocated(error)) return
+    call parse_args([string_t('--progress-lines'), string_t('ford.md')], parsed, stat, msg)
+    call check(error, stat, 0, 'the option')
+    if (allocated(error)) return
+    call check(error, parsed%progress_lines, 'it is on')
+end subroutine test_progress_lines
 
 !> Checks: progress bar.
 subroutine test_bar(error)

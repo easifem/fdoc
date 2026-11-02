@@ -3,6 +3,15 @@ module fdoc_progress
 !! warnings that do not get mixed up with the bar. When standard output is not a terminal there are
 !! no bars or colours, just a line for each stage.
 !!
+!! With `--progress-lines` there are lines for another program to read from standard output instead,
+!! each written at once. Warnings stay on standard error, and a run that fails has no `[end]` line.
+!!
+!! ```text
+!! [ 42%] Parsing files 83/198
+!! [done] Parsing files in 0.22 s
+!! [end] 3456 pages written to ./doc in 2.31 s
+!! ```
+!!
 !! Stages run in parallel loops. Any thread can count, and only the first draws. Nothing here calls a
 !! function returning a deferred-length string (see `example/slen_race.f90`).
 use iso_fortran_env, only: output_unit, error_unit, int64
@@ -12,6 +21,7 @@ implicit none
 private
 
 public :: progress_enable, progress_start, progress_tick, progress_finish, progress_summary, warn, bar_text
+public :: progress_line
 
 interface
     !> C `isatty`.
@@ -31,6 +41,8 @@ integer(int64), parameter :: REDRAW_MILLISECONDS = 40
 
 logical :: enabled = .false.            !! true to report progress
 logical :: live = .false.               !! true if standard output is a terminal
+logical :: lines = .false.              !! true to write lines for another program
+integer :: last_percent = -1            !! the last percentage written, with `lines`
 logical :: colour = .false.             !! true to use colours
 logical :: drawn = .false.              !! true if a bar is on the screen
 character(len=LABEL_WIDTH) :: label = ' '   !! the current stage
@@ -43,12 +55,14 @@ integer(int64) :: rate = 1000           !! clock ticks in a second
 
 contains
 
-!> Turn progress reports on.
-subroutine progress_enable()
+!> Turn progress reports on, with lines for another program if `for_programs`.
+subroutine progress_enable(for_programs)
+    logical, intent(in) :: for_programs     !! true to write lines for another program
     integer :: n, stat
 
     enabled = .true.
-    live = c_isatty(1_c_int) == 1
+    lines = for_programs
+    live = c_isatty(1_c_int) == 1 .and. .not. lines
     call get_environment_variable('NO_COLOR', length=n, status=stat)
     colour = live .and. stat /= 0
     call system_clock(run_start, rate)
@@ -65,20 +79,28 @@ subroutine progress_start(name, steps)
     done = 0
     call system_clock(stage_start)
     last_draw = stage_start
+    last_percent = -1
     if (live) call draw()
+    if (lines) call write_line(0)
 end subroutine progress_start
 
 !> Count a step, or `steps` of them. This can be called from any thread.
 subroutine progress_tick(steps)
     integer, intent(in), optional :: steps  !! how many steps
     integer(int64) :: now
-    integer :: amount
+    integer :: amount, count
 
     if (.not. enabled) return
     amount = 1
     if (present(steps)) amount = steps
-    !$omp atomic
+    !$omp atomic capture
     done = done + amount
+    count = done
+    !$omp end atomic
+    if (lines) then
+        call write_line(count)
+        return
+    end if
     if (.not. live .or. omp_get_thread_num() /= 0) return
     call system_clock(now)
     if ((now - last_draw)*1000 < REDRAW_MILLISECONDS*rate) return
@@ -98,7 +120,10 @@ subroutine progress_finish()
     call system_clock(now)
     call seconds_text(now - stage_start, time)
     write (count_text, '(i0)') total
-    if (live) then
+    if (lines) then
+        call write_line(total)
+        write (output_unit, '(a)') '[done] '//trim(label)//' in '//trim(time)
+    else if (live) then
         done = total
         call draw()
         write (output_unit, '(a)', advance='no') ' '//trim(time)
@@ -121,7 +146,10 @@ subroutine progress_summary(message)
     if (.not. enabled) return
     call system_clock(now)
     call seconds_text(now - run_start, time)
-    if (colour) then
+    if (lines) then
+        write (output_unit, '(a)') '[end] '//message//' in '//trim(time)
+        flush (output_unit)
+    else if (colour) then
         write (output_unit, '(a)') ESC//'[1;32m'//message//' in '//trim(time)//ESC//'[0m'
     else
         write (output_unit, '(a)') message//' in '//trim(time)
@@ -141,6 +169,36 @@ subroutine warn(message)
     if (drawn) call draw()
     !$omp end critical (file_io)
 end subroutine warn
+
+!> Write the line of `count` steps done, if its percentage is new. This can be called from any thread.
+subroutine write_line(count)
+    integer, intent(in) :: count    !! how many steps are done
+    character(len=128) :: line
+    integer :: filled, unfilled, percent
+
+    call bar_text(count, total, 1, filled, unfilled, percent)
+    if (total == 0) percent = 0
+    if (percent <= last_percent) return
+    !$omp critical (file_io)
+    if (percent > last_percent) then
+        last_percent = percent
+        call progress_line(percent, label, min(count, total), total, line)
+        write (output_unit, '(a)') trim(line)
+        flush (output_unit)
+    end if
+    !$omp end critical (file_io)
+end subroutine write_line
+
+!> The line for another program of `count` of `size` steps done in stage `name`.
+pure subroutine progress_line(percent, name, count, size, line)
+    integer, intent(in) :: percent          !! the percentage done
+    character(len=*), intent(in) :: name    !! the stage
+    integer, intent(in) :: count            !! how many steps are done
+    integer, intent(in) :: size             !! how many there are
+    character(len=*), intent(out) :: line   !! the line
+
+    write (line, '(a,i3,a,a,1x,i0,a,i0)') '[', percent, '%] ', trim(name), count, '/', size
+end subroutine progress_line
 
 !> `ticks` of the clock as text.
 subroutine seconds_text(ticks, text)

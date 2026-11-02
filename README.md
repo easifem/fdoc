@@ -37,6 +37,16 @@ pixi run fpm install --profile release --prefix ~/.local
 fdoc [options] [project_file]
 ```
 
+For a program that shows the progress of fdoc, `--progress-lines` writes lines to standard output in place of the bars, one for each whole percent of each stage, as they happen. Warnings go to standard error, and a run that fails ends with a nonzero exit code and no `[end]` line.
+
+```text
+[  0%] Parsing files 0/198
+[ 42%] Parsing files 83/198
+[100%] Parsing files 198/198
+[done] Parsing files in 0.22 s
+[end] 3456 pages written to ./doc in 2.31 s
+```
+
 The options are FORD's, including `-o`, `-d`, `-p`, `-g`, `-m`, `-I`, `-L`, `-q` and `--config`. Run `fdoc --help` for the full list. Command line options override the project's settings. fdoc uses every core unless `parallel` says otherwise.
 
 Without a project file, fdoc looks in the current directory for an `[extra.fdoc]` or `[extra.ford]` table in `fpm.toml`, and then for `ford.md`.
