@@ -111,6 +111,7 @@ table.forms { width: auto; margin: .4rem 0 .5rem; } table.forms td.type, table.f
 table.forms td.rank, table.forms th.rank { text-align: center; padding-right: 1rem; white-space: nowrap; }
 table.forms td.rank a { text-decoration: none; }
 .fixed { color: var(--muted); font-size: .88rem; margin: .2rem 0 0; }
+pre.mermaid { background: none; border: 0; padding: 0; margin: 1rem 0; text-align: center; }
 details.source { margin: 1rem 0; } details.source summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
 .chips { display: flex; flex-wrap: wrap; gap: .35rem; padding: 0; list-style: none; margin: .5rem 0 1rem; }
 .chips li { font-family: var(--mono); font-size: .82rem; background: var(--bg-soft); border: 1px solid var(--line);

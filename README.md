@@ -99,6 +99,7 @@ end function add
 * Badges for what procedures are, such as `pure` or `recursive`, and for those that keep state between calls, with arguments coloured by intent.
 * A list of source files with their lines of code and comments, size and procedures, and totals, sorted by clicking a heading.
 * A sidebar with the whole list a page belongs to, showing where that page is in it.
+* [Mermaid](https://mermaid.js.org) diagrams from `mermaid` code blocks, drawn in the browser.
 * A logo on the main page, from the `logo` setting, which is a path to an image.
 * Generic interfaces shown as call forms, with a table of the types and ranks each form takes and what it returns.
 * A search box. Press `/` to use it.
@@ -216,7 +217,7 @@ File statements in parallel code go inside `!$omp critical (file_io)`. In libgfo
 
 fpm fetches the Fortran packages. FORD and Python are needed only for `compare` and `bench`, not to run fdoc.
 
-Generated sites load [MathJax](https://www.mathjax.org) from a CDN, only on pages that contain math.
+Generated sites load [MathJax](https://www.mathjax.org) from a CDN, only on pages that contain math, and [Mermaid](https://mermaid.js.org) likewise, only on pages with a `mermaid` code block.
 
 ## License
 

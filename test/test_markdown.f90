@@ -93,6 +93,9 @@ subroutine test_fenced(error)
     type(error_type), allocatable, intent(out) :: error  !! the failure, if any
     call expect(error, '```fortran'//NL//'a < b'//NL//'```', &
                 '<div class="codehilite"><pre><code class="language-fortran">a &lt; b'//NL//'</code></pre></div>')
+    if (allocated(error)) return
+    call expect(error, '```mermaid'//NL//'graph LR'//NL//'a --> b'//NL//'```', &
+                '<pre class="mermaid">graph LR'//NL//'a --&gt; b'//NL//'</pre>')
 end subroutine test_fenced
 
 !> Checks: tables.

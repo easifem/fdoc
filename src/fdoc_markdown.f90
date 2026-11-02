@@ -505,6 +505,14 @@ subroutine code_block_html(code, lang, html)
     character(len=:), allocatable, intent(out) :: html  !! the HTML
     type(buffer_t) :: b
 
+    ! a diagram stays as its text, which `fdoc.js` has Mermaid draw in the browser
+    if (lowercase(lang) == 'mermaid') then
+        call add(b, '<pre class="mermaid">')
+        call html_escape(code, b, .false.)
+        call add(b, '</pre>')
+        call take(b, html)
+        return
+    end if
     call add(b, '<div class="codehilite"><pre><code')
     if (len(lang) > 0) then
         call add(b, ' class="language-')

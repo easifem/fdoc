@@ -371,3 +371,37 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   });
 })();
+
+// Mermaid diagrams are drawn in the browser, and Mermaid is only loaded for pages that have one
+(function () {
+  var URL = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+
+  function dark() {
+    var theme = document.documentElement.getAttribute("data-theme");
+    return theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    var blocks = document.querySelectorAll("pre.mermaid");
+    if (!blocks.length) return;
+    blocks.forEach(function (block) { block.dataset.source = block.textContent; });
+
+    function draw() {
+      blocks.forEach(function (block) {
+        block.textContent = block.dataset.source;
+        block.removeAttribute("data-processed");
+      });
+      window.mermaid.initialize({ startOnLoad: false, theme: dark() ? "dark" : "default" });
+      window.mermaid.run({ nodes: blocks });
+    }
+
+    var tag = document.createElement("script");
+    tag.src = URL;
+    tag.onload = function () {
+      draw();
+      var button = document.querySelector(".theme");
+      if (button) button.addEventListener("click", draw);
+    };
+    document.head.appendChild(tag);
+  });
+})();
