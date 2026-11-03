@@ -219,12 +219,15 @@ td.binds { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word
 .listing th { white-space: nowrap; }
 .listing td.link { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word; }
 .item h3 .attr, h1 .attr { margin-left: .5rem; vertical-align: middle; }
-.ico { display: inline-block; width: 1.05rem; height: 1.05rem; margin-right: .4rem; border-radius: 3px; color: #fff;
-  background: #646d7e; font: 700 .68rem/1.05rem var(--sans); text-align: center; vertical-align: .05rem; }
-.ico-m { background: #3657c9; } .ico-p { background: #a61e69; } .ico-s { background: #1d7a55; }
-.ico-f { background: #0b7285; } .ico-i { background: #6a4fb3; } .ico-a { background: #8a4fb3; }
-.ico-t { background: #a15c00; } .ico-b { background: #7a6a2d; } .ico-v { background: #646d7e; }
-.ico-n { background: #5c6f2d; } .ico-d { background: #8a5a44; } .ico-_ { background: #5c6f2d; }
+.chips.kinds li { display: inline-flex; align-items: center; padding-left: .2rem; border-color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 14%, transparent); }
+.chips.kinds .ico { margin-right: .3rem; }
+.ico { --kind: #646d7e; background: var(--kind); display: inline-block; width: 1.05rem; height: 1.05rem; margin-right: .4rem; border-radius: 3px; color: #fff;
+  font: 700 .68rem/1.05rem var(--sans); text-align: center; vertical-align: .05rem; }
+.ico-m { --kind: #3657c9; } .ico-p { --kind: #a61e69; } .ico-s { --kind: #1d7a55; }
+.ico-f { --kind: #0b7285; } .ico-i { --kind: #6a4fb3; } .ico-a { --kind: #8a4fb3; }
+.ico-t { --kind: #a15c00; } .ico-b { --kind: #7a6a2d; } .ico-v { --kind: #646d7e; }
+.ico-n { --kind: #5c6f2d; } .ico-d { --kind: #8a5a44; } .ico-_ { --kind: #5c6f2d; }
 .icon-github { --i: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z'/></svg>"); }
 .icon-gitlab { --i: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M8 15 .9 9.8a.7.7 0 0 1-.3-.8L2.3 2c.1-.4.6-.4.7 0l1.9 4.4h6.2L13 2c.1-.4.6-.4.7 0L15.4 9a.7.7 0 0 1-.3.8z'/></svg>"); }
 .icon-bitbucket { --i: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M1.2 1.5a.5.5 0 0 0-.5.6l2 12.2a.7.7 0 0 0 .7.6h9.4a.5.5 0 0 0 .5-.4l2-12.4a.5.5 0 0 0-.5-.6zm8.7 9H6.2l-.9-4.7h5.4z'/></svg>"); }

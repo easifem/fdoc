@@ -23,7 +23,8 @@ subroutine collect_site(testsuite)
 
     testsuite = [new_unittest("logo", test_logo), new_unittest("logo that is missing", test_missing_logo), &
                  new_unittest("lines of a source file", test_lines), new_unittest("list of source files", test_file_list), &
-                 new_unittest("external project", test_external)]
+                 new_unittest("external project", test_external), &
+                 new_unittest("where a type is used", test_type_uses)]
 end subroutine collect_site
 
 !> Write a project with the setting `logo: small.svg` in `root`, and run fdoc on it.
@@ -173,5 +174,63 @@ subroutine test_external(error)
     call check(error, index(text, 'module/lib.html">lib</a>') > 0, 'it links to the external module')
     call remove_directory(ROOT)
 end subroutine test_external
+
+!> Checks: the uses of a type, without its own methods, its own components or local variables, and with
+!> a private specific procedure shown as its generic.
+subroutine test_type_uses(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site uses'
+    character(len=:), allocatable :: text, errmsg
+    type(string_t) :: args(2)
+    integer :: stat
+
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: uses'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          NL//'The project.'//NL, stat, errmsg)
+    call write_whole_file(ROOT//'/src/a.f90', &
+                          'module m'//NL//'private'//NL//'public :: thing, holder, shared, takes, gives, plain, generic'//NL// &
+                          'type :: thing'//NL//'type(thing), pointer :: next => null()'//NL//'contains'//NL// &
+                          'procedure :: method'//NL//'end type thing'//NL// &
+                          'type :: holder'//NL//'type(thing) :: part'//NL//'end type holder'//NL// &
+                          'type(thing) :: shared'//NL// &
+                          'interface generic'//NL//'module procedure hidden'//NL//'end interface generic'//NL// &
+                          'contains'//NL// &
+                          'subroutine method(self)'//NL//'class(thing) :: self'//NL//'end subroutine method'//NL// &
+                          'subroutine takes(x)'//NL//'type(thing) :: x'//NL//'end subroutine takes'//NL// &
+                          'function gives() result(r)'//NL//'type(thing) :: r'//NL//'end function gives'//NL// &
+                          'subroutine plain()'//NL//'type(thing) :: local'//NL//'end subroutine plain'//NL// &
+                          'subroutine hidden(y)'//NL//'type(thing) :: y'//NL//'end subroutine hidden'//NL// &
+                          'end module m'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the source')
+    if (allocated(error)) return
+    args(1)%s = '-q'
+    args(2)%s = ROOT//'/ford.md'
+    call check(error, run(args), 0, 'the run')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/type/thing.html', text, stat, errmsg)
+    call check(error, stat, 0, 'the page of the type')
+    if (allocated(error)) return
+    text = text(index(text, 'id="uses-of-type"'):)
+    text = text(:index(text, '<h2 id="source"') + merge(len(text), 0, index(text, '<h2 id="source"') == 0))
+    call check(error, index(text, '<h3>Argument of (2)</h3>') > 0, 'a procedure, and a generic in place of a specific')
+    if (allocated(error)) return
+    call check(error, index(text, '>takes</a>') > 0, 'an argument')
+    if (allocated(error)) return
+    call check(error, index(text, '>generic</a>') > 0, 'the generic of a private procedure')
+    if (allocated(error)) return
+    call check(error, index(text, '>gives</a>') > 0, 'a result')
+    if (allocated(error)) return
+    call check(error, index(text, '>holder</a>') > 0, 'a component')
+    if (allocated(error)) return
+    call check(error, index(text, '>shared</a>') > 0, 'a module variable')
+    if (allocated(error)) return
+    call check(error, index(text, 'method') == 0, 'not its own method')
+    if (allocated(error)) return
+    call check(error, index(text, '>plain<') == 0, 'not a local variable')
+    if (allocated(error)) return
+    call check(error, index(text, '>thing<') == 0, 'not a component of itself')
+    call remove_directory(ROOT)
+end subroutine test_type_uses
 
 end module test_site

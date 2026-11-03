@@ -55,7 +55,17 @@ type :: site_t
     type(graph_set_t) :: graphs                 !! the graphs
     type(index_list_t), allocatable :: graphs_of(:) !! the graphs of each entity
     type(file_stats_t), allocatable :: file_stats(:)    !! the size of each entity of the list of files
+    integer, allocatable :: use_slot(:)         !! for each entity, its place in `type_uses`, or 0
+    type(type_uses_t), allocatable :: type_uses(:)  !! where each type is used
 end type site_t
+
+type :: type_uses_t
+    !! Where a type is used.
+    integer, allocatable :: arguments(:)    !! the procedures that take it
+    integer, allocatable :: results(:)      !! the functions that return it
+    integer, allocatable :: components(:)   !! the types that hold it
+    integer, allocatable :: variables(:)    !! the module variables of this type
+end type type_uses_t
 
 !> The directories of a site.
 character(len=*), parameter :: SITE_DIRECTORIES(*) = [character(len=10) :: 'css', 'js', 'lists', 'module', 'proc', &
@@ -628,6 +638,17 @@ subroutine side_icon(e, b)
     type(buffer_t), intent(inout) :: b  !! the HTML
     character(len=:), allocatable :: letter, word
 
+    call icon_of(e, letter, word)
+    if (len(letter) == 0) return
+    call add(b, '<span class="ico ico-'//letter_class(letter)//'" title="'//word//'" aria-hidden="true">'//letter//'</span>')
+end subroutine side_icon
+
+!> The letter of the icon of entity `e`, or `''` if it has none, and what it stands for.
+subroutine icon_of(e, letter, word)
+    type(entity_t), intent(in) :: e                         !! the entity
+    character(len=:), allocatable, intent(out) :: letter    !! the letter
+    character(len=:), allocatable, intent(out) :: word      !! what it stands for
+
     select case (e%kind)
     case (E_FILE); letter = '&equiv;'; word = 'source file'
     case (E_MODULE); letter = 'M'; word = 'module'
@@ -642,7 +663,10 @@ subroutine side_icon(e, b)
     case (E_BOUNDPROC); letter = 'B'; word = 'type-bound procedure'
     case (E_VARIABLE); letter = 'V'; word = 'variable'
     case (E_NAMELIST); letter = 'N'; word = 'namelist'
-    case default; return
+    case default
+        letter = ''
+        word = ''
+        return
     end select
     if (e%iface == IFACE_EXPLICIT) then
         letter = 'I'
@@ -651,8 +675,7 @@ subroutine side_icon(e, b)
         letter = 'A'
         word = 'abstract interface'
     end if
-    call add(b, '<span class="ico ico-'//letter_class(letter)//'" title="'//word//'" aria-hidden="true">'//letter//'</span>')
-end subroutine side_icon
+end subroutine icon_of
 
 !> The lowercase class for icon `letter`.
 pure function letter_class(letter) result(class)
@@ -1791,9 +1814,146 @@ subroutine type_body(site, id, variables, bindings, finals, b)
             end do
             call add(b, '</ul>'//achar(10))
         end if
+        call type_uses_section(site, id, b)
         call source_section(site, id, b)
     end associate
 end subroutine type_body
+
+!> Find where each type is used, once, so that the page of a type does not search the whole project. A
+!> specific procedure counts as its generic, which often is the only one with a page. The methods of a
+!> type are left out, as each of them takes it, and so are local variables.
+subroutine find_type_uses(site)
+    type(site_t), intent(inout) :: site     !! the site
+    integer, allocatable :: generic_of(:)
+    integer :: k, j, slots, parent, owner
+
+    associate (list => site%p%list)
+        allocate (site%use_slot(list%n), source=0)
+        allocate (generic_of(list%n), source=0)
+        slots = 0
+        do k = 1, list%n
+            associate (e => list%box(k)%e)
+                if (e%kind == E_TYPE) then
+                    slots = slots + 1
+                    site%use_slot(k) = slots
+                else if (e%kind == E_INTERFACE .and. allocated(e%more%modproc_ids)) then
+                    do j = 1, size(e%more%modproc_ids)
+                        if (e%more%modproc_ids(j) > 0) generic_of(e%more%modproc_ids(j)) = k
+                    end do
+                end if
+            end associate
+        end do
+        allocate (site%type_uses(slots))
+        do k = 1, list%n
+            associate (v => list%box(k)%e)
+                if (v%kind /= E_VARIABLE .or. v%proto_id == 0 .or. v%parent == 0) cycle
+                if (site%use_slot(v%proto_id) == 0) cycle
+                parent = v%parent
+                associate (uses => site%type_uses(site%use_slot(v%proto_id)), up => list%box(parent)%e)
+                    select case (up%kind)
+                    case (E_TYPE)
+                        if (parent /= v%proto_id .and. is_shown(list, parent)) call add_use(uses%components, parent)
+                    case (E_MODULE, E_SUBMODULE)
+                        if (is_shown(list, k)) call add_use(uses%variables, k)
+                    case (E_SUBROUTINE, E_FUNCTION, E_MODPROC)
+                        if (up%bound_to == v%proto_id) cycle
+                        owner = parent
+                        if (list%box(up%parent)%e%kind == E_INTERFACE) owner = up%parent
+                        if (generic_of(parent) > 0) owner = generic_of(parent)
+                        if (.not. is_shown(list, owner)) cycle
+                        if (up%result == k) then
+                            call add_use(uses%results, owner)
+                        else if (allocated(up%more%arg_ids)) then
+                            if (findloc(up%more%arg_ids, k, 1) > 0) call add_use(uses%arguments, owner)
+                        end if
+                    end select
+                end associate
+            end associate
+        end do
+        do k = 1, slots
+            associate (uses => site%type_uses(k))
+                call sort_by_name(list, uses%arguments)
+                call sort_by_name(list, uses%results)
+                call sort_by_name(list, uses%components)
+                call sort_by_name(list, uses%variables)
+            end associate
+        end do
+    end associate
+end subroutine find_type_uses
+
+!> Add entity `id` to `ids`, once.
+subroutine add_use(ids, id)
+    integer, allocatable, intent(inout) :: ids(:)   !! the entities
+    integer, intent(in) :: id                       !! the entity
+
+    if (allocated(ids)) then
+        if (any(ids == id)) return
+    end if
+    call push_int(ids, id)
+end subroutine add_use
+
+!> Put `ids`, if there are any, in the order of their names.
+subroutine sort_by_name(list, ids)
+    type(entity_list_t), intent(in) :: list         !! the entities
+    integer, allocatable, intent(inout) :: ids(:)   !! the entities to sort
+    integer :: k, j, value
+
+    if (.not. allocated(ids)) return
+    do k = 2, size(ids)
+        value = ids(k)
+        j = k - 1
+        do while (j >= 1)
+            if (lowercase(list%box(ids(j))%e%name) <= lowercase(list%box(value)%e%name)) exit
+            ids(j + 1) = ids(j)
+            j = j - 1
+        end do
+        ids(j + 1) = value
+    end do
+end subroutine sort_by_name
+
+!> Write where type `id` is used, if it is.
+subroutine type_uses_section(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the type
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (uses => site%type_uses(site%use_slot(id)))
+        if (.not. (allocated(uses%arguments) .or. allocated(uses%results) .or. &
+                   allocated(uses%components) .or. allocated(uses%variables))) return
+        call add(b, '<h2 id="uses-of-type">Where it is used</h2>'//achar(10))
+        call use_group(site, 'Argument of', uses%arguments, b)
+        call use_group(site, 'Returned by', uses%results, b)
+        call use_group(site, 'Component of', uses%components, b)
+        call use_group(site, 'Module variables', uses%variables, b)
+    end associate
+end subroutine type_uses_section
+
+!> Write a group of `ids`, collapsed if it is long.
+subroutine use_group(site, title, ids, b)
+    type(site_t), intent(in) :: site        !! the site
+    character(len=*), intent(in) :: title   !! the heading
+    integer, allocatable, intent(in) :: ids(:)  !! the entities, if any
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    integer, parameter :: LONG = 24
+    character(len=:), allocatable :: letter, word
+    integer :: k
+
+    if (.not. allocated(ids)) return
+    call add(b, '<h3>'//title//' ('//trim(int_text(size(ids)))//')</h3>'//achar(10))
+    if (size(ids) > LONG) call add(b, '<details class="specifics"><summary>Show all</summary>'//achar(10))
+    call add(b, '<ul class="chips kinds">')
+    do k = 1, size(ids)
+        associate (e => site%p%list%box(ids(k))%e)
+            call icon_of(e, letter, word)
+            call add(b, '<li class="ico-'//letter_class(letter)//'">')
+            call side_icon(e, b)
+            call link_to(site, ids(k), e%name, b)
+            call add(b, '</li>')
+        end associate
+    end do
+    call add(b, '</ul>'//achar(10))
+    if (size(ids) > LONG) call add(b, '</details>'//achar(10))
+end subroutine use_group
 
 !> Write what is specific to a source file.
 subroutine file_body(site, id, b)
@@ -2283,6 +2443,7 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     call make_footer(s, site%footer)
     call locate_sources(site)
     call measure_files(site)
+    call find_type_uses(site)
 
     allocate (ids(0))
     do k = 1, p%list%n
