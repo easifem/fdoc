@@ -1183,11 +1183,65 @@ subroutine graph_sections(site, id, b)
     integer :: k
 
     if (.not. allocated(site%graphs_of(id)%ids)) return
-    call add(b, '<h2 id="graphs">Graphs</h2>'//achar(10))
     do k = 1, size(site%graphs_of(id)%ids)
-        call write_graph(site, site%graphs_of(id)%ids(k), b)
+        associate (g => site%graphs%graphs(site%graphs_of(id)%ids(k)))
+            if (len(g%svg) == 0) cycle
+            call graph_heading(g%title, b)
+            ! a list goes with the graph of the same thing, above it
+            if (g%title == 'Uses') call uses_section(site, id, .false., b)
+            if (g%title == 'Calls') call calls_section(site, id, .false., b)
+            if (g%title == 'Used by' .or. g%title == 'Called by') call neighbour_chips(site, g%neighbours, b)
+            call add(b, '<div class="graph">'//g%svg//'</div>'//achar(10))
+        end associate
     end do
 end subroutine graph_sections
+
+!> Write `ids`, what is next to an entity in a graph, as chips in the order of their names.
+subroutine neighbour_chips(site, ids, b)
+    type(site_t), intent(in) :: site            !! the site
+    integer, allocatable, intent(in) :: ids(:)  !! the entities, if any
+    type(buffer_t), intent(inout) :: b          !! the HTML
+    integer, allocatable :: sorted(:)
+    integer :: k
+
+    if (.not. allocated(ids)) return
+    if (size(ids) == 0) return
+    sorted = ids
+    call sort_by_name(site%p%list, sorted)
+    call add(b, '<ul class="chips">')
+    do k = 1, size(sorted)
+        call add(b, '<li>')
+        call link_to(site, sorted(k), site%p%list%box(sorted(k))%e%name, b)
+        call add(b, '</li>')
+    end do
+    call add(b, '</ul>'//achar(10))
+end subroutine neighbour_chips
+
+!> True if entity `id` has a graph titled `title`.
+logical function has_graph(site, id, title)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    character(len=*), intent(in) :: title   !! the title
+    integer :: k
+
+    has_graph = .false.
+    if (.not. allocated(site%graphs_of(id)%ids)) return
+    do k = 1, size(site%graphs_of(id)%ids)
+        associate (g => site%graphs%graphs(site%graphs_of(id)%ids(k)))
+            if (g%title == title .and. len(g%svg) > 0) has_graph = .true.
+        end associate
+    end do
+end function has_graph
+
+!> Write the heading of a graph, at the level of the other sections of a page.
+subroutine graph_heading(title, b)
+    character(len=*), intent(in) :: title   !! the title
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    call add(b, '<h2 id="'//section_id(title)//'">')
+    call html_escape(title, b, .false.)
+    call add(b, '</h2>'//achar(10))
+end subroutine graph_heading
 
 !> Write graph `k`.
 subroutine write_graph(site, k, b)
@@ -1197,9 +1251,8 @@ subroutine write_graph(site, k, b)
 
     associate (g => site%graphs%graphs(k))
         if (len(g%svg) == 0) return
-        call add(b, '<h3>')
-        call html_escape(g%title, b, .false.)
-        call add(b, '</h3>'//achar(10)//'<div class="graph">')
+        call graph_heading(g%title, b)
+        call add(b, '<div class="graph">')
         call add(b, g%svg)
         call add(b, '</div>'//achar(10))
     end associate
@@ -1258,16 +1311,18 @@ subroutine summary_item(site, id, b)
 end subroutine summary_item
 
 !> Write the `use` statements of a unit.
-subroutine uses_section(site, id, b)
+subroutine uses_section(site, id, heading, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the unit
+    logical, intent(in) :: heading          !! true to write the heading too
     type(buffer_t), intent(inout) :: b      !! the HTML
     integer :: k
 
     associate (e => site%p%list%box(id)%e)
         if (.not. allocated(e%more%uses)) return
         if (size(e%more%uses) == 0) return
-        call add(b, '<h2 id="uses">Uses</h2>'//achar(10)//'<ul class="chips">')
+        if (heading) call add(b, '<h2 id="uses">Uses</h2>'//achar(10))
+        call add(b, '<ul class="chips">')
         do k = 1, size(e%more%uses)
             call add(b, '<li>')
             call link_to(site, e%more%uses(k)%target, e%more%uses(k)%module, b)
@@ -1278,16 +1333,18 @@ subroutine uses_section(site, id, b)
 end subroutine uses_section
 
 !> Write what a procedure calls.
-subroutine calls_section(site, id, b)
+subroutine calls_section(site, id, heading, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the procedure
+    logical, intent(in) :: heading          !! true to write the heading too
     type(buffer_t), intent(inout) :: b      !! the HTML
     integer :: k
 
     associate (e => site%p%list%box(id)%e)
         if (.not. allocated(e%call_ids)) return
         if (size(e%call_ids) == 0) return
-        call add(b, '<h2 id="calls">Calls</h2>'//achar(10)//'<ul class="chips">')
+        if (heading) call add(b, '<h2 id="calls">Calls</h2>'//achar(10))
+        call add(b, '<ul class="chips">')
         do k = 1, size(e%call_ids)
             call add(b, '<li>')
             call link_to(site, e%call_ids(k), site%p%list%box(e%call_ids(k))%e%name, b)
@@ -1592,6 +1649,7 @@ subroutine entity_page(site, id, html)
             call summary_section(site, 'Subroutines', subroutines, b)
             call summary_section(site, 'Module procedures', implementations, b)
         end if
+        call page_source(site, id, b)
         call page_foot(site, b)
     end associate
     call take(b, html)
@@ -1687,7 +1745,7 @@ subroutine unit_body(site, id, b)
             call link_to(site, e%ancestor_id, e%more%ancestor, b)
             call add(b, '</span></div>'//achar(10))
         end if
-        call uses_section(site, id, b)
+        if (.not. has_graph(site, id, 'Uses')) call uses_section(site, id, .true., b)
         if (allocated(e%more%descendants)) then
             call add(b, '<h2 id="submodules">Submodules</h2>'//achar(10)//'<ul class="chips">')
             do k = 1, size(e%more%descendants)
@@ -1697,7 +1755,7 @@ subroutine unit_body(site, id, b)
             end do
             call add(b, '</ul>'//achar(10))
         end if
-        if (e%kind == E_PROGRAM) call calls_section(site, id, b)
+        if (e%kind == E_PROGRAM .and. .not. has_graph(site, id, 'Calls')) call calls_section(site, id, .true., b)
     end associate
 end subroutine unit_body
 
@@ -1724,9 +1782,8 @@ subroutine procedure_body(site, id, b)
             call link_to(site, e%implements, site%p%list%box(e%implements)%e%name, b)
             call add(b, '</span></div>'//achar(10))
         end if
-        call uses_section(site, id, b)
-        call calls_section(site, id, b)
-        call source_section(site, id, b)
+        if (.not. has_graph(site, id, 'Uses')) call uses_section(site, id, .true., b)
+        if (.not. has_graph(site, id, 'Calls')) call calls_section(site, id, .true., b)
     end associate
 end subroutine procedure_body
 
@@ -1815,7 +1872,6 @@ subroutine type_body(site, id, variables, bindings, finals, b)
             call add(b, '</ul>'//achar(10))
         end if
         call type_uses_section(site, id, b)
-        call source_section(site, id, b)
     end associate
 end subroutine type_body
 
@@ -1974,13 +2030,29 @@ subroutine file_body(site, id, b)
             end associate
         end do
         call summary_section(site, 'Contents', units, b)
-        if (site%s%incl_src .and. allocated(e%source_text)) then
-            call add(b, '<h2 id="source">Source</h2>'//achar(10)//'<pre class="source"><code>')
-            call highlight_fortran(e%source_text, b, .true.)
-            call add(b, '</code></pre>'//achar(10))
-        end if
     end associate
 end subroutine file_body
+
+!> Write the source of entity `id`, the last section of its page: all of it for a file, which is
+!> numbered, and folded away for anything else.
+subroutine page_source(site, id, b)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    type(buffer_t), intent(inout) :: b      !! the HTML
+
+    associate (e => site%p%list%box(id)%e)
+        select case (e%kind)
+        case (E_FILE)
+            if (site%s%incl_src .and. allocated(e%source_text)) then
+                call add(b, '<h2 id="source">Source</h2>'//achar(10)//'<pre class="source"><code>')
+                call highlight_fortran(e%source_text, b, .true.)
+                call add(b, '</code></pre>'//achar(10))
+            end if
+        case (E_SUBROUTINE, E_FUNCTION, E_MODPROC, E_TYPE)
+            call source_section(site, id, b)
+        end select
+    end associate
+end subroutine page_source
 
 !> Write the sections of a procedure page, for the sidebar.
 subroutine page_outline(site, id, b)

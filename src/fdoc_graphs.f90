@@ -62,6 +62,7 @@ type :: graph_t
     character(len=:), allocatable :: svg        !! its drawing
     integer :: owner = 0                        !! the entity whose page shows it, or 0
     integer :: list_page = 0                    !! the list page that shows it, or 0
+    integer, allocatable :: neighbours(:)       !! what is next to the entity of a page in its graph
 end type graph_t
 
 type :: graph_set_t
@@ -561,6 +562,7 @@ subroutine build_graphs(p, s, members, list_codes, set, stat, errmsg)
         call move_alloc(jobs(k)%title, set%graphs(m)%title)
         set%graphs(m)%owner = jobs(k)%owner
         set%graphs(m)%list_page = jobs(k)%list_page
+        if (jobs(k)%owner > 0) call neighbours_of(p, relations(jobs(k)%relation), jobs(k), set%graphs(m)%neighbours)
     end do
 
 contains
@@ -642,6 +644,45 @@ contains
     end subroutine add_job
 
 end subroutine build_graphs
+
+!> What is next to the one root of `job` in its graph: the first entities that [[describe_graph]] reaches,
+!> in the same order and within the same limit, so that a list of them matches the drawing.
+subroutine neighbours_of(p, relation, job, ids)
+    type(project_t), intent(in) :: p                !! the project
+    type(adjacency_t), intent(in) :: relation       !! the relation
+    type(graph_job_t), intent(in) :: job            !! the graph
+    integer, allocatable, intent(out) :: ids(:)     !! the entities next to the root
+    integer :: j, other, root
+
+    allocate (ids(0))
+    root = job%roots(1)
+    if (job%max_depth < 1) return
+    if (job%forward) then
+        if (.not. allocated(relation%out(root)%ids)) return
+        do j = 1, size(relation%out(root)%ids)
+            call consider(relation%out(root)%ids(j))
+        end do
+    else
+        if (.not. allocated(relation%in(root)%ids)) return
+        do j = 1, size(relation%in(root)%ids)
+            call consider(relation%in(root)%ids(j))
+        end do
+    end if
+
+contains
+
+    !> Add `other` if the graph has room for it.
+    subroutine consider(item)
+        integer, intent(in) :: item     !! the entity
+
+        other = item
+        if (other == root .or. p%list%box(other)%e%kind == E_NONE) return
+        if (any(ids == other)) return
+        if (size(ids) + 1 >= job%max_nodes) return
+        call push_int(ids, other)
+    end subroutine consider
+
+end subroutine neighbours_of
 
 !> Lay out and draw `jobs`. A graph that turns out to have nothing to show gets no drawing.
 subroutine draw_graphs(p, s, relations, jobs, keep, drawings, descriptions, failed, threads)
