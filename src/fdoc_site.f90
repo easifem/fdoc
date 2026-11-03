@@ -28,6 +28,7 @@ integer, parameter :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
 integer, parameter :: NUM_LISTS = 8
 
 integer, parameter :: HERE_PAGES = -1   !! for `page_head`: a static page, not of a list
+integer, parameter :: HERE_INDEX = -2   !! for `page_head`: the index of all names
 integer, parameter :: MAX_NESTING = 16  !! how many levels of containers a page shows
 
 character(len=*), parameter :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
@@ -403,6 +404,8 @@ subroutine page_head(site, title, here, prefix, math, b)
             call add(b, '<a'//trim(merge(' class="here"', '             ', k == here))//' href="'//prefix//'lists/'// &
                      trim(LIST_FILE(k))//'.html">'//trim(LIST_TITLE(k))//'</a>')
         end do
+        call add(b, '<a'//trim(merge(' class="here"', '             ', here == HERE_INDEX))//' href="'//prefix// &
+                 'lists/names.html">Index</a>')
         if (size(site%pages) > 0) then
             call add(b, '<a'//trim(merge(' class="here"', '             ', here == HERE_PAGES))// &
                      ' href="'//prefix//'page/index.html">')
@@ -2213,6 +2216,203 @@ contains
 
 end subroutine list_columns
 
+!> Write the types of the project as a tree, by what they extend, if any type extends another. A type that
+!> extends one from elsewhere is at the top, with what it extends.
+subroutine type_tree(site, b)
+    type(site_t), intent(in) :: site        !! the site
+    type(buffer_t), intent(inout) :: b      !! the HTML
+    type(index_list_t), allocatable :: children(:)
+    integer, allocatable :: slot(:), roots(:)
+    integer :: k, parent
+
+    associate (types => site%members(LIST_TYPES)%ids, list => site%p%list)
+        allocate (slot(list%n), source=0)
+        do k = 1, size(types)
+            slot(types(k)) = k
+        end do
+        allocate (children(size(types)), roots(0))
+        do k = 1, size(types)
+            parent = list%box(types(k))%e%extends_id
+            if (parent > 0) then
+                if (slot(parent) > 0 .and. parent /= types(k)) then
+                    call push_int(children(slot(parent))%ids, types(k))
+                    cycle
+                end if
+            end if
+            call push_int(roots, types(k))
+        end do
+        if (size(roots) == size(types)) return
+        call add(b, '<h2 id="hierarchy">Hierarchy</h2>'//achar(10)//'<ul class="tree types">')
+        call sort_by_name(list, roots)
+        do k = 1, size(roots)
+            call tree_node(roots(k), 1)
+        end do
+        call add(b, '</ul>'//achar(10)//'<h2 id="all-types">All types</h2>'//achar(10))
+    end associate
+
+contains
+
+    !> Write type `id` and what extends it.
+    recursive subroutine tree_node(id, depth)
+        integer, intent(in) :: id       !! the type
+        integer, intent(in) :: depth    !! how deep it is, against a loop in what extends what
+
+        associate (e => site%p%list%box(id)%e, here => slot(id))
+            call add(b, '<li>')
+            if (allocated(children(here)%ids) .and. depth < MAX_NESTING) call add(b, '<details open><summary>')
+            call side_icon(e, b)
+            call link_to(site, id, e%name, b)
+            if (e%extends_id > 0 .and. depth == 1 .and. allocated(e%more%extends)) then
+                call add(b, ' <span class="where">extends ')
+                call link_to(site, e%extends_id, e%more%extends, b)
+                call add(b, '</span>')
+            end if
+            if (allocated(children(here)%ids) .and. depth < MAX_NESTING) then
+                call add(b, '</summary><ul>')
+                call sort_by_name(site%p%list, children(here)%ids)
+                block
+                    integer :: j
+
+                    do j = 1, size(children(here)%ids)
+                        call tree_node(children(here)%ids(j), depth + 1)
+                    end do
+                end block
+                call add(b, '</ul></details>')
+            end if
+            call add(b, '</li>')
+        end associate
+    end subroutine tree_node
+
+end subroutine type_tree
+
+!> Render the index of all names: everything in the lists, from A to Z, with what each is and where.
+subroutine names_page(site, html)
+    type(site_t), intent(in) :: site                    !! the site
+    character(len=:), allocatable, intent(out) :: html  !! the page
+    type(buffer_t) :: b
+    type(string_t), allocatable :: keys(:)
+    integer, allocatable :: ids(:), order(:)
+    character(len=:), allocatable :: url, letter, word
+    character :: initial, previous
+    integer :: k, which, n
+
+    n = sum([(size(site%members(which)%ids), which=1, NUM_LISTS)])
+    allocate (ids(n), keys(n))
+    n = 0
+    do which = 1, NUM_LISTS
+        do k = 1, size(site%members(which)%ids)
+            n = n + 1
+            ids(n) = site%members(which)%ids(k)
+            keys(n)%s = lowercase(display_name(site%p%list%box(ids(n))%e))
+        end do
+    end do
+    call sorted_order(keys, order)
+
+    call page_head(site, 'Index', HERE_INDEX, '../', .false., b)
+    call add(b, '<aside class="side">'//achar(10))
+    call site_side(site, 0, '../', b)
+    call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10)//'<h1>Index</h1>'//achar(10))
+    call add(b, '<nav class="letters">')
+    previous = ' '
+    do k = 1, n
+        initial = index_letter(keys(order(k))%s)
+        if (initial == previous) cycle
+        call add(b, '<a href="#letter-'//initial//'">'//upper_letter(initial)//'</a>')
+        previous = initial
+    end do
+    call add(b, '</nav>'//achar(10))
+    previous = ' '
+    do k = 1, n
+        initial = index_letter(keys(order(k))%s)
+        if (initial /= previous) then
+            if (previous /= ' ') call add(b, '</ul>'//achar(10))
+            call add(b, '<h2 id="letter-'//initial//'">'//upper_letter(initial)//'</h2>'//achar(10)//'<ul class="names">')
+            previous = initial
+        end if
+        associate (id => ids(order(k)), e => site%p%list%box(ids(order(k)))%e)
+            call entity_url(site%p%list, id, url)
+            call add(b, '<li><a href="../')
+            call html_escape(url, b, .true.)
+            call add(b, '">')
+            call side_icon(e, b)
+            call html_escape(display_name(e), b, .false.)
+            call add(b, '</a>')
+            call icon_of(e, letter, word)
+            call add(b, ' <span class="where">'//word)
+            if (e%parent > 0) then
+                if (site%p%list%box(e%parent)%e%kind /= E_NONE) then
+                    call add(b, ' in ')
+                    call link_to(site, e%parent, display_name(site%p%list%box(e%parent)%e), b)
+                end if
+            end if
+            call add(b, '</span></li>')
+        end associate
+    end do
+    if (n > 0) call add(b, '</ul>'//achar(10))
+    call page_foot(site, b)
+    call take(b, html)
+
+contains
+
+    !> The group of a name in the index: its first letter, or `_` for anything else.
+    pure character function index_letter(key)
+        character(len=*), intent(in) :: key     !! the name, in lowercase
+
+        index_letter = '_'
+        if (len(key) == 0) return
+        if (key(1:1) >= 'a' .and. key(1:1) <= 'z') index_letter = key(1:1)
+    end function index_letter
+
+    !> The heading of a group: its letter in capitals, or `#`.
+    pure character function upper_letter(initial)
+        character, intent(in) :: initial    !! the group
+
+        upper_letter = '#'
+        if (initial /= '_') upper_letter = achar(iachar(initial) - 32)
+    end function upper_letter
+
+end subroutine names_page
+
+!> The order of `keys`, sorted, with equal keys in the order given: a merge sort, as an index can be long.
+subroutine sorted_order(keys, order)
+    type(string_t), intent(in) :: keys(:)           !! what to sort by
+    integer, allocatable, intent(out) :: order(:)   !! the positions of `keys`, in order
+    integer, allocatable :: other(:)
+    integer :: width, left, middle, right, i, j, k, n
+
+    n = size(keys)
+    allocate (order(n), other(n))
+    order = [(k, k=1, n)]
+    width = 1
+    do while (width < n)
+        left = 1
+        do while (left <= n)
+            middle = min(left + width - 1, n)
+            right = min(left + 2*width - 1, n)
+            i = left
+            j = middle + 1
+            do k = left, right
+                if (j > right) then
+                    other(k) = order(i)
+                    i = i + 1
+                else if (i > middle) then
+                    other(k) = order(j)
+                    j = j + 1
+                else if (keys(order(j))%s < keys(order(i))%s) then
+                    other(k) = order(j)
+                    j = j + 1
+                else
+                    other(k) = order(i)
+                    i = i + 1
+                end if
+            end do
+            left = left + 2*width
+        end do
+        order = other
+        width = 2*width
+    end do
+end subroutine sorted_order
+
 !> Render list page `which`.
 subroutine list_page(site, which, html)
     type(site_t), intent(in) :: site                    !! the site
@@ -2228,6 +2428,7 @@ subroutine list_page(site, which, html)
     call site_side(site, which, '../', b)
     call add(b, '</aside>'//achar(10)//'<main><div class="inner">'//achar(10))
     call add(b, '<h1>'//trim(LIST_TITLE(which))//'</h1>'//achar(10))
+    if (which == LIST_TYPES) call type_tree(site, b)
     if (which == LIST_FILES) then
         call add(b, '<table class="listing sortable">'//achar(10)//'<thead><tr><th>'//trim(LIST_NOUN(which))//'</th>')
     else
@@ -2530,7 +2731,7 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
             call push_int(site%graphs_of(site%graphs%graphs(k)%owner)%ids, k)
         end if
     end do
-    extra = size(pages_in) + 1
+    extra = size(pages_in) + 2
     allocate (pages(n + NUM_LISTS + 1 + extra), paths(n + NUM_LISTS + 1 + extra))
     count = 0
 
@@ -2559,6 +2760,8 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
         paths(n + NUM_LISTS + 1 + k)%s = 'page/'//pages_in(k)%path
         call static_page(site, k, pages(n + NUM_LISTS + 1 + k)%s)
     end do
+    paths(size(paths) - 1)%s = 'lists/names.html'
+    call names_page(site, pages(size(paths) - 1)%s)
     paths(size(paths))%s = 'search.html'
     if (s%search) call search_page(site, pages(size(paths))%s)
 

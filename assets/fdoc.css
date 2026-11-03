@@ -240,3 +240,18 @@ td.binds { font-family: var(--mono); font-size: .84em; overflow-wrap: break-word
 .icon-facebook { --i: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill-rule='evenodd' d='M8 .6a7.4 7.4 0 0 0-1.2 14.7V10.1H5V8h1.8V6.4c0-1.8 1.1-2.8 2.7-2.8.8 0 1.6.1 1.6.1v1.8h-.9c-.9 0-1.2.6-1.2 1.1V8h2l-.3 2.1H9v5.2A7.4 7.4 0 0 0 8 .6z'/></svg>"); }
 @media (max-width: 860px) { .project-links { position: static; margin: .3rem 0; } .hero h1 { margin-right: 0; }
   .hero.with-logo { padding-left: 4.6rem; } .hero-logo { left: .9rem; width: 2.8rem; height: 2.8rem; } }
+.anchor { margin-left: .4rem; color: var(--muted); font-weight: 400; text-decoration: none; opacity: 0; }
+h2:hover .anchor, h3:hover .anchor, .anchor:focus { opacity: 1; }
+@media (hover: none) { .anchor { opacity: .5; } }
+nav.letters { display: flex; flex-wrap: wrap; gap: .25rem; margin: .4rem 0 1rem; }
+nav.letters a { min-width: 1.7rem; padding: .1rem .35rem; text-align: center; border: 1px solid var(--line);
+  border-radius: 5px; font-weight: 600; }
+ul.names { list-style: none; padding: 0; columns: 22rem; column-gap: 2rem; margin: 0; }
+ul.names li { break-inside: avoid; padding: .12rem 0; }
+.where { color: var(--muted); font-size: .84rem; }
+ul.tree { list-style: none; padding-left: 0; margin: .4rem 0 1rem; }
+ul.tree ul { list-style: none; padding-left: 1.4rem; margin: 0; border-left: 1px solid var(--line); }
+ul.tree li { padding: .12rem 0; }
+ul.tree details > summary { cursor: pointer; }
+ul.tree details > summary::marker { color: var(--muted); }
+ul.tree li:not(:has(details)) { padding-left: 1.05rem; }

@@ -24,7 +24,8 @@ subroutine collect_site(testsuite)
     testsuite = [new_unittest("logo", test_logo), new_unittest("logo that is missing", test_missing_logo), &
                  new_unittest("lines of a source file", test_lines), new_unittest("list of source files", test_file_list), &
                  new_unittest("external project", test_external), &
-                 new_unittest("where a type is used", test_type_uses)]
+                 new_unittest("where a type is used", test_type_uses), &
+                 new_unittest("index and tree of types", test_index_tree)]
 end subroutine collect_site
 
 !> Write a project with the setting `logo: small.svg` in `root`, and run fdoc on it.
@@ -232,5 +233,54 @@ subroutine test_type_uses(error)
     call check(error, index(text, '>thing<') == 0, 'not a component of itself')
     call remove_directory(ROOT)
 end subroutine test_type_uses
+
+!> Checks: the index of all names, in order under their letters, and the tree of types by what they extend.
+subroutine test_index_tree(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site index'
+    character(len=:), allocatable :: text, errmsg
+    type(string_t) :: args(2)
+    integer :: stat
+
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: index'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          NL//'The project.'//NL, stat, errmsg)
+    call write_whole_file(ROOT//'/src/a.f90', &
+                          'module zeta'//NL//'type :: base'//NL//'end type base'//NL// &
+                          'type, extends(base) :: child'//NL//'end type child'//NL// &
+                          'type, extends(child) :: grandchild'//NL//'end type grandchild'//NL// &
+                          'type :: alone'//NL//'end type alone'//NL//'contains'//NL// &
+                          'subroutine apply()'//NL//'end subroutine apply'//NL//'end module zeta'//NL, stat, errmsg)
+    args(1)%s = '-q'
+    args(2)%s = ROOT//'/ford.md'
+    call check(error, run(args), 0, 'the run')
+    if (allocated(error)) return
+
+    call read_whole_file(ROOT//'/doc/lists/names.html', text, stat, errmsg)
+    call check(error, stat, 0, 'the index')
+    if (allocated(error)) return
+    call check(error, index(text, 'class="here" href="../lists/names.html"') > 0, 'its tab')
+    if (allocated(error)) return
+    ! the sidebar has names too, in another order
+    text = text(index(text, '<main'):)
+    call check(error, index(text, '<a href="#letter-a">A</a>') > 0, 'a link to each letter')
+    if (allocated(error)) return
+    call check(error, index(text, '>alone</a>') < index(text, '>apply</a>'), 'names in order')
+    if (allocated(error)) return
+    ! the module's own entry, as its name is also where the types are
+    call check(error, index(text, '<h2 id="letter-z">Z</h2>') < index(text, '>M</span>zeta</a>'), 'under their letter')
+    if (allocated(error)) return
+
+    call read_whole_file(ROOT//'/doc/lists/types.html', text, stat, errmsg)
+    call check(error, stat, 0, 'the list of types')
+    if (allocated(error)) return
+    call check(error, index(text, '<h2 id="hierarchy">Hierarchy</h2>') > 0, 'a tree')
+    if (allocated(error)) return
+    call check(error, index(text, '>base</a></summary><ul><li><details open><summary>') > 0, 'base holds child')
+    if (allocated(error)) return
+    call check(error, index(text, '>child</a></summary><ul><li>') > 0, 'child holds grandchild')
+    call remove_directory(ROOT)
+end subroutine test_index_tree
 
 end module test_site

@@ -111,6 +111,7 @@ end function add
 * A sidebar with the whole list a page belongs to, showing where that page is in it.
 * [Mermaid](https://mermaid.js.org) diagrams from `mermaid` code blocks, drawn in the browser.
 * On the page of a type, where it is used: the procedures that take or return it, the types that hold it and the module variables of that type.
+* An index of all names from A to Z, a tree of the derived types by what they extend, and a link on each heading to copy.
 * A logo on the main page, from the `logo` setting, which is a path to an image.
 * Generic interfaces shown as call forms, with a table of the types and ranks each form takes and what it returns.
 * A search box. Press `/` to use it.

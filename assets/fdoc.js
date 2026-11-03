@@ -405,3 +405,16 @@ window.addEventListener('DOMContentLoaded', function () {
     document.head.appendChild(tag);
   });
 })();
+
+// each heading with an id, and each entry of a list, gets a link to itself
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("main h2[id], main h3[id], main .item[id] > h3").forEach(function (heading) {
+    var id = heading.id || heading.parentElement.id;
+    var link = document.createElement("a");
+    link.className = "anchor";
+    link.href = "#" + id;
+    link.textContent = "#";
+    link.setAttribute("aria-label", "Link to this section");
+    heading.appendChild(link);
+  });
+});

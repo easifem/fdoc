@@ -222,7 +222,18 @@ subroutine asset_fdoc_css(b)
         //' 0 16 16''><path fill-rule=''evenodd'' d=''M8 .6a7.4 7.4 0 0 0-1.2 14.7V10.1H5V8h1.8V6.4c0-1.8 1.1-2.8 2.7-2.' &
         //'8.8 0 1.6.1 1.6.1v1.8h-.9c-.9 0-1.2.6-1.2 1.1V8h2l-.3 2.1H9v5.2A7.4 7.4 0 0 0 8 .6z''/></svg>"); }'//NL//'@me' &
         //'dia (max-width: 860px) { .project-links { position: static; margin: .3rem 0; } .hero h1 { margin-right: 0; }'//NL &
-        //'  .hero.with-logo { padding-left: 4.6rem; } .hero-logo { left: .9rem; width: 2.8rem; height: 2.8rem; } }'//NL)
+        //'  .hero.with-logo { padding-left: 4.6rem; } .hero-logo { left: .9rem; width: 2.8rem; height: 2.8rem; } }'//NL &
+        //'.anchor { margin-left: .4rem; color: var(--muted); font-weight: 400; text-decoration: none; opacity: 0; }'//NL &
+        //'h2:hover .anchor, h3:hover .anchor, .anchor:focus { opacity: 1; }'//NL//'@media (hover: none) { .anchor { opa' &
+        //'city: .5; } }'//NL//'nav.letters { display: flex; flex-wrap: wrap; gap: .25rem; margin: .4rem 0 1rem; }'//NL//'n' &
+        //'av.letters a { min-width: 1.7rem; padding: .1rem .35rem; text-align: center; border: 1px solid var(--line);'//NL &
+        //'  border-radius: 5px; font-weight: 600; }'//NL//'ul.names { list-style: none; padding: 0; columns: 22rem; col' &
+        //'umn-gap: 2rem; margin: 0; }'//NL//'ul.names li { break-inside: avoid; padding: .12rem 0; }'//NL//'.where { co' &
+        //'lor: var(--muted); font-size: .84rem; }'//NL//'ul.tree { list-style: none; padding-left: 0; margin: .4rem 0 1' &
+        //'rem; }'//NL//'ul.tree ul { list-style: none; padding-left: 1.4rem; margin: 0; border-left: 1px solid var(--li' &
+        //'ne); }'//NL//'ul.tree li { padding: .12rem 0; }'//NL//'ul.tree details > summary { cursor: pointer; }'//NL//'u' &
+        //'l.tree details > summary::marker { color: var(--muted); }'//NL//'ul.tree li:not(:has(details)) { padding-left' &
+        //': 1.05rem; }'//NL)
 end subroutine asset_fdoc_css
 
 !> The contents of `assets/fdoc.js`.
@@ -404,7 +415,13 @@ subroutine asset_fdoc_js(b)
         //'un({ nodes: blocks });'//NL//'    }'//NL//NL//'    var tag = document.createElement("script");'//NL//'    tag' &
         //'.src = URL;'//NL//'    tag.onload = function () {'//NL//'      draw();'//NL//'      var button = document.que' &
         //'rySelector(".theme");'//NL//'      if (button) button.addEventListener("click", draw);'//NL//'    };'//NL//' ' &
-        //'   document.head.appendChild(tag);'//NL//'  });'//NL//'})();'//NL)
+        //'   document.head.appendChild(tag);'//NL//'  });'//NL//'})();'//NL//NL//'// each heading with an id, and each ' &
+        //'entry of a list, gets a link to itself'//NL//'document.addEventListener("DOMContentLoaded", function () {'//NL &
+        //'  document.querySelectorAll("main h2[id], main h3[id], main .item[id] > h3").forEach(function (heading) {'//NL &
+        //'    var id = heading.id || heading.parentElement.id;'//NL//'    var link = document.createElement("a");'//NL//' ' &
+        //'   link.className = "anchor";'//NL//'    link.href = "#" + id;'//NL//'    link.textContent = "#";'//NL//'    ' &
+        //'link.setAttribute("aria-label", "Link to this section");'//NL//'    heading.appendChild(link);'//NL//'  });'//NL &
+        //'});'//NL)
 end subroutine asset_fdoc_js
 
 end module fdoc_assets
