@@ -25,7 +25,8 @@ subroutine collect_site(testsuite)
                  new_unittest("lines of a source file", test_lines), new_unittest("list of source files", test_file_list), &
                  new_unittest("external project", test_external), &
                  new_unittest("where a type is used", test_type_uses), &
-                 new_unittest("index and tree of types", test_index_tree)]
+                 new_unittest("index and tree of types", test_index_tree), &
+                 new_unittest("command line before the checks", test_late_options)]
 end subroutine collect_site
 
 !> Write a project with the setting `logo: small.svg` in `root`, and run fdoc on it.
@@ -282,5 +283,33 @@ subroutine test_index_tree(error)
     call check(error, index(text, '>child</a></summary><ul><li>') > 0, 'child holds grandchild')
     call remove_directory(ROOT)
 end subroutine test_index_tree
+
+!> Checks: options from the command line count as much as those of the project file. An extension given
+!> with `--config` must reach the list of files to read, which is made by the checks.
+subroutine test_late_options(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site late'
+    character(len=:), allocatable :: text, errmsg
+    type(string_t) :: args(4)
+    logical :: found
+    integer :: stat
+
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: late'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          'preprocessor: fypp'//NL//'fpp_extensions: fypp'//NL//NL//'The project.'//NL, stat, errmsg)
+    call write_whole_file(ROOT//'/src/upper.F90', 'module upper'//NL//'end module upper'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the source')
+    if (allocated(error)) return
+    args(1)%s = '-q'
+    args(2)%s = '--config'
+    args(3)%s = 'fpp_extensions = ["fypp", "F90"]'
+    args(4)%s = ROOT//'/ford.md'
+    call check(error, run(args), 0, 'the run')
+    if (allocated(error)) return
+    inquire (file=ROOT//'/doc/module/upper.html', exist=found)
+    call check(error, found, 'the file of an extension from the command line is read')
+    call remove_directory(ROOT)
+end subroutine test_late_options
 
 end module test_site

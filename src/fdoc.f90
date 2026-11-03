@@ -75,9 +75,10 @@ integer function run(args) result(status)
     directory = '.'
     if (len(parsed%project_file) > 0) directory = parent_directory(parsed%project_file)
     call load_project(parsed%project_file, directory, s, body, stat, errmsg)
-    if (stat == 0) call check_settings(s, stat, errmsg)
+    ! all of the settings first, as the checks also work out what follows from them
     if (stat == 0 .and. allocated(parsed%config)) call apply_toml_string(parsed%config, s, stat, errmsg)
     if (stat == 0) call apply_args(parsed, s, stat, errmsg)
+    if (stat == 0) call check_settings(s, stat, errmsg)
     if (stat == 0) call finish_settings(s, directory, stat, errmsg)
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg
