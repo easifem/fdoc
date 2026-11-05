@@ -96,6 +96,21 @@ subroutine test_fenced(error)
     if (allocated(error)) return
     call expect(error, '```mermaid'//NL//'graph LR'//NL//'a --> b'//NL//'```', &
                 '<pre class="mermaid">graph LR'//NL//'a --&gt; b'//NL//'</pre>')
+    if (allocated(error)) return
+    call expect(error, '```json'//NL//'{"a": "b:c", "n": -1.5e3, "t": true, "z": null}'//NL//'```', &
+                '<div class="codehilite"><pre><code class="language-json">{<span class="k">"a"</span>: '// &
+                '<span class="s">"b:c"</span>, <span class="k">"n"</span>: '// &
+                '<span class="n">-1.5e3</span>, <span class="k">"t"</span>: <span class="n">true</span>, '// &
+                '<span class="k">"z"</span>: <span class="n">null</span>}'//NL//'</code></pre></div>')
+    if (allocated(error)) return
+    call expect(error, '```toml'//NL//'[extra.fdoc] # here'//NL//'graph = true'//NL//'src_dir = ["./src"]'//NL// &
+                'a.b = 2024-01-01'//NL//'x = { y = 1 }'//NL//'```', &
+                '<div class="codehilite"><pre><code class="language-toml"><span class="p">[extra.fdoc]</span> '// &
+                '<span class="c"># here</span>'//NL//'<span class="k">graph</span> = <span class="n">true</span>'//NL// &
+                '<span class="k">src_dir</span> = [<span class="s">"./src"</span>]'//NL// &
+                '<span class="k">a.b</span> = <span class="n">2024-01-01</span>'//NL// &
+                '<span class="k">x</span> = { <span class="k">y</span> = <span class="n">1</span> }'//NL// &
+                '</code></pre></div>')
 end subroutine test_fenced
 
 !> Checks: tables.

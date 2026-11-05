@@ -11,7 +11,7 @@ module fdoc_markdown
 !! string (see `example/slen_race.f90`).
 use fdoc_util
 use fdoc_buffer
-use fdoc_highlight, only: highlight_fortran
+use fdoc_highlight, only: highlight_fortran, highlight_data
 use fdoc_progress, only: warn
 use fdoc_settings, only: map_entry_t
 implicit none
@@ -523,6 +523,10 @@ subroutine code_block_html(code, lang, html)
     select case (lowercase(lang))
     case ('fortran', 'f90', 'f', 'fortranfixed')
         call highlight_fortran(code, b, .false.)
+    case ('json')
+        call highlight_data(code, .false., b)
+    case ('toml')
+        call highlight_data(code, .true., b)
     case default
         call html_escape(code, b, .false.)
     end select
