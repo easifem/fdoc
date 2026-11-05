@@ -23,12 +23,12 @@ WORK = ROOT / "build" / "projects"
 
 # name: repository, commit, project file, pages, broken links that come from the project's own text
 PROJECTS = {
-    "fformat": ("jacobwilliams/fformat", "0073d0546b1c916590d03914f26f4d21ffff84f1", "ford.md", 247, 0),
-    "bspline-fortran": ("jacobwilliams/bspline-fortran", "047c724451aeee7f883c0d5acba3f7bd22a5de01", "ford.md", 165, 0),
-    "json-fortran": ("jacobwilliams/json-fortran", "d9ed2e4ee53745f4ed98d7536e17bee5198aa3b0", "ford.md", 381, 2),
-    "toml-f": ("toml-f/toml-f", "f9ff54793b2d1a3edca7d6890548d18d48c98e36", "fpm.toml", 177, 0),
-    "fpm": ("fortran-lang/fpm", "b30ca67abf4a616234d856ca565c7cfad0bcafac", "docs.md", 484, 1),
-    "stdlib": ("fortran-lang/stdlib", "1903780b7c616eaf55e90e515214e9813dde3284", "API-doc-FORD-file.md", 3456, 225),
+    "fformat": ("jacobwilliams/fformat", "0073d0546b1c916590d03914f26f4d21ffff84f1", "ford.md", 248, 0),
+    "bspline-fortran": ("jacobwilliams/bspline-fortran", "047c724451aeee7f883c0d5acba3f7bd22a5de01", "ford.md", 166, 0),
+    "json-fortran": ("jacobwilliams/json-fortran", "d9ed2e4ee53745f4ed98d7536e17bee5198aa3b0", "ford.md", 382, 2),
+    "toml-f": ("toml-f/toml-f", "f9ff54793b2d1a3edca7d6890548d18d48c98e36", "fpm.toml", 178, 0),
+    "fpm": ("fortran-lang/fpm", "b30ca67abf4a616234d856ca565c7cfad0bcafac", "docs.md", 485, 1),
+    "stdlib": ("fortran-lang/stdlib", "1903780b7c616eaf55e90e515214e9813dde3284", "API-doc-FORD-file.md", 3457, 225),
 }
 
 
