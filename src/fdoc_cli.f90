@@ -45,6 +45,7 @@ function usage() result(text)
            '  -d, --src_dir DIR        directory of source files (repeatable; default ./src)'//NL// &
            '  -p, --page_dir DIR       directory of static pages'//NL// &
            '  -o, --output_dir DIR     output directory (default ./doc)'//NL// &
+           '      --output_format FMT  what to write: html (default) or markdown'//NL// &
            '  -s, --css FILE           custom style sheet'//NL// &
            '  -r, --revision REV       version or revision of the project'//NL// &
            '      --exclude FILE       file to leave out (repeatable)'//NL// &
@@ -134,6 +135,7 @@ subroutine parse_args(args, parsed, stat, errmsg)
         case ('-d', '--src_dir'); call valued('src_dir', .true.)
         case ('-p', '--page_dir'); call valued('page_dir', .false.)
         case ('-o', '--output_dir'); call valued('output_dir', .false.)
+        case ('--output_format'); call valued('output_format', .false.)
         case ('-s', '--css'); call valued('css', .false.)
         case ('-r', '--revision'); call valued('revision', .false.)
         case ('--exclude'); call valued('exclude', .true.)

@@ -27,6 +27,7 @@ use fdoc_links, only: link_project, dump_links
 use fdoc_markdown, only: markdown_to_html, markdown_options_t
 use fdoc_docs, only: base_options, render_documentation, render_text, collect_abbreviations
 use fdoc_site, only: assign_pages, write_site
+use fdoc_site_markdown, only: write_markdown_site
 use fdoc_urls, only: index_entity_names
 use fdoc_pages, only: load_pages, page_t
 use fdoc_progress, only: progress_enable, progress_start, progress_finish, progress_summary, warn
@@ -119,8 +120,13 @@ integer function run(args) result(status)
     if (allocated(options%abbreviations)) front_options%abbreviations = options%abbreviations
     call render_text(p, front_options, 0, '', body, front)
     call load_pages(p, s, options, static)
-    call write_site(p, s, front, static, pages, stat, errmsg)
-    if (stat == 0 .and. s%externalize) call write_modules(p, s, stat, errmsg)
+    if (s%output_format == 'markdown') then
+        ! `modules.json` is left out, as other projects link to the pages of an HTML site
+        call write_markdown_site(p, s, front, static, pages, stat, errmsg)
+    else
+        call write_site(p, s, front, static, pages, stat, errmsg)
+        if (stat == 0 .and. s%externalize) call write_modules(p, s, stat, errmsg)
+    end if
     if (stat /= 0) then
         write (error_unit, '(a)') 'fdoc: '//errmsg
         status = 1
@@ -136,6 +142,7 @@ subroutine warn_unsupported(s)
     integer :: k
 
     if (size(s%html_template_dir) > 0) call warn('html_template_dir has no effect: fdoc does not use templates')
+    if (s%output_format == 'markdown' .and. s%graph) call warn('graph has no effect: Markdown output has no graphs')
     do k = 1, size(s%md_extensions)
         select case (s%md_extensions(k)%s)
         case ('markdown.extensions.toc', 'toc', 'markdown.extensions.smarty', 'smarty')

@@ -10,12 +10,14 @@ implicit none
 private
 
 public :: page_name, object_word, entity_url, entity_anchor, link_context_t, resolve_link, url_quote, index_entity_names, is_shown
+public :: markdown_url
 
 type :: link_context_t
     !! Where a `[[name]]` link is being read.
     type(entity_list_t), pointer :: list => null()  !! the entities
     integer :: entity = 0                           !! the entity being documented, or 0
     character(len=:), allocatable :: prefix         !! from the page to the root of the site
+    logical :: markdown = .false.                   !! true if links go to Markdown files, not to HTML pages
 end type link_context_t
 
 contains
@@ -58,6 +60,23 @@ subroutine url_quote(text, out)
         end if
     end do
 end subroutine url_quote
+
+!> The link to the Markdown file for `url`, the URL of an HTML page in this project. The path is
+!> quoted, as a name like `operator(+)` would otherwise end a Markdown link early.
+subroutine markdown_url(url, out)
+    character(len=*), intent(in) :: url                 !! the URL, possibly with an anchor
+    character(len=:), allocatable, intent(out) :: out   !! the result
+    integer :: stop_at
+
+    stop_at = index(url, '#') - 1
+    if (stop_at < 0) stop_at = len(url)
+    if (ends_with(url(:stop_at), '.html')) then
+        call url_quote(url(:stop_at - 5)//'.md', out)
+    else
+        call url_quote(url(:stop_at), out)
+    end if
+    out = out//url(stop_at + 1:)
+end subroutine markdown_url
 
 !> The word FORD uses for the kind of entity `e`.
 subroutine object_word(e, word)
@@ -339,7 +358,7 @@ subroutine resolve_link(data, name, entity, child, child_entity, url, text, foun
     logical, intent(out) :: found                       !! false if there is no such entity
     character(len=len(name)) :: low
     character(len=len(entity)) :: class
-    character(len=:), allocatable :: label
+    character(len=:), allocatable :: label, quoted
     integer :: item, inner, parent
 
     found = .false.
@@ -374,7 +393,13 @@ subroutine resolve_link(data, name, entity, child, child_entity, url, text, foun
         end do
         if (len(url) == 0) return
         if (.not. data%list%box(item)%e%visible .and. index(url, '#') > 0) url = url(:index(url, '#') - 1)
-        if (.not. allocated(data%list%box(item)%e%external_url)) url = data%prefix//url
+        if (.not. allocated(data%list%box(item)%e%external_url)) then
+            if (data%markdown) then
+                call markdown_url(url, quoted)
+                url = quoted
+            end if
+            url = data%prefix//url
+        end if
         text = label
         found = .true.
     end select

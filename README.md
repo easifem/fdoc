@@ -51,6 +51,16 @@ The options are FORD's, including `-o`, `-d`, `-p`, `-g`, `-m`, `-I`, `-L`, `-q`
 
 Without a project file, fdoc looks in the current directory for an `[extra.fdoc]` or `[extra.ford]` table in `fpm.toml`, and then for `ford.md`.
 
+### Markdown output
+
+`--output_format markdown`, or `output_format: markdown` in the project's settings, writes Markdown files in place of the HTML site: one for each page, at the same paths with `.md` for `.html`, starting from `index.md`.
+
+```
+fdoc --output_format markdown -o doc-md ford.md
+```
+
+Links between pages go to the Markdown files. `[[name]]` links, aliases, file includes and admonitions are replaced, and math is written with `$` and `$$`. Other extensions of FORD's Markdown, such as abbreviations and attribute lists, stay as they were written. Graphs, search, the index of names, the tree of types and `modules.json` are left out.
+
 ### Configuration
 
 A FORD project file works as it is:

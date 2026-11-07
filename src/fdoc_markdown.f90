@@ -17,7 +17,7 @@ use fdoc_settings, only: map_entry_t
 implicit none
 private
 
-public :: markdown_to_html, markdown_options_t, dedent
+public :: markdown_to_html, markdown_to_markdown, markdown_options_t, dedent
 
 character, parameter :: NL = achar(10)
 character, parameter :: STX = achar(2)      !! starts a placeholder for stashed HTML
@@ -50,6 +50,7 @@ type :: markdown_options_t
     !! What rendering depends on.
     type(map_entry_t), allocatable :: aliases(:)    !! the `|alias|` replacements
     character(len=:), allocatable :: base_path      !! where file include directives paths start from
+    logical :: keep_markdown = .false.              !! true if documentation stays Markdown, not HTML
     logical :: toc = .false.                        !! the `toc` extension: ids on headers, `[TOC]`
     logical :: smarty = .false.                     !! the `smarty` extension: typographic punctuation
     procedure(link_resolver), pointer, nopass :: resolver => null() !! finds `[[...]]` links
@@ -160,6 +161,244 @@ recursive subroutine markdown_to_html(source, options, html)
     if (options%toc) call insert_toc(t, html)
     call unstash(t, html)
 end subroutine markdown_to_html
+
+!> Convert Markdown `source` to Markdown that needs nothing of FORD's or fdoc's to read: file includes,
+!> aliases, `[[name]]` links and admonitions are replaced, links between pages go to Markdown files, and
+!> math is written with dollar signs. The rest of the text and all code is left as it is.
+subroutine markdown_to_markdown(source, options, markdown)
+    character(len=*), intent(in) :: source                  !! the Markdown
+    type(markdown_options_t), intent(in) :: options         !! what rendering depends on
+    character(len=:), allocatable, intent(out) :: markdown  !! the result
+    type(string_t), allocatable :: lines(:)
+    type(buffer_t) :: b
+    type(tree_t) :: t
+    character(len=:), allocatable :: id, heading
+    character :: mark
+    integer :: k, at, n, open_fence, level
+
+    allocate (t%ids(0))
+    lines = split_lines(source)
+    call normalize_lines(lines)
+    call expand_file_includes(lines, options, 1)
+    call admonition_lines(lines)
+    if (allocated(options%aliases)) call substitute_aliases(lines, options%aliases)
+    open_fence = 0
+    mark = ' '
+    do k = 1, size(lines)
+        at = verify(lines(k)%s, ' ')
+        n = 0
+        if (at > 0) n = fence_length(lines(k)%s(at:))
+        if (open_fence > 0) then
+            if (n >= open_fence .and. len(strip(lines(k)%s(at + n:))) == 0) then
+                if (lines(k)%s(at:at) == mark) open_fence = 0
+            end if
+        else if (n > 0) then
+            open_fence = n
+            mark = lines(k)%s(at:at)
+        else if (strip(lines(k)%s) == '[TOC]') then
+            lines(k)%s = ''
+        else
+            call join_broken_link(lines, k)
+            level = verify(lines(k)%s//' ', '#') - 1
+            if (level >= 1 .and. level <= 6 .and. len(lines(k)%s) > level) then
+                if (lines(k)%s(level + 1:level + 1) == ' ') then
+                    call portable_heading(t, lines(k)%s(level + 2:), options, b)
+                    id = lines(k)%s(:level + 1)
+                    call take(b, heading)
+                    lines(k)%s = id//heading
+                    cycle
+                end if
+            end if
+            call portable_line(lines(k)%s, options, b)
+            call take(b, lines(k)%s)
+        end if
+    end do
+    call admonition_quotes(lines)
+    markdown = join(lines, NL)
+end subroutine markdown_to_markdown
+
+!> Write the text of a heading, after an anchor with the id it has in the HTML, as links are written for
+!> those and Markdown renderers make their own differently: one given as `{#id}`, or else with the `toc`
+!> extension the one that makes.
+subroutine portable_heading(t, text, options, out)
+    type(tree_t), intent(inout) :: t                !! the conversion, for the ids in use
+    character(len=*), intent(in) :: text            !! the text of the heading
+    type(markdown_options_t), intent(in) :: options !! what rendering depends on
+    type(buffer_t), intent(inout) :: out            !! the result
+    character(len=:), allocatable :: id, inner
+    integer :: open, stop_at
+
+    stop_at = len_trim(text)
+    open = index(text(:stop_at), '{', back=.true.)
+    id = ''
+    if (open > 0 .and. text(stop_at:stop_at) == '}') then
+        inner = strip(text(open + 1:stop_at - 1))
+        if (starts_with(inner, ':')) inner = strip(inner(2:))
+        if (starts_with(inner, '#') .and. index(inner, ' ') == 0) then
+            id = inner(2:)
+            stop_at = len_trim(text(:open - 1))
+        end if
+    end if
+    if (len(id) == 0 .and. options%toc) call unique_id(t, text, id)
+    if (len(id) > 0) call add(out, '<a id="'//id//'"></a>')
+    call portable_line(text(:stop_at), options, out)
+end subroutine portable_heading
+
+!> Bring up the rest of a link whose target goes on to the next line, which only Python-Markdown allows.
+subroutine join_broken_link(lines, k)
+    type(string_t), intent(inout) :: lines(:)   !! the lines
+    integer, intent(in) :: k                    !! the line
+    integer :: at, close
+
+    if (k == size(lines)) return
+    at = index(lines(k)%s, '](', back=.true.)
+    if (at == 0) return
+    if (index(lines(k)%s(at:), ')') > 0) return
+    close = index(lines(k + 1)%s, ')')
+    if (close == 0) return
+    lines(k)%s = lines(k)%s//strip(lines(k + 1)%s(:close))
+    lines(k + 1)%s = strip(lines(k + 1)%s(close + 1:))
+end subroutine join_broken_link
+
+!> Write `line`, outside code blocks, in the form [[markdown_to_markdown]] gives it.
+subroutine portable_line(line, options, out)
+    character(len=*), intent(in) :: line            !! the line
+    type(markdown_options_t), intent(in) :: options !! what rendering depends on
+    type(buffer_t), intent(inout) :: out            !! the result
+    character(len=:), allocatable :: name, url, label
+    integer :: i, n, close, used
+    logical :: found
+
+    n = len(line)
+    i = 1
+    do while (i <= n)
+        select case (line(i:i))
+        case ('`')
+            used = verify(line(i:)//' ', '`') - 1
+            close = index(line(i + used:), repeat('`', used))
+            if (close > 0) used = 2*used + close - 1
+            call add(out, line(i:i + used - 1))
+            i = i + used
+            cycle
+        case ('\')
+            call portable_backslash(line, i, out, used)
+            i = i + used
+            cycle
+        case ('[')
+            if (i < n) then
+                if (line(i + 1:i + 1) == '[') then
+                    call find_ford_link(line, i, options, name, url, label, found, used)
+                    if (used > 0) then
+                        if (found) then
+                            call add(out, '[`'//label//'`]('//url//')')
+                        else
+                            call add(out, '`'//name//'`')
+                        end if
+                        i = i + used
+                        cycle
+                    end if
+                end if
+            end if
+        case (']')
+            if (i < n) then
+                if (line(i + 1:i + 1) == '(') then
+                    close = index(line(i + 2:), ')')
+                    if (close > 0) then
+                        call add(out, '](')
+                        call portable_target(line(i + 2:i + close), out)
+                        call add(out, ')')
+                        i = i + close + 2
+                        cycle
+                    end if
+                end if
+            end if
+        end select
+        call add(out, line(i:i))
+        i = i + 1
+    end do
+end subroutine portable_line
+
+!> Write what a backslash starts: math with dollar signs, or the backslash and the character after it.
+subroutine portable_backslash(line, i, out, used)
+    character(len=*), intent(in) :: line    !! the line
+    integer, intent(in) :: i                !! where the backslash is
+    type(buffer_t), intent(inout) :: out    !! the result
+    integer, intent(out) :: used            !! how much was used
+    integer :: close
+
+    used = 1
+    if (i < len(line)) then
+        used = 2
+        associate (c => line(i + 1:i + 1))
+            if (c == '(' .or. c == '[') then
+                close = index(line(i + 2:), '\'//merge(')', ']', c == '('))
+                if (close > 0) then
+                    call add(out, trim(merge('$ ', '$$', c == '('))//line(i + 2:i + close)//trim(merge('$ ', '$$', c == '(')))
+                    used = close + 3
+                    return
+                end if
+            end if
+            ! display math over several lines, with its delimiters alone on their lines
+            if ((c == '[' .or. c == ']') .and. len(strip(line)) == 2) then
+                call add(out, '$$')
+                return
+            end if
+        end associate
+    end if
+    call add(out, line(i:i + used - 1))
+end subroutine portable_backslash
+
+!> Write `target`, what is in the parentheses of a link, with a link to another page changed to its
+!> Markdown file. Links elsewhere are left alone.
+subroutine portable_target(target, out)
+    character(len=*), intent(in) :: target  !! the link and any title
+    type(buffer_t), intent(inout) :: out    !! the result
+    integer :: stop_at, at
+
+    stop_at = index(target, ' ') - 1
+    if (stop_at < 0) stop_at = len(target)
+    at = index(target(:stop_at), '#') - 1
+    if (at >= 0) stop_at = at
+    if (index(target(:stop_at), ':') > 0 .or. starts_with(target, '/') .or. .not. ends_with(target(:stop_at), '.html')) then
+        call add(out, target)
+    else
+        call add(out, target(:stop_at - 5)//'.md'//target(stop_at + 1:))
+    end if
+end subroutine portable_target
+
+!> Turn the admonitions that [[admonition_lines]] leaves into quotes.
+subroutine admonition_quotes(lines)
+    type(string_t), allocatable, intent(inout) :: lines(:)  !! the lines
+    type(string_t), allocatable :: out(:)
+    integer :: k
+
+    if (.not. any([(starts_with(lines(k)%s, '@note '), k=1, size(lines))])) return
+    allocate (out(0))
+    k = 1
+    do while (k <= size(lines))
+        if (.not. starts_with(lines(k)%s, '@note ')) then
+            call push(out, lines(k)%s)
+            k = k + 1
+            cycle
+        end if
+        call push(out, '> **'//lines(k)%s(7:)//'**')
+        call push(out, '>')
+        k = k + 1
+        do while (k <= size(lines))
+            if (starts_with(lines(k)%s, '    ')) then
+                call push(out, '> '//lines(k)%s(5:))
+            else if (len(lines(k)%s) > 0 .or. k == size(lines)) then
+                exit
+            else if (.not. starts_with(lines(k + 1)%s, '    ')) then
+                exit
+            else
+                call push(out, '>')
+            end if
+            k = k + 1
+        end do
+    end do
+    call move_alloc(out, lines)
+end subroutine admonition_quotes
 
 !> Expand tabs and blank lines of only spaces.
 subroutine normalize_lines(lines)
@@ -2515,11 +2754,38 @@ subroutine ford_link(text, i, options, out, used)
     type(markdown_options_t), intent(in) :: options !! what rendering depends on
     type(buffer_t), intent(inout) :: out            !! the HTML
     integer, intent(out) :: used                    !! how much was used
-    character(len=:), allocatable :: inner, name, entity, child, child_entity, url, label
-    integer :: close, colon
+    character(len=:), allocatable :: name, url, label
     logical :: found
 
+    call find_ford_link(text, i, options, name, url, label, found, used)
+    if (used == 0) return
+    if (.not. found) then
+        call add(out, '<a>'//name//'</a>')
+        return
+    end if
+    call add(out, '<a href="')
+    call html_escape(url, out, .true.)
+    call add(out, '">')
+    call html_escape(label, out, .false.)
+    call add(out, '</a>')
+end subroutine ford_link
+
+!> Find what the `[[name(type):child(type)]]` at `i` refers to. `used` is 0 if it is not such a link, and
+!> `found` false, after a warning, if it refers to nothing.
+subroutine find_ford_link(text, i, options, name, url, label, found, used)
+    character(len=*), intent(in) :: text                !! the text
+    integer, intent(in) :: i                            !! where it is
+    type(markdown_options_t), intent(in) :: options     !! what rendering depends on
+    character(len=:), allocatable, intent(out) :: name  !! the name in the link
+    character(len=:), allocatable, intent(out) :: url   !! where it goes
+    character(len=:), allocatable, intent(out) :: label !! the text to show
+    logical, intent(out) :: found                       !! false if nothing has that name
+    integer, intent(out) :: used                        !! how much was used
+    character(len=:), allocatable :: inner, entity, child, child_entity
+    integer :: close, colon
+
     used = 0
+    found = .false.
     if (.not. associated(options%resolver)) return
     close = index(text(i:), ']]')
     if (close < 4) return
@@ -2535,17 +2801,8 @@ subroutine ford_link(text, i, options, out, used)
     call name_and_entity(inner, name, entity)
     call options%resolver(options%resolver_data, name, entity, child, child_entity, url, label, found)
     used = close + 1
-    if (.not. found) then
-        call warn('Could not substitute link '//text(i:i + close)//", '"//name//"' not found")
-        call add(out, '<a>'//name//'</a>')
-        return
-    end if
-    call add(out, '<a href="')
-    call html_escape(url, out, .true.)
-    call add(out, '">')
-    call html_escape(label, out, .false.)
-    call add(out, '</a>')
-end subroutine ford_link
+    if (.not. found) call warn('Could not substitute link '//text(i:i + close)//", '"//name//"' not found")
+end subroutine find_ford_link
 
 !> Split `name(entity)`.
 subroutine name_and_entity(text, name, entity)

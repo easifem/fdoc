@@ -22,22 +22,25 @@ implicit none
 private
 
 public :: assign_pages, write_site
+! what the Markdown output shares with the HTML site
+public :: site_t, prepare_site, copy_project_files, page_directories, children_of, has_page, display_name, entity_word
+public :: wants_source, logo_name
 
-integer, parameter :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIST_ABSINT = 4, LIST_TYPES = 5
-integer, parameter :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
-integer, parameter :: NUM_LISTS = 8
+integer, parameter, public :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIST_ABSINT = 4, LIST_TYPES = 5
+integer, parameter, public :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
+integer, parameter, public :: NUM_LISTS = 8
 
 integer, parameter :: HERE_PAGES = -1   !! for `page_head`: a static page, not of a list
 integer, parameter :: HERE_INDEX = -2   !! for `page_head`: the index of all names
 integer, parameter :: MAX_NESTING = 16  !! how many levels of containers a page shows
 
-character(len=*), parameter :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
+character(len=*), parameter, public :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
                                                        'types', 'programs', 'blockdata', 'namelists']
-character(len=*), parameter :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'Source Files', 'Modules', 'Procedures', &
+character(len=*), parameter, public :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'Source Files', 'Modules', 'Procedures', &
                                                         'Abstract Interfaces', 'Derived Types', 'Programs', 'Block Data', &
                                                         'Namelists']
 
-character(len=*), parameter :: LIST_NOUN(NUM_LISTS) = [character(len=18) :: 'File', 'Module', 'Procedure', &
+character(len=*), parameter, public :: LIST_NOUN(NUM_LISTS) = [character(len=18) :: 'File', 'Module', 'Procedure', &
                                                        'Abstract Interface', 'Type', 'Program', 'Block Data Unit', &
                                                        'Namelist']
 
@@ -1553,6 +1556,28 @@ pure integer function line_has(line, keyword, name)
     end if
 end function line_has
 
+!> What entity `e` is, as the title of its page says.
+subroutine entity_word(e, word)
+    type(entity_t), intent(in) :: e                     !! the entity
+    character(len=:), allocatable, intent(out) :: word  !! what it is
+
+    select case (e%kind)
+    case (E_MODULE); word = 'module'
+    case (E_SUBMODULE); word = 'submodule'
+    case (E_PROGRAM); word = 'program'
+    case (E_BLOCKDATA); word = 'block data'
+    case (E_SUBROUTINE); word = 'subroutine'
+    case (E_FUNCTION); word = 'function'
+    case (E_MODPROC); word = 'module procedure'
+    case (E_INTERFACE); word = 'interface'
+    case (E_TYPE); word = 'type'
+    case (E_NAMELIST); word = 'namelist'
+    case default; word = 'file'
+    end select
+    if (e%iface == IFACE_EXPLICIT) word = 'interface'
+    if (e%iface == IFACE_ABSTRACT) word = 'abstract interface'
+end subroutine entity_word
+
 !> Render the page of entity `id`.
 subroutine entity_page(site, id, html)
     type(site_t), intent(in) :: site                    !! the site
@@ -1579,21 +1604,7 @@ subroutine entity_page(site, id, html)
 
     associate (e => site%p%list%box(id)%e)
         here = list_of(site, id)
-        select case (e%kind)
-        case (E_MODULE); word = 'module'
-        case (E_SUBMODULE); word = 'submodule'
-        case (E_PROGRAM); word = 'program'
-        case (E_BLOCKDATA); word = 'block data'
-        case (E_SUBROUTINE); word = 'subroutine'
-        case (E_FUNCTION); word = 'function'
-        case (E_MODPROC); word = 'module procedure'
-        case (E_INTERFACE); word = 'interface'
-        case (E_TYPE); word = 'type'
-        case (E_NAMELIST); word = 'namelist'
-        case default; word = 'file'
-        end select
-        if (e%iface == IFACE_EXPLICIT) word = 'interface'
-        if (e%iface == IFACE_ABSTRACT) word = 'abstract interface'
+        call entity_word(e, word)
 
         if (e%kind == E_TYPE) then
             call side_group(site, 'Components', variables, side)
@@ -2693,6 +2704,46 @@ subroutine write_entity_page(site, id, directory, stat)
     call write_whole_file(directory//'/'//url, html, stat, errmsg)
 end subroutine write_entity_page
 
+!> Work out what pages need from the project, whatever form they are written in.
+subroutine prepare_site(site, p, s, pages_in)
+    type(site_t), intent(out) :: site                   !! the site
+    type(project_t), intent(inout), target :: p         !! the project
+    type(settings_t), intent(in), target :: s           !! the settings
+    type(page_t), intent(in), target :: pages_in(:)     !! the static pages
+
+    site%p => p
+    site%s => s
+    site%pages => pages_in
+    call collect_lists(site)
+    call make_footer(s, site%footer)
+    call locate_sources(site)
+    call measure_files(site)
+    call find_type_uses(site)
+end subroutine prepare_site
+
+!> Copy the files of the project that pages refer to.
+subroutine copy_project_files(s, directory, pages)
+    type(settings_t), intent(in) :: s           !! the settings
+    character(len=*), intent(in) :: directory   !! the output directory
+    type(page_t), intent(in) :: pages(:)        !! the static pages
+    character(len=:), allocatable :: name
+    integer :: status
+
+    call copy_page_files(s, directory, pages)
+    call logo_name(s, name)
+    if (len(name) > 0) then
+        call copy_file(s%logo, directory//'/'//name, status)
+    else if (allocated(s%logo)) then
+        call warn('the logo '//s%logo//' was not found, so the main page has none')
+    end if
+    if (allocated(s%media_dir)) then
+        if (is_directory(s%media_dir)) then
+            call remove_directory(directory//'/media')
+            call copy_path(s%media_dir, directory//'/media', status)
+        end if
+    end if
+end subroutine copy_project_files
+
 !> Write the whole site.
 subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     type(project_t), intent(inout), target :: p         !! the project
@@ -2709,14 +2760,7 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     type(buffer_t) :: b
     integer :: k, n, extra
 
-    site%p => p
-    site%s => s
-    site%pages => pages_in
-    call collect_lists(site)
-    call make_footer(s, site%footer)
-    call locate_sources(site)
-    call measure_files(site)
-    call find_type_uses(site)
+    call prepare_site(site, p, s, pages_in)
 
     allocate (ids(0))
     do k = 1, p%list%n
@@ -2790,21 +2834,9 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
         call write_whole_file(directory//'/search/index.js', url, stat, errmsg)
         if (stat /= 0) return
     end if
-    call copy_page_files(s, directory, pages_in)
+    call copy_project_files(s, directory, pages_in)
     if (allocated(s%css)) call copy_file(s%css, directory//'/css/user.css', k)
     if (allocated(s%favicon)) call copy_file(s%favicon, directory//'/favicon.png', k)
-    call logo_name(s, url)
-    if (len(url) > 0) then
-        call copy_file(s%logo, directory//'/'//url, k)
-    else if (allocated(s%logo)) then
-        call warn('the logo '//s%logo//' was not found, so the main page has none')
-    end if
-    if (allocated(s%media_dir)) then
-        if (is_directory(s%media_dir)) then
-            call remove_directory(directory//'/media')
-            call copy_path(s%media_dir, directory//'/media', k)
-        end if
-    end if
 end subroutine write_site
 
 end module fdoc_site
