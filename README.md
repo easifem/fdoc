@@ -8,8 +8,9 @@ fdoc reads the same project files and doc comments as [FORD](https://github.com/
 * **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, apart from a few [listed below](#differences-from-ford), so existing links keep working.
 * **Clean output.** Light and dark themes, a layout that works on a phone, and instant search with typo tolerance. The site needs no framework, and its CSS and JavaScript are built into the program.
 * **Small output.** Sites take about a third of the space of FORD's.
+* **Markdown too.** The same documentation can be written as plain Markdown files in place of a site. See [Markdown output](#markdown-output).
 
-fdoc is in early development and has only been tested on macOS with gfortran. See [Differences from FORD](#differences-from-ford) for what isn't supported yet.
+fdoc is in early development and has only been tested on macOS and Linux with gfortran. See [Differences from FORD](#differences-from-ford) for what isn't supported yet.
 
 ## Getting started
 
@@ -29,6 +30,23 @@ To install the binary:
 
 ```
 pixi run fpm install --profile release --prefix ~/.local
+```
+
+Without pixi, with gfortran 16 and fpm already installed:
+
+```
+git clone https://github.com/jacobwilliams/fdoc.git
+cd fdoc
+fpm install --profile release --prefix ~/.local
+```
+
+Either way this puts `fdoc` in `~/.local/bin`, which needs to be on your `PATH`. Check it with `fdoc --version`.
+
+For Markdown output, also install [rumdl](https://rumdl.dev), which formats the files. It is optional, and can be installed with either of these:
+
+```
+uv tool install rumdl
+cargo install rumdl
 ```
 
 ## Usage
@@ -53,13 +71,66 @@ Without a project file, fdoc looks in the current directory for an `[extra.fdoc]
 
 ### Markdown output
 
-`--output_format markdown`, or `output_format: markdown` in the project's settings, writes Markdown files in place of the HTML site: one for each page, at the same paths with `.md` for `.html`, starting from `index.md`.
+fdoc can write Markdown files in place of the HTML site, for a static site generator, a wiki, a repository, or anything else that reads Markdown. There is one file for each page, at the same paths with `.md` for `.html`, starting from `index.md`.
 
 ```
 fdoc --output_format markdown -o doc-md ford.md
 ```
 
-Links between pages go to the Markdown files. `[[name]]` links, aliases, file includes and admonitions are replaced, and math is written with `$` and `$$`. Other extensions of FORD's Markdown, such as abbreviations and attribute lists, stay as they were written. Graphs, search, the index of names, the tree of types and `modules.json` are left out.
+| Option | Setting | Default | Meaning |
+|---|---|---|---|
+| `--output_format FMT` | `output_format` | `html` | What to write: `html` or `markdown` |
+| `--markdown_formatter CMD` | `markdown_formatter` | rumdl | The command that formats the files, or empty for none |
+
+The settings can also go in the project file, like any other:
+
+```
+project: My Project
+output_format: markdown
+output_dir: ./doc-md
+```
+
+Or in `fpm.toml`:
+
+```toml
+[extra.fdoc]
+project = "My Project"
+output_format = "markdown"
+output_dir = "./doc-md"
+```
+
+Other options work as they do for a site, so `-d`, `-p`, `--exclude` and `display` choose what is documented in the same way.
+
+**What is in the files.** Modules, procedures, types, interfaces, programs, source files, the lists of each and static pages are all there, with signatures, tables of arguments and components, and source code if `source` is on.
+
+* Links between pages go to the Markdown files, including links in doc comments, and anchors match those of the site.
+* `[[name]]` links, aliases and file includes are replaced by what they stand for.
+* Math is written with `$` and `$$`, in place of `\(` and `\[`.
+* Admonitions such as `@note` become block quotes, starting with `**Note**`.
+* Other extensions of FORD's Markdown, such as abbreviations and attribute lists, stay as they were written, so they need a reader that understands them.
+
+**What is left out.** Graphs, search, the index of names, the tree of types and `modules.json` are all left out. `graph: true` gives a warning and has no other effect. Keep the HTML site if other projects link to yours, as `modules.json` is what they use.
+
+**Formatting.** Once the pages are written, fdoc runs `rumdl fmt` on the output directory, to tidy the blank lines, list markers, indentation and trailing spaces that come from doc comments. Only rules for layout are enabled, as rumdl's other rules change heading levels, emphasis and the spaces in math. Links, code blocks and wording stay as they were, and any rumdl configuration of your own is ignored. The rules are listed in `new_settings` in `src/fdoc_settings.f90`.
+
+If rumdl isn't installed, or it fails, the files are kept as written, with a warning, and the run still succeeds. To turn formatting off:
+
+```
+fdoc --output_format markdown --markdown_formatter '' -o doc-md ford.md
+```
+
+`markdown_formatter` can be any command, and fdoc adds the output directory as its last argument. This one uses all of rumdl's rules, for example:
+
+```
+fdoc --output_format markdown --markdown_formatter 'rumdl fmt --silent' -o doc-md ford.md
+```
+
+A few things to keep in mind:
+
+* **Use a directory of its own.** Files already in the output directory aren't removed, and the formatter changes every Markdown file there, including ones fdoc didn't write. The files of `media_dir` are copied afterwards, so these are left alone.
+* **Output depends on what is installed.** Without rumdl, the pages are complete but untidy, so install it wherever the documentation is generated, such as in CI.
+* **The command comes from the project.** Like `preprocessor`, `markdown_formatter` is run through the shell, so a project file can run commands on your machine. Treat project files from elsewhere as code.
+* **The Markdown isn't converted to HTML by fdoc,** so how math, tables and raw `<a id>` anchors appear depends on the program that reads the files.
 
 ### Configuration
 
@@ -190,7 +261,7 @@ pixi run bench path/to/ford.md ...
 4. **Linking** connects names across the project: `use` statements, inheritance, interfaces, bindings and calls.
 5. **Markdown** is converted to HTML in parallel, by a converter that follows the dialect of Python-Markdown.
 6. **Graphs** are laid out in parallel by [fdot](https://github.com/jacobwilliams/fdot), a Fortran port of the layout of Graphviz `dot`, with no files and no other process.
-7. **Pages** are rendered in parallel and written out.
+7. **Pages** are rendered in parallel and written out. For Markdown output, steps 5 and 6 are replaced: doc comments stay Markdown, with links and extensions resolved, and there are no graphs. The files are then formatted.
 
 ## Development
 
@@ -235,6 +306,7 @@ File statements in parallel code go inside `!$omp critical (file_io)`. In libgfo
 | [TOML Fortran](https://github.com/toml-f/toml-f) | Settings in `fpm.toml` |
 | [fregex](https://github.com/jacobwilliams/fregex) | Exclude patterns, through fformat |
 | OpenMP | Parallel parsing and rendering |
+| [rumdl](https://rumdl.dev) | Formatting Markdown output (optional, run as a separate program) |
 | [test-drive](https://github.com/fortran-lang/test-drive) | Tests |
 
 fpm fetches the Fortran packages. FORD and Python are needed only for `compare` and `bench`, not to run fdoc.

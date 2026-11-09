@@ -12,10 +12,10 @@ use fdoc_settings, only: settings_t
 use fdoc_project, only: project_t
 use fdoc_pages, only: page_t
 use fdoc_urls, only: entity_url, entity_anchor, markdown_url, is_shown
-use fdoc_progress, only: progress_start, progress_tick, progress_finish
-use fdoc_shell, only: make_directory
+use fdoc_progress, only: progress_start, progress_tick, progress_finish, warn
+use fdoc_shell, only: make_directory, quoted_path, run_command
 use fdoc_site, only: site_t, prepare_site, copy_project_files, page_directories, children_of, has_page, display_name, &
-                     entity_word, wants_source, logo_name, LIST_FILES, LIST_MODULES, LIST_PROCEDURES, LIST_ABSINT, &
+                     entity_word, wants_source, logo_name, repeats_module, LIST_FILES, LIST_MODULES, LIST_PROCEDURES, LIST_ABSINT, &
                      LIST_TYPES, LIST_PROGRAMS, LIST_BLOCKDATA, LIST_NAMELISTS, NUM_LISTS, LIST_FILE, LIST_TITLE, LIST_NOUN
 implicit none
 private
@@ -449,7 +449,7 @@ subroutine word_list(words, b)
     call add(b, NL)
 end subroutine word_list
 
-!> Write the `use` statements of a unit.
+!> Write the modules a unit uses, each once, however many `use` statements name it.
 subroutine uses_section(site, id, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the unit
@@ -461,6 +461,7 @@ subroutine uses_section(site, id, b)
         if (size(e%more%uses) == 0) return
         call add_heading('Uses', b)
         do k = 1, size(e%more%uses)
+            if (repeats_module(e%more%uses, k)) cycle
             call add(b, '- ')
             call link_to(site, e%more%uses(k)%target, e%more%uses(k)%module, b)
             call add(b, NL)
@@ -1057,6 +1058,21 @@ subroutine write_entity_pages(site, ids, directory, stat, errmsg)
     end do
 end subroutine write_entity_pages
 
+!> Run formatter `command` on the Markdown files in `directory`, if there is one. The files are complete
+!> without it, so a formatter that is missing or fails only gets a warning.
+subroutine format_pages(command, directory)
+    character(len=*), intent(in) :: command     !! the command, or empty for none
+    character(len=*), intent(in) :: directory   !! the output directory
+    integer :: stat
+    character(len=16) :: status_text
+
+    if (len_trim(command) == 0) return
+    call run_command(command//' '//quoted_path(directory), stat)
+    if (stat == 0) return
+    write (status_text, '(i0)') stat
+    call warn('the Markdown files are not formatted: "'//command//'" failed with status '//trim(status_text))
+end subroutine format_pages
+
 !> Write the documentation as Markdown files.
 subroutine write_markdown_site(p, s, front, pages_in, count, stat, errmsg)
     type(project_t), intent(inout), target :: p         !! the project
@@ -1110,6 +1126,8 @@ subroutine write_markdown_site(p, s, front, pages_in, count, stat, errmsg)
     call write_whole_file(directory//'/index.md', text, stat, errmsg)
     if (stat /= 0) return
     count = count + 1
+    ! Before the project's own files arrive, as they are not the formatter's to change
+    call format_pages(s%markdown_formatter, directory)
     call copy_project_files(s, directory, pages_in)
 end subroutine write_markdown_site
 

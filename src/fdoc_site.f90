@@ -24,7 +24,7 @@ private
 public :: assign_pages, write_site
 ! what the Markdown output shares with the HTML site
 public :: site_t, prepare_site, copy_project_files, page_directories, children_of, has_page, display_name, entity_word
-public :: wants_source, logo_name
+public :: wants_source, logo_name, repeats_module
 
 integer, parameter, public :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIST_ABSINT = 4, LIST_TYPES = 5
 integer, parameter, public :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
@@ -1316,7 +1316,20 @@ subroutine summary_item(site, id, b)
     end associate
 end subroutine summary_item
 
-!> Write the `use` statements of a unit.
+!> True if a statement before number `k` of `uses` names the same module.
+logical function repeats_module(uses, k)
+    type(use_t), intent(in) :: uses(:)      !! the `use` statements
+    integer, intent(in) :: k                !! which one
+    integer :: j
+
+    repeats_module = .false.
+    do j = 1, k - 1
+        repeats_module = uses(j)%module == uses(k)%module
+        if (repeats_module) return
+    end do
+end function repeats_module
+
+!> Write the modules a unit uses, each once, however many `use` statements name it.
 subroutine uses_section(site, id, heading, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the unit
@@ -1330,6 +1343,7 @@ subroutine uses_section(site, id, heading, b)
         if (heading) call add(b, '<h2 id="uses">Uses</h2>'//achar(10))
         call add(b, '<ul class="chips">')
         do k = 1, size(e%more%uses)
+            if (repeats_module(e%more%uses, k)) cycle
             call add(b, '<li>')
             call link_to(site, e%more%uses(k)%target, e%more%uses(k)%module, b)
             call add(b, '</li>')

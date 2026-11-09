@@ -18,7 +18,7 @@ character(len=*), parameter :: STRING_OPTIONS = &
     ' facebook github gitlab gitter_sidecar google_plus license linkedin predocmark predocmark_alt preprocessor'// &
     ' privacy_policy_url project project_bitbucket project_download project_github project_gitlab'// &
     ' project_sourceforge project_url project_website revision sort summary terms_of_service_url twitter version'// &
-    ' output_format'// &
+    ' markdown_formatter output_format'// &
     ' website year '
 character(len=*), parameter :: PATH_OPTIONS = &
     ' css favicon graph_dir logo mathjax_config md_base_dir media_dir output_dir page_dir '
@@ -56,6 +56,7 @@ type, public :: settings_t
     character(len=:), allocatable :: creation_date, docmark, docmark_alt, encoding, predocmark, predocmark_alt
     character(len=:), allocatable :: preprocessor, project, project_url, sort, year
     character(len=:), allocatable :: output_format      !! what to write: `html` or `markdown`
+    character(len=:), allocatable :: markdown_formatter !! the command to format Markdown output, or empty
     character(len=:), allocatable :: css, favicon, graph_dir, logo, mathjax_config, md_base_dir, media_dir, output_dir, page_dir
     character(len=:), allocatable :: directory          !! the project's directory
     logical :: coloured_edges = .false., dbg = .true., doxygen = .true., externalize = .true.
@@ -98,6 +99,9 @@ function new_settings() result(s)
     s%md_base_dir = '.'
     s%output_dir = './doc'
     s%output_format = 'html'
+    ! Only rules that change the layout: others rewrite headings, emphasis and the spaces in math
+    s%markdown_formatter = 'rumdl fmt --no-config --no-cache --silent --enable '// &
+                           'MD004,MD005,MD007,MD009,MD012,MD018,MD022,MD023,MD027,MD030,MD031,MD032'
     s%display = [string_t('public'), string_t('protected')]
     s%src_dir = [string_t('./src')]
     s%extensions = [string_t('f90'), string_t('f95'), string_t('f03'), string_t('f08'), string_t('f15')]
@@ -262,6 +266,7 @@ subroutine set_text(s, key, value)
     case ('media_dir'); s%media_dir = value
     case ('output_dir'); s%output_dir = value
     case ('output_format'); s%output_format = value
+    case ('markdown_formatter'); s%markdown_formatter = value
     case ('page_dir'); s%page_dir = value
     end select
 end subroutine set_text
@@ -531,6 +536,7 @@ function dump_settings(s) result(text)
     call put_text('revision', s%revision)
     call put_text('sort', s%sort)
     call put_text('output_format', s%output_format)
+    call put_text('markdown_formatter', s%markdown_formatter)
     call put_text('summary', s%summary)
     call put_text('terms_of_service_url', s%terms_of_service_url)
     call put_text('twitter', s%twitter)
