@@ -14,12 +14,14 @@ fdoc is in early development and has only been tested on macOS and Linux with gf
 
 ## Getting started
 
+This is the [easifem](https://github.com/easifem/fdoc) fork of [jacobwilliams/fdoc](https://github.com/jacobwilliams/fdoc). Its `vikas-dev` branch adds [Markdown output](#markdown-output), so the commands below use that branch.
+
 You need [gfortran](https://gcc.gnu.org/fortran/) 16 and [fpm](https://fpm.fortran-lang.org).
 
 The easiest way to get all of these is [pixi](https://pixi.sh), which installs them for this repository:
 
 ```
-git clone https://github.com/jacobwilliams/fdoc.git
+git clone -b vikas-dev https://github.com/easifem/fdoc.git
 cd fdoc
 pixi run doc ~/my-project/ford.md
 ```
@@ -35,7 +37,7 @@ pixi run fpm install --profile release --prefix ~/.local
 Without pixi, with gfortran 16 and fpm already installed:
 
 ```
-git clone https://github.com/jacobwilliams/fdoc.git
+git clone -b vikas-dev https://github.com/easifem/fdoc.git
 cd fdoc
 fpm install --profile release --prefix ~/.local
 ```
