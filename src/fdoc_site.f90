@@ -394,6 +394,8 @@ subroutine page_head(site, title, here, prefix, math, b)
             call add(b, '</script>'//achar(10))
         end if
         call add(b, '</head>'//achar(10)//'<body>'//achar(10)//'<header class="top">'//achar(10))
+        call add(b, '<button class="side-toggle" title="Show or hide the sidebar" aria-label="Show or hide the sidebar">'// &
+                 '&#9776;</button>'//achar(10))
         call add(b, '<a class="brand" href="'//prefix//'index.html">')
         call html_escape(s%project, b, .false.)
         if (allocated(s%version)) then
@@ -1642,7 +1644,6 @@ subroutine entity_page(site, id, html)
         call side_group(site, 'Subroutines', subroutines, side)
         call side_group(site, 'Module procedures', implementations, side)
         call side_group(site, 'Bindings', bindings, side)
-        call page_outline(site, id, side)
         call take(side, text)
 
         call page_head(site, display_name(e), here, '../', uses_math(site, id), b)
@@ -2092,30 +2093,6 @@ subroutine page_source(site, id, b)
     end associate
 end subroutine page_source
 
-!> Write the sections of a procedure page, for the sidebar.
-subroutine page_outline(site, id, b)
-    type(site_t), intent(in) :: site        !! the site
-    integer, intent(in) :: id               !! the entity
-    type(buffer_t), intent(inout) :: b      !! the HTML
-
-    associate (e => site%p%list%box(id)%e)
-        if (.not. is_procedure(e%kind) .and. e%kind /= E_MODPROC) return
-        call add(b, '<h4>On this page</h4><ul>')
-        if (allocated(e%more%arg_ids)) then
-            if (size(e%more%arg_ids) > 0) call add(b, '<li><a href="#arguments">Arguments</a></li>')
-        end if
-        if (e%result > 0) call add(b, '<li><a href="#result">Result</a></li>')
-        if (allocated(e%more%uses)) then
-            if (size(e%more%uses) > 0) call add(b, '<li><a href="#uses">Uses</a></li>')
-        end if
-        if (allocated(e%call_ids)) then
-            if (size(e%call_ids) > 0) call add(b, '<li><a href="#calls">Calls</a></li>')
-        end if
-        if (e%source_first > 0) call add(b, '<li><a href="#source">Source</a></li>')
-        call add(b, '</ul>'//achar(10))
-    end associate
-end subroutine page_outline
-
 !> Write the links to the list pages, for the sidebar. The list of the page is empty here, as it could
 !> be far too long to go in each page: `fdoc.js` fills it from `sidebar.js`. Pages outside the lists, which
 !> have no place in one, show the start of each list.
@@ -2174,7 +2151,14 @@ subroutine sidebar_script(site, text)
                 call entity_url(site%p%list, id, url)
                 call add(entry, '<li><a href="@')
                 call html_escape(url, entry, .true.)
-                call add(entry, '">')
+                call add(entry, '"')
+                if (k /= LIST_FILES .and. k /= LIST_MODULES) then
+                    ! the unit holding the entry, for fdoc.js to group the list by
+                    call add(entry, ' data-m="')
+                    call html_escape(host_name(site, id), entry, .true.)
+                    call add(entry, '"')
+                end if
+                call add(entry, '>')
                 call side_icon(site%p%list%box(id)%e, entry)
                 call html_escape(display_name(site%p%list%box(id)%e), entry, .false.)
                 call add(entry, '</a></li>')
@@ -2187,6 +2171,30 @@ subroutine sidebar_script(site, text)
     call add(b, '};'//achar(10))
     call take(b, text)
 end subroutine sidebar_script
+
+!> The name of the module, submodule, program or block data holding entity `id`, or of its file if
+!> none does.
+function host_name(site, id) result(name)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    character(len=:), allocatable :: name
+    integer :: up, n
+
+    name = ''
+    up = site%p%list%box(id)%e%parent
+    n = 0
+    do while (up > 0 .and. n < MAX_NESTING)
+        n = n + 1
+        associate (e => site%p%list%box(up)%e)
+            select case (e%kind)
+            case (E_MODULE, E_SUBMODULE, E_PROGRAM, E_BLOCKDATA, E_FILE)
+                name = display_name(e)
+                return
+            end select
+            up = e%parent
+        end associate
+    end do
+end function host_name
 
 !> Append `text` for use in a JavaScript string in single quotes.
 subroutine add_js_text(text, b)
