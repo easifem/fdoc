@@ -9,15 +9,30 @@
 :root[data-theme="dark"] {
   --bg: #14171d; --bg-soft: #1b1f27; --bg-code: #1b1f27; --line: #2c323d; --text: #e4e7ec; --muted: #9aa3b2;
   --accent: #8ba7ff; --accent-soft: #232c45; --ok: #5fcf9f; --warn: #e3ab5c; --bad: #f28b82; --hist: #b9a4f2;
-  --attr-l: 72%;
+  --attr-l: 72%; color-scheme: dark;
   --k: #c792ea; --s: #8fd18f; --c: #7f8796; --d: #7fc4d4; --n: #f0a868; --p: #e3ab5c;
 }
+/* Gruvbox dark, the default dark theme */
+:root[data-theme="gruvbox-dark"] {
+  --bg: #282828; --bg-soft: #32302f; --bg-code: #1d2021; --line: #504945; --text: #ebdbb2; --muted: #a89984;
+  --accent: #83a598; --accent-soft: #3c3836; --ok: #b8bb26; --warn: #fabd2f; --bad: #fb4934; --hist: #d3869b;
+  --attr-l: 72%; color-scheme: dark;
+  --k: #fb4934; --s: #b8bb26; --c: #928374; --d: #8ec07c; --n: #d3869b; --p: #fe8019;
+}
+/* Tokyo Night */
+:root[data-theme="tokyo-night"] {
+  --bg: #1a1b26; --bg-soft: #1f2335; --bg-code: #16161e; --line: #292e42; --text: #c0caf5; --muted: #9aa5ce;
+  --accent: #7aa2f7; --accent-soft: #283457; --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e; --hist: #bb9af7;
+  --attr-l: 72%; color-scheme: dark;
+  --k: #bb9af7; --s: #9ece6a; --c: #565f89; --d: #7dcfff; --n: #ff9e64; --p: #e0af68;
+}
+/* with no theme chosen, a system in dark mode gets gruvbox-dark */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #14171d; --bg-soft: #1b1f27; --bg-code: #1b1f27; --line: #2c323d; --text: #e4e7ec; --muted: #9aa3b2;
-    --accent: #8ba7ff; --accent-soft: #232c45; --ok: #5fcf9f; --warn: #e3ab5c; --bad: #f28b82; --hist: #b9a4f2;
-    --attr-l: 72%;
-    --k: #c792ea; --s: #8fd18f; --c: #7f8796; --d: #7fc4d4; --n: #f0a868; --p: #e3ab5c;
+  :root:not([data-theme]) {
+    --bg: #282828; --bg-soft: #32302f; --bg-code: #1d2021; --line: #504945; --text: #ebdbb2; --muted: #a89984;
+    --accent: #83a598; --accent-soft: #3c3836; --ok: #b8bb26; --warn: #fabd2f; --bad: #fb4934; --hist: #d3869b;
+    --attr-l: 72%; color-scheme: dark;
+    --k: #fb4934; --s: #b8bb26; --c: #928374; --d: #8ec07c; --n: #d3869b; --p: #fe8019;
   }
 }
 * { box-sizing: border-box; }

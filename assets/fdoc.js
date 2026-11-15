@@ -2,16 +2,26 @@
   var root = document.documentElement;
   var saved = null;
   try { saved = localStorage.getItem("fdoc-theme"); } catch (e) {}
-  if (saved) root.setAttribute("data-theme", saved);
+  // the button steps through these, starting from the saved theme or the system's light or dark;
+  // a system in dark mode starts on gruvbox-dark
+  var THEMES = ["light", "gruvbox-dark", "tokyo-night", "dark"];
+  if (saved && THEMES.indexOf(saved) >= 0) root.setAttribute("data-theme", saved);
+  function current() {
+    return root.getAttribute("data-theme")
+      || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "gruvbox-dark" : "light");
+  }
   document.addEventListener("DOMContentLoaded", function () {
     var button = document.querySelector(".theme");
-    if (button) button.addEventListener("click", function () {
-      var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark"
-        : window.matchMedia("(prefers-color-scheme: dark)").matches;
-      var next = dark ? "light" : "dark";
-      root.setAttribute("data-theme", next);
-      try { localStorage.setItem("fdoc-theme", next); } catch (e) {}
-    });
+    function label() { button.title = "Theme: " + current() + " (click to change)"; }
+    if (button) {
+      label();
+      button.addEventListener("click", function () {
+        var next = THEMES[(THEMES.indexOf(current()) + 1) % THEMES.length];
+        root.setAttribute("data-theme", next);
+        try { localStorage.setItem("fdoc-theme", next); } catch (e) {}
+        label();
+      });
+    }
     document.querySelectorAll(".codehilite").forEach(function (block) {
       if (!navigator.clipboard) return;
       var copy = document.createElement("button");
@@ -378,7 +388,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
   function dark() {
     var theme = document.documentElement.getAttribute("data-theme");
-    return theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return theme ? theme !== "light" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   }
 
   document.addEventListener("DOMContentLoaded", function () {
