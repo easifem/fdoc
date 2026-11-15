@@ -236,9 +236,12 @@
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
     // what the colours of `add_node` in fdoc_graphs.f90 mean: keep the two the same
-    var COLOURS = [["#3657c9", "Module"], ["#5a78de", "Submodule"], ["#a61e69", "Program"], ["#1d7a55", "Subroutine"],
-      ["#0b7285", "Function"], ["#6a4fb3", "Interface"], ["#a15c00", "Derived type"], ["#7a6a2d", "Type-bound procedure"],
-      ["#5c6f2d", "Source file"], ["#646d7e", "External, or other"], ["#8a93a5", "Not documented"]];
+    // the CSS gives each the colour of the theme, from the variable named third
+    var COLOURS = [["#3657c9", "Module", "module"], ["#5a78de", "Submodule", "submodule"],
+      ["#a61e69", "Program", "program"], ["#1d7a55", "Subroutine", "subroutine"], ["#0b7285", "Function", "function"],
+      ["#6a4fb3", "Interface", "interface"], ["#a15c00", "Derived type", "type"],
+      ["#7a6a2d", "Type-bound procedure", "binding"], ["#5c6f2d", "Source file", "file"],
+      ["#646d7e", "External, or other", "other"], ["#8a93a5", "Not documented", "undoc"]];
 
     // a button that shows what is in this drawing, under it, as a short drawing can't hold a popup
     function addKey(box, svg, zoom) {
@@ -259,11 +262,11 @@
         return mark;
       }
       COLOURS.forEach(function (c) {
-        if (svg.querySelector('rect[fill="' + c[0] + '"], path[fill="' + c[0] + '"]')) entry(swatch({ background: c[0] }), c[1]);
+        if (svg.querySelector('rect[fill="' + c[0] + '"], path[fill="' + c[0] + '"]')) entry(swatch({ background: "var(--kind-" + c[2] + ")" }), c[1]);
       });
-      if (svg.querySelector('rect[stroke="#f0a868"]')) entry(swatch({ border: "2px solid #f0a868" }), "This page");
+      if (svg.querySelector('rect[stroke="#f0a868"]')) entry(swatch({ border: "2px solid var(--kind-here)" }), "This page");
       if (svg.querySelector("path[stroke-dasharray]")) {
-        entry(swatch({ height: "0", borderRadius: "0", borderTop: "2px dashed #8a93a5" }), "Component of a type");
+        entry(swatch({ height: "0", borderRadius: "0", borderTop: "2px dashed var(--kind-undoc)" }), "Component of a type");
       }
       var button = document.createElement("button");
       button.textContent = "?";

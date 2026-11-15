@@ -36,6 +36,7 @@ integer, parameter, public :: REL_INHERITS = 3   !! types extended
 integer, parameter, public :: REL_FILES = 4      !! files depended on
 integer, parameter :: NUM_RELATIONS = 4
 
+! `fdoc.css` replaces each of these with the colour of the theme, by its value
 character(len=*), parameter :: EDGE_COLOURS(*) = [character(len=7) :: '#3657c9', '#1d7a55', '#a15c00', '#b3261e', &
                                                   '#6a4fb3', '#0b7285', '#a61e69', '#5c6f2d']
 
@@ -381,7 +382,8 @@ pure subroutine grow_edges(w)
     call move_alloc(grown, w%to)
 end subroutine grow_edges
 
-!> Add node `id` to a description. The key to the graphs in `fdoc.js` lists these colours.
+!> Add node `id` to a description. The key to the graphs in `fdoc.js` lists these colours, and `fdoc.css`
+!> replaces each with the colour of the theme, by its value: keep the three the same.
 subroutine add_node(p, id, root, g, place)
     type(project_t), intent(in) :: p    !! the project
     integer, intent(in) :: id           !! the entity
