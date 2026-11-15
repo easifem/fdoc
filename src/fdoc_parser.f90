@@ -1108,6 +1108,7 @@ subroutine close_interface(list, id)
             e%iface = kind_of_body
             e%parent = parent
             e%permission = list%box(id)%e%permission
+            call inherit_doc(e, list%box(id)%e)
             call push_int(list%box(parent)%e%children, child)
         end associate
     end do
@@ -1115,6 +1116,44 @@ subroutine close_interface(list, id)
     list%box(id)%e%kind = E_NONE
     list%box(id)%e%visible = .false.
 end subroutine close_interface
+
+!> Give a procedure of a dissolved interface the documentation written above the interface, as FORD
+!> does. The interface's doc comes before the procedure's own, and the procedure's own metadata
+!> wins where both set a key.
+subroutine inherit_doc(e, iface)
+    type(entity_t), intent(inout) :: e      !! the procedure
+    type(entity_t), intent(in) :: iface     !! the interface around it
+    type(string_t), allocatable :: doc(:)
+    type(meta_t), allocatable :: meta(:)
+    integer :: k, j
+    logical :: found
+
+    if (allocated(iface%doc)) then
+        if (size(iface%doc) > 0) then
+            if (allocated(e%doc)) then
+                doc = [iface%doc, e%doc]
+            else
+                doc = iface%doc
+            end if
+            call move_alloc(doc, e%doc)
+        end if
+    end if
+    if (.not. allocated(iface%meta)) return
+    if (size(iface%meta) == 0) return
+    if (.not. allocated(e%meta)) allocate (e%meta(0))
+    allocate (meta(0))
+    do k = 1, size(iface%meta)
+        found = .false.
+        do j = 1, size(e%meta)
+            if (e%meta(j)%key == iface%meta(k)%key) then
+                found = .true.
+                exit
+            end if
+        end do
+        if (.not. found) meta = [meta, iface%meta(k)]
+    end do
+    if (size(meta) > 0) e%meta = [meta, e%meta]
+end subroutine inherit_doc
 
 !> Remove `id` from the children of `e`.
 pure subroutine remove_child(e, id)
