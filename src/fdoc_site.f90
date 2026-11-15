@@ -420,7 +420,17 @@ subroutine page_head(site, title, here, prefix, math, b)
             call add(b, '<div class="search"><input type="search" placeholder="Search (/)" aria-label="Search">')
             call add(b, '<div class="results"></div></div>'//achar(10))
         end if
-        call add(b, '<button class="theme" title="Change theme" aria-label="Change theme">&#9680;</button>')
+        call add(b, '<select class="theme" title="Color scheme" aria-label="Color scheme">'// &
+                 '<optgroup label="Color scheme">'// &
+                 '<option value="">Auto</option>'// &
+                 '<option value="gruvbox-light">Gruvbox light</option>'// &
+                 '<option value="gruvbox-dark">Gruvbox dark</option>'// &
+                 '<option value="tokyo-night">Tokyo Night</option>'// &
+                 '<option value="catppuccin-mocha">Catppuccin Mocha</option>'// &
+                 '<option value="catppuccin-frappe">Catppuccin Frapp&eacute;</option>'// &
+                 '<option value="rose-pine">Ros&eacute; Pine</option>'// &
+                 '<option value="rose-pine-dawn">Ros&eacute; Pine Dawn</option>'// &
+                 '</optgroup></select>')
         call add(b, achar(10)//'</header>'//achar(10)//'<div class="layout">'//achar(10))
     end associate
 end subroutine page_head

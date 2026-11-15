@@ -2,24 +2,21 @@
   var root = document.documentElement;
   var saved = null;
   try { saved = localStorage.getItem("fdoc-theme"); } catch (e) {}
-  // the button steps through these, starting from the saved theme or the system's light or dark;
-  // a system in dark mode starts on gruvbox-dark
-  var THEMES = ["light", "gruvbox-dark", "tokyo-night", "dark"];
+  // the themes the selector offers; with none chosen (Auto) the CSS follows the system
+  var THEMES = ["gruvbox-light", "gruvbox-dark", "tokyo-night", "catppuccin-mocha", "catppuccin-frappe",
+    "rose-pine", "rose-pine-dawn"];
   if (saved && THEMES.indexOf(saved) >= 0) root.setAttribute("data-theme", saved);
-  function current() {
-    return root.getAttribute("data-theme")
-      || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "gruvbox-dark" : "light");
-  }
   document.addEventListener("DOMContentLoaded", function () {
-    var button = document.querySelector(".theme");
-    function label() { button.title = "Theme: " + current() + " (click to change)"; }
-    if (button) {
-      label();
-      button.addEventListener("click", function () {
-        var next = THEMES[(THEMES.indexOf(current()) + 1) % THEMES.length];
-        root.setAttribute("data-theme", next);
-        try { localStorage.setItem("fdoc-theme", next); } catch (e) {}
-        label();
+    var select = document.querySelector("select.theme");
+    if (select) {
+      select.value = root.getAttribute("data-theme") || "";
+      select.addEventListener("change", function () {
+        if (select.value) root.setAttribute("data-theme", select.value);
+        else root.removeAttribute("data-theme");
+        try {
+          if (select.value) localStorage.setItem("fdoc-theme", select.value);
+          else localStorage.removeItem("fdoc-theme");
+        } catch (e) {}
       });
     }
     document.querySelectorAll(".codehilite").forEach(function (block) {
@@ -388,7 +385,8 @@ window.addEventListener('DOMContentLoaded', function () {
 
   function dark() {
     var theme = document.documentElement.getAttribute("data-theme");
-    return theme ? theme !== "light" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (!theme) return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return ["gruvbox-light", "rose-pine-dawn"].indexOf(theme) < 0;
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -409,8 +407,8 @@ window.addEventListener('DOMContentLoaded', function () {
     tag.src = URL;
     tag.onload = function () {
       draw();
-      var button = document.querySelector(".theme");
-      if (button) button.addEventListener("click", draw);
+      var select = document.querySelector("select.theme");
+      if (select) select.addEventListener("change", draw);
     };
     document.head.appendChild(tag);
   });
