@@ -3,7 +3,7 @@
   var saved = null;
   try { saved = localStorage.getItem("fdoc-theme"); } catch (e) {}
   // the themes the selector offers; with none chosen (Auto) the CSS follows the system
-  var THEMES = ["gruvbox-light", "gruvbox-dark", "tokyo-night", "catppuccin-mocha", "catppuccin-frappe",
+  var THEMES = ["gruvbox-light", "gruvbox-dark", "tokyo-night", "catppuccin-mocha", "catppuccin-latte",
     "rose-pine", "rose-pine-dawn"];
   if (saved && THEMES.indexOf(saved) >= 0) root.setAttribute("data-theme", saved);
   document.addEventListener("DOMContentLoaded", function () {
@@ -644,7 +644,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function dark() {
     var theme = document.documentElement.getAttribute("data-theme");
     if (!theme) return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return ["gruvbox-light", "rose-pine-dawn"].indexOf(theme) < 0;
+    return ["gruvbox-light", "catppuccin-latte", "rose-pine-dawn"].indexOf(theme) < 0;
   }
 
   document.addEventListener("DOMContentLoaded", function () {

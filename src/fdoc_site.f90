@@ -429,7 +429,7 @@ subroutine page_head(site, title, here, prefix, math, b)
                  '<option value="gruvbox-dark">Gruvbox dark</option>'// &
                  '<option value="tokyo-night">Tokyo Night</option>'// &
                  '<option value="catppuccin-mocha">Catppuccin Mocha</option>'// &
-                 '<option value="catppuccin-frappe">Catppuccin Frapp&eacute;</option>'// &
+                 '<option value="catppuccin-latte">Catppuccin Latte</option>'// &
                  '<option value="rose-pine">Ros&eacute; Pine</option>'// &
                  '<option value="rose-pine-dawn">Ros&eacute; Pine Dawn</option>'// &
                  '</optgroup></select>')

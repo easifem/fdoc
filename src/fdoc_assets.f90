@@ -56,14 +56,14 @@ subroutine asset_fdoc_css(b)
         //'  --kind-function: #94e2d5; --kind-interface: #cba6f7; --kind-absint: #b4befe; --kind-type: #fab387;'//NL//' ' &
         //' --kind-binding: #f9e2af; --kind-file: #f5c2e7; --kind-blockdata: #eba0ac; --kind-other: #9399b2;'//NL//'  --' &
         //'kind-undoc: #7f849c; --kind-red: #f38ba8; --kind-here: #f9e2af; --kind-ink: #1e1e2e;'//NL//'}'//NL//':root[da' &
-        //'ta-theme="catppuccin-frappe"] {'//NL//'  --bg: #303446; --bg-soft: #292c3c; --bg-code: #292c3c; --line: #4145' &
-        //'59; --text: #c6d0f5; --muted: #a5adce;'//NL//'  --accent: #8caaee; --accent-soft: #414559; --ok: #a6d189; --w' &
-        //'arn: #e5c890; --bad: #e78284; --hist: #ca9ee6;'//NL//'  --attr-l: 72%; color-scheme: dark;'//NL//'  --k: #ca9' &
-        //'ee6; --s: #a6d189; --c: #737994; --d: #81c8be; --n: #ef9f76; --p: #e5c890;'//NL//'  --kind-module: #8caaee; -' &
-        //'-kind-submodule: #85c1dc; --kind-program: #e78284; --kind-subroutine: #a6d189;'//NL//'  --kind-function: #81c' &
-        //'8be; --kind-interface: #ca9ee6; --kind-absint: #babbf1; --kind-type: #ef9f76;'//NL//'  --kind-binding: #e5c89' &
-        //'0; --kind-file: #f4b8e4; --kind-blockdata: #ea999c; --kind-other: #949cbb;'//NL//'  --kind-undoc: #838ba7; --' &
-        //'kind-red: #e78284; --kind-here: #e5c890; --kind-ink: #303446;'//NL//'}'//NL//':root[data-theme="rose-pine"] {' &
+        //'ta-theme="catppuccin-latte"] {'//NL//'  --bg: #eff1f5; --bg-soft: #e6e9ef; --bg-code: #e6e9ef; --line: #ccd0d' &
+        //'a; --text: #4c4f69; --muted: #6c6f85;'//NL//'  --accent: #1e66f5; --accent-soft: #dce0e8; --ok: #40a02b; --wa' &
+        //'rn: #df8e1d; --bad: #d20f39; --hist: #8839ef;'//NL//'  --attr-l: 34%; color-scheme: light;'//NL//'  --k: #883' &
+        //'9ef; --s: #40a02b; --c: #8c8fa1; --d: #179299; --n: #fe640b; --p: #df8e1d;'//NL//'  --kind-module: #1e66f5; -' &
+        //'-kind-submodule: #209fb5; --kind-program: #d20f39; --kind-subroutine: #40a02b;'//NL//'  --kind-function: #179' &
+        //'299; --kind-interface: #8839ef; --kind-absint: #7287fd; --kind-type: #fe640b;'//NL//'  --kind-binding: #b8730' &
+        //'f; --kind-file: #6c6f85; --kind-blockdata: #e64553; --kind-other: #7c7f93;'//NL//'  --kind-undoc: #9ca0b0; --' &
+        //'kind-red: #d20f39; --kind-here: #df8e1d; --kind-ink: #eff1f5;'//NL//'}'//NL//':root[data-theme="rose-pine"] {' &
         //NL//'  --bg: #191724; --bg-soft: #1f1d2e; --bg-code: #1f1d2e; --line: #403d52; --text: #e0def4; --muted: #908c' &
         //'aa;'//NL//'  --accent: #c4a7e7; --accent-soft: #26233a; --ok: #9ccfd8; --warn: #f6c177; --bad: #eb6f92; --his' &
         //'t: #ebbcba;'//NL//'  --attr-l: 72%; color-scheme: dark;'//NL//'  --k: #c4a7e7; --s: #f6c177; --c: #6e6a86; --' &
@@ -362,13 +362,13 @@ subroutine asset_fdoc_js(b)
         '(function () {'//NL//'  var root = document.documentElement;'//NL//'  var saved = null;'//NL//'  try { saved ' &
         //'= localStorage.getItem("fdoc-theme"); } catch (e) {}'//NL//'  // the themes the selector offers; with none ch' &
         //'osen (Auto) the CSS follows the system'//NL//'  var THEMES = ["gruvbox-light", "gruvbox-dark", "tokyo-night",' &
-        //' "catppuccin-mocha", "catppuccin-frappe",'//NL//'    "rose-pine", "rose-pine-dawn"];'//NL//'  if (saved && TH' &
-        //'EMES.indexOf(saved) >= 0) root.setAttribute("data-theme", saved);'//NL//'  document.addEventListener("DOMCont' &
-        //'entLoaded", function () {'//NL//'    var select = document.querySelector("select.theme");'//NL//'    if (sele' &
-        //'ct) {'//NL//'      select.value = root.getAttribute("data-theme") || "";'//NL//'      select.addEventListener' &
-        //'("change", function () {'//NL//'        if (select.value) root.setAttribute("data-theme", select.value);'//NL &
-        //'        else root.removeAttribute("data-theme");'//NL//'        try {'//NL//'          if (select.value) loca' &
-        //'lStorage.setItem("fdoc-theme", select.value);'//NL//'          else localStorage.removeItem("fdoc-theme");'//NL &
+        //' "catppuccin-mocha", "catppuccin-latte",'//NL//'    "rose-pine", "rose-pine-dawn"];'//NL//'  if (saved && THE' &
+        //'MES.indexOf(saved) >= 0) root.setAttribute("data-theme", saved);'//NL//'  document.addEventListener("DOMConte' &
+        //'ntLoaded", function () {'//NL//'    var select = document.querySelector("select.theme");'//NL//'    if (selec' &
+        //'t) {'//NL//'      select.value = root.getAttribute("data-theme") || "";'//NL//'      select.addEventListener(' &
+        //'"change", function () {'//NL//'        if (select.value) root.setAttribute("data-theme", select.value);'//NL//' ' &
+        //'       else root.removeAttribute("data-theme");'//NL//'        try {'//NL//'          if (select.value) local' &
+        //'Storage.setItem("fdoc-theme", select.value);'//NL//'          else localStorage.removeItem("fdoc-theme");'//NL &
         //'        } catch (e) {}'//NL//'      });'//NL//'    }'//NL//'    document.querySelectorAll(".codehilite").forE' &
         //'ach(function (block) {'//NL//'      if (!navigator.clipboard) return;'//NL//'      var copy = document.create' &
         //'Element("button");'//NL//'      copy.className = "copy";'//NL//'      copy.textContent = "Copy";'//NL//'     ' &
@@ -643,22 +643,22 @@ subroutine asset_fdoc_js(b)
         //'and Mermaid is only loaded for pages that have one'//NL//'(function () {'//NL//'  var URL = "https://cdn.jsde' &
         //'livr.net/npm/mermaid@11/dist/mermaid.min.js";'//NL//NL//'  function dark() {'//NL//'    var theme = document.' &
         //'documentElement.getAttribute("data-theme");'//NL//'    if (!theme) return window.matchMedia("(prefers-color-s' &
-        //'cheme: dark)").matches;'//NL//'    return ["gruvbox-light", "rose-pine-dawn"].indexOf(theme) < 0;'//NL//'  }'//NL &
-        //NL//'  document.addEventListener("DOMContentLoaded", function () {'//NL//'    var blocks = document.querySelec' &
-        //'torAll("pre.mermaid");'//NL//'    if (!blocks.length) return;'//NL//'    blocks.forEach(function (block) { bl' &
-        //'ock.dataset.source = block.textContent; });'//NL//NL//'    function draw() {'//NL//'      blocks.forEach(func' &
-        //'tion (block) {'//NL//'        block.textContent = block.dataset.source;'//NL//'        block.removeAttribute(' &
-        //'"data-processed");'//NL//'      });'//NL//'      window.mermaid.initialize({ startOnLoad: false, theme: dark(' &
-        //') ? "dark" : "default" });'//NL//'      window.mermaid.run({ nodes: blocks });'//NL//'    }'//NL//NL//'    va' &
-        //'r tag = document.createElement("script");'//NL//'    tag.src = URL;'//NL//'    tag.onload = function () {'//NL &
-        //'      draw();'//NL//'      var select = document.querySelector("select.theme");'//NL//'      if (select) sele' &
-        //'ct.addEventListener("change", draw);'//NL//'    };'//NL//'    document.head.appendChild(tag);'//NL//'  });'//NL &
-        //'})();'//NL//NL//'// each heading with an id, and each entry of a list, gets a link to itself'//NL//'document.' &
-        //'addEventListener("DOMContentLoaded", function () {'//NL//'  document.querySelectorAll("main h2[id], main h3[i' &
-        //'d], main .item[id] > h3").forEach(function (heading) {'//NL//'    var id = heading.id || heading.parentElemen' &
-        //'t.id;'//NL//'    var link = document.createElement("a");'//NL//'    link.className = "anchor";'//NL//'    lin' &
-        //'k.href = "#" + id;'//NL//'    link.textContent = "#";'//NL//'    link.setAttribute("aria-label", "Link to thi' &
-        //'s section");'//NL//'    heading.appendChild(link);'//NL//'  });'//NL//'});'//NL)
+        //'cheme: dark)").matches;'//NL//'    return ["gruvbox-light", "catppuccin-latte", "rose-pine-dawn"].indexOf(the' &
+        //'me) < 0;'//NL//'  }'//NL//NL//'  document.addEventListener("DOMContentLoaded", function () {'//NL//'    var b' &
+        //'locks = document.querySelectorAll("pre.mermaid");'//NL//'    if (!blocks.length) return;'//NL//'    blocks.fo' &
+        //'rEach(function (block) { block.dataset.source = block.textContent; });'//NL//NL//'    function draw() {'//NL//' ' &
+        //'     blocks.forEach(function (block) {'//NL//'        block.textContent = block.dataset.source;'//NL//'      ' &
+        //'  block.removeAttribute("data-processed");'//NL//'      });'//NL//'      window.mermaid.initialize({ startOnL' &
+        //'oad: false, theme: dark() ? "dark" : "default" });'//NL//'      window.mermaid.run({ nodes: blocks });'//NL//' ' &
+        //'   }'//NL//NL//'    var tag = document.createElement("script");'//NL//'    tag.src = URL;'//NL//'    tag.onlo' &
+        //'ad = function () {'//NL//'      draw();'//NL//'      var select = document.querySelector("select.theme");'//NL &
+        //'      if (select) select.addEventListener("change", draw);'//NL//'    };'//NL//'    document.head.appendChild' &
+        //'(tag);'//NL//'  });'//NL//'})();'//NL//NL//'// each heading with an id, and each entry of a list, gets a link' &
+        //' to itself'//NL//'document.addEventListener("DOMContentLoaded", function () {'//NL//'  document.querySelector' &
+        //'All("main h2[id], main h3[id], main .item[id] > h3").forEach(function (heading) {'//NL//'    var id = heading' &
+        //'.id || heading.parentElement.id;'//NL//'    var link = document.createElement("a");'//NL//'    link.className' &
+        //' = "anchor";'//NL//'    link.href = "#" + id;'//NL//'    link.textContent = "#";'//NL//'    link.setAttribute' &
+        //'("aria-label", "Link to this section");'//NL//'    heading.appendChild(link);'//NL//'  });'//NL//'});'//NL)
 end subroutine asset_fdoc_js
 
 end module fdoc_assets

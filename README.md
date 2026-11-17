@@ -6,7 +6,7 @@ fdoc reads the same project files and doc comments as [FORD](https://github.com/
 
 * **Fast.** Documentation for a 25,000-line project takes seconds, graphs included, where FORD takes minutes. See the [benchmarks](#benchmarks).
 * **Compatible.** It reads FORD project files, doc comments, Markdown and `modules.json`, and generates the same page URLs, apart from a few [listed below](#differences-from-ford), so existing links keep working.
-* **Clean output.** Seven colour themes (Gruvbox light and dark, Tokyo Night, Catppuccin Mocha and Frappé, Rosé Pine and Rosé Pine Dawn) picked from a menu, with Gruvbox following the system by default, a layout that works on a phone, and instant search with typo tolerance. The site needs no framework, and its CSS and JavaScript are built into the program.
+* **Clean output.** Seven colour themes (Gruvbox light and dark, Tokyo Night, Catppuccin Mocha and Latte, Rosé Pine and Rosé Pine Dawn) picked from a menu, with Gruvbox following the system by default, a layout that works on a phone, and instant search with typo tolerance. The site needs no framework, and its CSS and JavaScript are built into the program.
 * **Small output.** Sites take about a third of the space of FORD's.
 * **Markdown too.** The same documentation can be written as plain Markdown files in place of a site. See [Markdown output](#markdown-output).
 
