@@ -26,8 +26,21 @@ subroutine collect_site(testsuite)
                  new_unittest("external project", test_external), &
                  new_unittest("where a type is used", test_type_uses), &
                  new_unittest("index and tree of types", test_index_tree), &
-                 new_unittest("command line before the checks", test_late_options)]
+                 new_unittest("command line before the checks", test_late_options), &
+                 new_unittest("Markdown output", test_markdown_output), &
+                 new_unittest("Markdown formatter", test_markdown_formatter), &
+                 new_unittest("module used twice", test_used_twice)]
 end subroutine collect_site
+
+!> Run fdoc with `args`, while no other test does. The tests of a suite run in parallel, but a program
+!> only runs fdoc once, so what `run` does before its own threads start is not safe to do at the same time.
+integer function run_alone(args) result(status)
+    type(string_t), intent(in) :: args(:)   !! the arguments, in order
+
+    !$omp critical (fdoc_run)
+    status = run(args)
+    !$omp end critical (fdoc_run)
+end function run_alone
 
 !> Write a project with the setting `logo: small.svg` in `root`, and run fdoc on it.
 subroutine make_site(root, error)
@@ -46,6 +59,158 @@ subroutine make_site(root, error)
     call check(error, stat, 0, 'the source')
 end subroutine make_site
 
+!> Checks: Markdown output writes a page for a module, with links to Markdown files and no HTML.
+subroutine test_markdown_output(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site markdown'
+    type(string_t) :: args(6)
+    character(len=:), allocatable :: text, errmsg
+    logical :: exists
+    integer :: first, stat
+
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: md'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          'md_extensions: markdown.extensions.toc'//NL//NL//'See [[m]].'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the project file')
+    if (allocated(error)) return
+    call write_whole_file(ROOT//'/src/a.f90', 'module g'//NL//'integer :: i, j'//NL//'end module g'//NL// &
+                          'module m'//NL// &
+                          '!! Uses \(x\) and [[f]].'//NL//'!!'//NL// &
+                          '!! ## `a_b` - c'//NL//'!!'//NL//'!! ### Given {#mine}'//NL//'!!'//NL// &
+                          '!! A [link](other.html#'//NL//'!! part) here.'//NL// &
+                          'use g, only: i'//NL//'use G, only: j'//NL//'use iso_c_binding'//NL//'contains'//NL// &
+                          'function f(a)'//NL//'integer :: a, f !! the a|b'//NL//'end function f'//NL// &
+                          'end module m'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the source')
+    if (allocated(error)) return
+    args(1)%s = '-q'
+    args(2)%s = '--output_format'
+    args(3)%s = 'markdown'
+    args(4)%s = '--markdown_formatter'
+    args(5)%s = ''
+    args(6)%s = ROOT//'/ford.md'
+    call check(error, run_alone(args), 0, 'the run')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/index.md', text, stat, errmsg)
+    call check(error, stat, 0, 'the front page')
+    if (allocated(error)) return
+    call check(error, index(text, '[`m`](module/m.md)') > 0, 'a link on the front page')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/module/m.md', text, stat, errmsg)
+    call check(error, stat, 0, 'the page of the module')
+    if (allocated(error)) return
+    first = index(text, '- [`g`](../module/g.md)')
+    call check(error, first > 0, 'a used module')
+    if (allocated(error)) return
+    call check(error, index(text(first + 1:), '- [`g`]') == 0, 'a module used twice is listed once')
+    if (allocated(error)) return
+    call check(error, index(text, '`iso_c_binding`') > 0, 'the next used module')
+    if (allocated(error)) return
+    call check(error, index(text, 'Uses $x$ and [`f`](../proc/f.md).') > 0, 'math and a link in documentation')
+    if (allocated(error)) return
+    call check(error, index(text, '## <a id="a_b-c"></a>`a_b` - c') > 0, 'the id of a heading')
+    if (allocated(error)) return
+    call check(error, index(text, '### <a id="mine"></a>Given'//NL) > 0, 'an id given to a heading')
+    if (allocated(error)) return
+    call check(error, index(text, '[link](other.md#part)') > 0, 'a link over two lines')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/proc/f.md', text, stat, errmsg)
+    call check(error, stat, 0, 'the page of the procedure')
+    if (allocated(error)) return
+    call check(error, index(text, 'the a\|b') > 0, 'a bar in a table')
+    if (allocated(error)) return
+    inquire (file=ROOT//'/doc/index.html', exist=exists)
+    call check(error, .not. exists, 'no HTML')
+end subroutine test_markdown_output
+
+!> Checks: the formatter runs on the output directory before the project's files are copied, and one that
+!> fails leaves the pages as they were written.
+subroutine test_markdown_formatter(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site formatter'
+    character(len=*), parameter :: MARK = "sh -c 'test ! -e ""$0/media/a.md"" && echo done > ""$0/formatted""'"
+    type(string_t) :: args(6)
+    character(len=:), allocatable :: errmsg
+    character(len=16) :: system
+    logical :: exists
+    integer :: stat
+
+    call get_environment_variable('OS', system)
+    if (system == 'Windows_NT') return
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call make_directory(ROOT//'/media', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: md'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          'media_dir: ./media'//NL//NL//'The project.'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the project file')
+    if (allocated(error)) return
+    call write_whole_file(ROOT//'/media/a.md', '# a'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the media file')
+    if (allocated(error)) return
+    call write_whole_file(ROOT//'/src/a.f90', 'module m'//NL//'end module m'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the source')
+    if (allocated(error)) return
+    args(1)%s = '-q'
+    args(2)%s = '--output_format'
+    args(3)%s = 'markdown'
+    args(4)%s = '--markdown_formatter'
+    args(5)%s = MARK
+    args(6)%s = ROOT//'/ford.md'
+    call check(error, run_alone(args), 0, 'the run')
+    if (allocated(error)) return
+    inquire (file=ROOT//'/doc/formatted', exist=exists)
+    call check(error, exists, 'the formatter ran on the output, before the media were copied')
+    if (allocated(error)) return
+    inquire (file=ROOT//'/doc/media/a.md', exist=exists)
+    call check(error, exists, 'the media were copied')
+    if (allocated(error)) return
+
+    args(5)%s = 'exit 3 ;'
+    call check(error, run_alone(args), 0, 'the run with a formatter that fails')
+    if (allocated(error)) return
+    inquire (file=ROOT//'/doc/module/m.md', exist=exists)
+    call check(error, exists, 'the pages are kept')
+end subroutine test_markdown_formatter
+
+!> Checks: the page of a module lists a module it uses once, however many statements name it.
+subroutine test_used_twice(error)
+    type(error_type), allocatable, intent(out) :: error     !! the failure, if any
+    character(len=*), parameter :: ROOT = 'build/test site used twice'
+    type(string_t) :: args(2)
+    character(len=:), allocatable :: text, errmsg
+    integer :: stat, start, finish, first
+
+    call remove_directory(ROOT)
+    call make_directory(ROOT//'/src', stat)
+    call write_whole_file(ROOT//'/ford.md', 'project: twice'//NL//'src_dir: ./src'//NL//'output_dir: ./doc'//NL// &
+                          NL//'The project.'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the project file')
+    if (allocated(error)) return
+    call write_whole_file(ROOT//'/src/a.f90', 'module g'//NL//'integer :: i, j'//NL//'end module g'//NL// &
+                          'module m'//NL//'use g, only: i'//NL//'use G, only: j'//NL//'use iso_c_binding'//NL// &
+                          'end module m'//NL, stat, errmsg)
+    call check(error, stat, 0, 'the source')
+    if (allocated(error)) return
+    args(1)%s = '-q'
+    args(2)%s = ROOT//'/ford.md'
+    call check(error, run_alone(args), 0, 'the run')
+    if (allocated(error)) return
+    call read_whole_file(ROOT//'/doc/module/m.html', text, stat, errmsg)
+    call check(error, stat, 0, 'the page of the module')
+    if (allocated(error)) return
+    start = index(text, '<h2 id="uses">')
+    call check(error, start > 0, 'the list of used modules')
+    if (allocated(error)) return
+    finish = start + index(text(start:), '</ul>') - 1
+    first = start + index(text(start:finish), 'module/g.html') - 1
+    call check(error, first >= start, 'a used module')
+    if (allocated(error)) return
+    call check(error, index(text(first + 1:finish), 'module/g.html') == 0, 'a module used twice is listed once')
+    if (allocated(error)) return
+    call check(error, index(text(start:finish), 'iso_c_binding') > 0, 'the next used module')
+end subroutine test_used_twice
+
 !> Run fdoc on the project in `root`.
 subroutine run_site(root, error)
     character(len=*), intent(in) :: root                    !! the directory
@@ -54,7 +219,7 @@ subroutine run_site(root, error)
 
     args(1)%s = '-q'
     args(2)%s = root//'/ford.md'
-    call check(error, run(args), 0, 'the run')
+    call check(error, run_alone(args), 0, 'the run')
 end subroutine run_site
 
 !> Checks: the logo goes in the site, and on the main page.
@@ -168,7 +333,7 @@ subroutine test_external(error)
     if (allocated(error)) return
     args(1)%s = '-q'
     args(2)%s = ROOT//'/ford.md'
-    call check(error, run(args), 0, 'the run')
+    call check(error, run_alone(args), 0, 'the run')
     if (allocated(error)) return
     call read_whole_file(ROOT//'/doc/module/m.html', text, stat, errmsg)
     call check(error, stat, 0, 'the page of the module')
@@ -208,7 +373,7 @@ subroutine test_type_uses(error)
     if (allocated(error)) return
     args(1)%s = '-q'
     args(2)%s = ROOT//'/ford.md'
-    call check(error, run(args), 0, 'the run')
+    call check(error, run_alone(args), 0, 'the run')
     if (allocated(error)) return
     call read_whole_file(ROOT//'/doc/type/thing.html', text, stat, errmsg)
     call check(error, stat, 0, 'the page of the type')
@@ -255,7 +420,7 @@ subroutine test_index_tree(error)
                           'subroutine apply()'//NL//'end subroutine apply'//NL//'end module zeta'//NL, stat, errmsg)
     args(1)%s = '-q'
     args(2)%s = ROOT//'/ford.md'
-    call check(error, run(args), 0, 'the run')
+    call check(error, run_alone(args), 0, 'the run')
     if (allocated(error)) return
 
     call read_whole_file(ROOT//'/doc/lists/names.html', text, stat, errmsg)
@@ -305,7 +470,7 @@ subroutine test_late_options(error)
     args(2)%s = '--config'
     args(3)%s = 'fpp_extensions = ["fypp", "F90"]'
     args(4)%s = ROOT//'/ford.md'
-    call check(error, run(args), 0, 'the run')
+    call check(error, run_alone(args), 0, 'the run')
     if (allocated(error)) return
     inquire (file=ROOT//'/doc/module/upper.html', exist=found)
     call check(error, found, 'the file of an extension from the command line is read')

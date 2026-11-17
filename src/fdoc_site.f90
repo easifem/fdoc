@@ -22,22 +22,25 @@ implicit none
 private
 
 public :: assign_pages, write_site
+! what the Markdown output shares with the HTML site
+public :: site_t, prepare_site, copy_project_files, page_directories, children_of, has_page, display_name, entity_word
+public :: wants_source, logo_name, repeats_module
 
-integer, parameter :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIST_ABSINT = 4, LIST_TYPES = 5
-integer, parameter :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
-integer, parameter :: NUM_LISTS = 8
+integer, parameter, public :: LIST_FILES = 1, LIST_MODULES = 2, LIST_PROCEDURES = 3, LIST_ABSINT = 4, LIST_TYPES = 5
+integer, parameter, public :: LIST_PROGRAMS = 6, LIST_BLOCKDATA = 7, LIST_NAMELISTS = 8
+integer, parameter, public :: NUM_LISTS = 8
 
 integer, parameter :: HERE_PAGES = -1   !! for `page_head`: a static page, not of a list
 integer, parameter :: HERE_INDEX = -2   !! for `page_head`: the index of all names
 integer, parameter :: MAX_NESTING = 16  !! how many levels of containers a page shows
 
-character(len=*), parameter :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
+character(len=*), parameter, public :: LIST_FILE(NUM_LISTS) = [character(len=10) :: 'files', 'modules', 'procedures', 'absint', &
                                                        'types', 'programs', 'blockdata', 'namelists']
-character(len=*), parameter :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'Source Files', 'Modules', 'Procedures', &
+character(len=*), parameter, public :: LIST_TITLE(NUM_LISTS) = [character(len=19) :: 'Source Files', 'Modules', 'Procedures', &
                                                         'Abstract Interfaces', 'Derived Types', 'Programs', 'Block Data', &
                                                         'Namelists']
 
-character(len=*), parameter :: LIST_NOUN(NUM_LISTS) = [character(len=18) :: 'File', 'Module', 'Procedure', &
+character(len=*), parameter, public :: LIST_NOUN(NUM_LISTS) = [character(len=18) :: 'File', 'Module', 'Procedure', &
                                                        'Abstract Interface', 'Type', 'Program', 'Block Data Unit', &
                                                        'Namelist']
 
@@ -391,6 +394,8 @@ subroutine page_head(site, title, here, prefix, math, b)
             call add(b, '</script>'//achar(10))
         end if
         call add(b, '</head>'//achar(10)//'<body>'//achar(10)//'<header class="top">'//achar(10))
+        call add(b, '<button class="side-toggle" title="Show or hide the sidebar" aria-label="Show or hide the sidebar">'// &
+                 '&#9776;</button>'//achar(10))
         call add(b, '<a class="brand" href="'//prefix//'index.html">')
         call html_escape(s%project, b, .false.)
         if (allocated(s%version)) then
@@ -417,7 +422,17 @@ subroutine page_head(site, title, here, prefix, math, b)
             call add(b, '<div class="search"><input type="search" placeholder="Search (/)" aria-label="Search">')
             call add(b, '<div class="results"></div></div>'//achar(10))
         end if
-        call add(b, '<button class="theme" title="Change theme" aria-label="Change theme">&#9680;</button>')
+        call add(b, '<select class="theme" title="Color scheme" aria-label="Color scheme">'// &
+                 '<optgroup label="Color scheme">'// &
+                 '<option value="">Auto</option>'// &
+                 '<option value="gruvbox-light">Gruvbox light</option>'// &
+                 '<option value="gruvbox-dark">Gruvbox dark</option>'// &
+                 '<option value="tokyo-night">Tokyo Night</option>'// &
+                 '<option value="catppuccin-mocha">Catppuccin Mocha</option>'// &
+                 '<option value="catppuccin-latte">Catppuccin Latte</option>'// &
+                 '<option value="rose-pine">Ros&eacute; Pine</option>'// &
+                 '<option value="rose-pine-dawn">Ros&eacute; Pine Dawn</option>'// &
+                 '</optgroup></select>')
         call add(b, achar(10)//'</header>'//achar(10)//'<div class="layout">'//achar(10))
     end associate
 end subroutine page_head
@@ -1313,7 +1328,20 @@ subroutine summary_item(site, id, b)
     end associate
 end subroutine summary_item
 
-!> Write the `use` statements of a unit.
+!> True if a statement before number `k` of `uses` names the same module.
+logical function repeats_module(uses, k)
+    type(use_t), intent(in) :: uses(:)      !! the `use` statements
+    integer, intent(in) :: k                !! which one
+    integer :: j
+
+    repeats_module = .false.
+    do j = 1, k - 1
+        repeats_module = uses(j)%module == uses(k)%module
+        if (repeats_module) return
+    end do
+end function repeats_module
+
+!> Write the modules a unit uses, each once, however many `use` statements name it.
 subroutine uses_section(site, id, heading, b)
     type(site_t), intent(in) :: site        !! the site
     integer, intent(in) :: id               !! the unit
@@ -1327,6 +1355,7 @@ subroutine uses_section(site, id, heading, b)
         if (heading) call add(b, '<h2 id="uses">Uses</h2>'//achar(10))
         call add(b, '<ul class="chips">')
         do k = 1, size(e%more%uses)
+            if (repeats_module(e%more%uses, k)) cycle
             call add(b, '<li>')
             call link_to(site, e%more%uses(k)%target, e%more%uses(k)%module, b)
             call add(b, '</li>')
@@ -1553,6 +1582,28 @@ pure integer function line_has(line, keyword, name)
     end if
 end function line_has
 
+!> What entity `e` is, as the title of its page says.
+subroutine entity_word(e, word)
+    type(entity_t), intent(in) :: e                     !! the entity
+    character(len=:), allocatable, intent(out) :: word  !! what it is
+
+    select case (e%kind)
+    case (E_MODULE); word = 'module'
+    case (E_SUBMODULE); word = 'submodule'
+    case (E_PROGRAM); word = 'program'
+    case (E_BLOCKDATA); word = 'block data'
+    case (E_SUBROUTINE); word = 'subroutine'
+    case (E_FUNCTION); word = 'function'
+    case (E_MODPROC); word = 'module procedure'
+    case (E_INTERFACE); word = 'interface'
+    case (E_TYPE); word = 'type'
+    case (E_NAMELIST); word = 'namelist'
+    case default; word = 'file'
+    end select
+    if (e%iface == IFACE_EXPLICIT) word = 'interface'
+    if (e%iface == IFACE_ABSTRACT) word = 'abstract interface'
+end subroutine entity_word
+
 !> Render the page of entity `id`.
 subroutine entity_page(site, id, html)
     type(site_t), intent(in) :: site                    !! the site
@@ -1579,21 +1630,7 @@ subroutine entity_page(site, id, html)
 
     associate (e => site%p%list%box(id)%e)
         here = list_of(site, id)
-        select case (e%kind)
-        case (E_MODULE); word = 'module'
-        case (E_SUBMODULE); word = 'submodule'
-        case (E_PROGRAM); word = 'program'
-        case (E_BLOCKDATA); word = 'block data'
-        case (E_SUBROUTINE); word = 'subroutine'
-        case (E_FUNCTION); word = 'function'
-        case (E_MODPROC); word = 'module procedure'
-        case (E_INTERFACE); word = 'interface'
-        case (E_TYPE); word = 'type'
-        case (E_NAMELIST); word = 'namelist'
-        case default; word = 'file'
-        end select
-        if (e%iface == IFACE_EXPLICIT) word = 'interface'
-        if (e%iface == IFACE_ABSTRACT) word = 'abstract interface'
+        call entity_word(e, word)
 
         if (e%kind == E_TYPE) then
             call side_group(site, 'Components', variables, side)
@@ -1607,7 +1644,6 @@ subroutine entity_page(site, id, html)
         call side_group(site, 'Subroutines', subroutines, side)
         call side_group(site, 'Module procedures', implementations, side)
         call side_group(site, 'Bindings', bindings, side)
-        call page_outline(site, id, side)
         call take(side, text)
 
         call page_head(site, display_name(e), here, '../', uses_math(site, id), b)
@@ -2057,30 +2093,6 @@ subroutine page_source(site, id, b)
     end associate
 end subroutine page_source
 
-!> Write the sections of a procedure page, for the sidebar.
-subroutine page_outline(site, id, b)
-    type(site_t), intent(in) :: site        !! the site
-    integer, intent(in) :: id               !! the entity
-    type(buffer_t), intent(inout) :: b      !! the HTML
-
-    associate (e => site%p%list%box(id)%e)
-        if (.not. is_procedure(e%kind) .and. e%kind /= E_MODPROC) return
-        call add(b, '<h4>On this page</h4><ul>')
-        if (allocated(e%more%arg_ids)) then
-            if (size(e%more%arg_ids) > 0) call add(b, '<li><a href="#arguments">Arguments</a></li>')
-        end if
-        if (e%result > 0) call add(b, '<li><a href="#result">Result</a></li>')
-        if (allocated(e%more%uses)) then
-            if (size(e%more%uses) > 0) call add(b, '<li><a href="#uses">Uses</a></li>')
-        end if
-        if (allocated(e%call_ids)) then
-            if (size(e%call_ids) > 0) call add(b, '<li><a href="#calls">Calls</a></li>')
-        end if
-        if (e%source_first > 0) call add(b, '<li><a href="#source">Source</a></li>')
-        call add(b, '</ul>'//achar(10))
-    end associate
-end subroutine page_outline
-
 !> Write the links to the list pages, for the sidebar. The list of the page is empty here, as it could
 !> be far too long to go in each page: `fdoc.js` fills it from `sidebar.js`. Pages outside the lists, which
 !> have no place in one, show the start of each list.
@@ -2139,7 +2151,14 @@ subroutine sidebar_script(site, text)
                 call entity_url(site%p%list, id, url)
                 call add(entry, '<li><a href="@')
                 call html_escape(url, entry, .true.)
-                call add(entry, '">')
+                call add(entry, '"')
+                if (k /= LIST_FILES .and. k /= LIST_MODULES) then
+                    ! the unit holding the entry, for fdoc.js to group the list by
+                    call add(entry, ' data-m="')
+                    call html_escape(host_name(site, id), entry, .true.)
+                    call add(entry, '"')
+                end if
+                call add(entry, '>')
                 call side_icon(site%p%list%box(id)%e, entry)
                 call html_escape(display_name(site%p%list%box(id)%e), entry, .false.)
                 call add(entry, '</a></li>')
@@ -2152,6 +2171,30 @@ subroutine sidebar_script(site, text)
     call add(b, '};'//achar(10))
     call take(b, text)
 end subroutine sidebar_script
+
+!> The name of the module, submodule, program or block data holding entity `id`, or of its file if
+!> none does.
+function host_name(site, id) result(name)
+    type(site_t), intent(in) :: site        !! the site
+    integer, intent(in) :: id               !! the entity
+    character(len=:), allocatable :: name
+    integer :: up, n
+
+    name = ''
+    up = site%p%list%box(id)%e%parent
+    n = 0
+    do while (up > 0 .and. n < MAX_NESTING)
+        n = n + 1
+        associate (e => site%p%list%box(up)%e)
+            select case (e%kind)
+            case (E_MODULE, E_SUBMODULE, E_PROGRAM, E_BLOCKDATA, E_FILE)
+                name = display_name(e)
+                return
+            end select
+            up = e%parent
+        end associate
+    end do
+end function host_name
 
 !> Append `text` for use in a JavaScript string in single quotes.
 subroutine add_js_text(text, b)
@@ -2693,6 +2736,46 @@ subroutine write_entity_page(site, id, directory, stat)
     call write_whole_file(directory//'/'//url, html, stat, errmsg)
 end subroutine write_entity_page
 
+!> Work out what pages need from the project, whatever form they are written in.
+subroutine prepare_site(site, p, s, pages_in)
+    type(site_t), intent(out) :: site                   !! the site
+    type(project_t), intent(inout), target :: p         !! the project
+    type(settings_t), intent(in), target :: s           !! the settings
+    type(page_t), intent(in), target :: pages_in(:)     !! the static pages
+
+    site%p => p
+    site%s => s
+    site%pages => pages_in
+    call collect_lists(site)
+    call make_footer(s, site%footer)
+    call locate_sources(site)
+    call measure_files(site)
+    call find_type_uses(site)
+end subroutine prepare_site
+
+!> Copy the files of the project that pages refer to.
+subroutine copy_project_files(s, directory, pages)
+    type(settings_t), intent(in) :: s           !! the settings
+    character(len=*), intent(in) :: directory   !! the output directory
+    type(page_t), intent(in) :: pages(:)        !! the static pages
+    character(len=:), allocatable :: name
+    integer :: status
+
+    call copy_page_files(s, directory, pages)
+    call logo_name(s, name)
+    if (len(name) > 0) then
+        call copy_file(s%logo, directory//'/'//name, status)
+    else if (allocated(s%logo)) then
+        call warn('the logo '//s%logo//' was not found, so the main page has none')
+    end if
+    if (allocated(s%media_dir)) then
+        if (is_directory(s%media_dir)) then
+            call remove_directory(directory//'/media')
+            call copy_path(s%media_dir, directory//'/media', status)
+        end if
+    end if
+end subroutine copy_project_files
+
 !> Write the whole site.
 subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     type(project_t), intent(inout), target :: p         !! the project
@@ -2709,14 +2792,7 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
     type(buffer_t) :: b
     integer :: k, n, extra
 
-    site%p => p
-    site%s => s
-    site%pages => pages_in
-    call collect_lists(site)
-    call make_footer(s, site%footer)
-    call locate_sources(site)
-    call measure_files(site)
-    call find_type_uses(site)
+    call prepare_site(site, p, s, pages_in)
 
     allocate (ids(0))
     do k = 1, p%list%n
@@ -2790,21 +2866,9 @@ subroutine write_site(p, s, front, pages_in, count, stat, errmsg)
         call write_whole_file(directory//'/search/index.js', url, stat, errmsg)
         if (stat /= 0) return
     end if
-    call copy_page_files(s, directory, pages_in)
+    call copy_project_files(s, directory, pages_in)
     if (allocated(s%css)) call copy_file(s%css, directory//'/css/user.css', k)
     if (allocated(s%favicon)) call copy_file(s%favicon, directory//'/favicon.png', k)
-    call logo_name(s, url)
-    if (len(url) > 0) then
-        call copy_file(s%logo, directory//'/'//url, k)
-    else if (allocated(s%logo)) then
-        call warn('the logo '//s%logo//' was not found, so the main page has none')
-    end if
-    if (allocated(s%media_dir)) then
-        if (is_directory(s%media_dir)) then
-            call remove_directory(directory//'/media')
-            call copy_path(s%media_dir, directory//'/media', k)
-        end if
-    end if
 end subroutine write_site
 
 end module fdoc_site

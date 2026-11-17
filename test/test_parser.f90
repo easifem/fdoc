@@ -5,7 +5,7 @@ use fdoc_model
 use fdoc_parser, only: parse_file
 use fdoc_project, only: project_t, prune
 use fdoc_settings, only: settings_t, new_settings
-use fdoc_util, only: join, lowercase
+use fdoc_util, only: join, lowercase, strip
 implicit none
 private
 
@@ -30,6 +30,7 @@ subroutine collect_parser(testsuite)
                 new_unittest("dummy arguments", test_arguments), &
                 new_unittest("derived types and bindings", test_type), &
                 new_unittest("interface blocks", test_interfaces), &
+                new_unittest("docs of an unnamed interface", test_interface_doc), &
                 new_unittest("metadata in doc comments", test_metadata), &
                 new_unittest("labelled do loops", test_labelled_do), &
                 new_unittest("several bindings on a line", test_several_bindings), &
@@ -323,6 +324,21 @@ subroutine test_interfaces(error)
     if (allocated(error)) return
     call check(error, l%box(f)%e%parent, m, 'the block dissolves into the module')
 end subroutine test_interfaces
+
+!> Checks: the doc comment above an unnamed interface goes to the procedure in it, as in FORD.
+subroutine test_interface_doc(error)
+    type(error_type), allocatable, intent(out) :: error  !! the failure, if any
+    type(entity_list_t) :: l
+    integer :: s
+
+    call parse('module m'//NL//'!> date: 2024-05-14'//NL//'!> summary: Short'//NL//'!>'//NL//'!> Body'//NL// &
+               'interface'//NL//'module subroutine s(x)'//NL//'integer :: x'//NL//'end subroutine s'//NL// &
+               'end interface'//NL//'end module m'//NL, l)
+    s = find(l, E_SUBROUTINE, 's')
+    call check(error, strip(join(l%box(s)%e%doc, ' ')), 'Body')
+    if (allocated(error)) return
+    call check(error, size(l%box(s)%e%meta), 2, 'date and summary')
+end subroutine test_interface_doc
 
 !> Checks: metadata in doc comments.
 subroutine test_metadata(error)

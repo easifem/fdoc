@@ -25,6 +25,7 @@ PARALLEL = [
     "fdoc_stats",
     "fdoc_docs",
     "fdoc_site",
+    "fdoc_site_markdown",
     "fdoc_highlight",
     "fdoc_buffer",
     "fdoc_progress",

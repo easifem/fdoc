@@ -2,16 +2,23 @@
   var root = document.documentElement;
   var saved = null;
   try { saved = localStorage.getItem("fdoc-theme"); } catch (e) {}
-  if (saved) root.setAttribute("data-theme", saved);
+  // the themes the selector offers; with none chosen (Auto) the CSS follows the system
+  var THEMES = ["gruvbox-light", "gruvbox-dark", "tokyo-night", "catppuccin-mocha", "catppuccin-latte",
+    "rose-pine", "rose-pine-dawn"];
+  if (saved && THEMES.indexOf(saved) >= 0) root.setAttribute("data-theme", saved);
   document.addEventListener("DOMContentLoaded", function () {
-    var button = document.querySelector(".theme");
-    if (button) button.addEventListener("click", function () {
-      var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark"
-        : window.matchMedia("(prefers-color-scheme: dark)").matches;
-      var next = dark ? "light" : "dark";
-      root.setAttribute("data-theme", next);
-      try { localStorage.setItem("fdoc-theme", next); } catch (e) {}
-    });
+    var select = document.querySelector("select.theme");
+    if (select) {
+      select.value = root.getAttribute("data-theme") || "";
+      select.addEventListener("change", function () {
+        if (select.value) root.setAttribute("data-theme", select.value);
+        else root.removeAttribute("data-theme");
+        try {
+          if (select.value) localStorage.setItem("fdoc-theme", select.value);
+          else localStorage.removeItem("fdoc-theme");
+        } catch (e) {}
+      });
+    }
     document.querySelectorAll(".codehilite").forEach(function (block) {
       if (!navigator.clipboard) return;
       var copy = document.createElement("button");
@@ -229,9 +236,12 @@
 (function () {
   document.addEventListener("DOMContentLoaded", function () {
     // what the colours of `add_node` in fdoc_graphs.f90 mean: keep the two the same
-    var COLOURS = [["#3657c9", "Module"], ["#5a78de", "Submodule"], ["#a61e69", "Program"], ["#1d7a55", "Subroutine"],
-      ["#0b7285", "Function"], ["#6a4fb3", "Interface"], ["#a15c00", "Derived type"], ["#7a6a2d", "Type-bound procedure"],
-      ["#5c6f2d", "Source file"], ["#646d7e", "External, or other"], ["#8a93a5", "Not documented"]];
+    // the CSS gives each the colour of the theme, from the variable named third
+    var COLOURS = [["#3657c9", "Module", "module"], ["#5a78de", "Submodule", "submodule"],
+      ["#a61e69", "Program", "program"], ["#1d7a55", "Subroutine", "subroutine"], ["#0b7285", "Function", "function"],
+      ["#6a4fb3", "Interface", "interface"], ["#a15c00", "Derived type", "type"],
+      ["#7a6a2d", "Type-bound procedure", "binding"], ["#5c6f2d", "Source file", "file"],
+      ["#646d7e", "External, or other", "other"], ["#8a93a5", "Not documented", "undoc"]];
 
     // a button that shows what is in this drawing, under it, as a short drawing can't hold a popup
     function addKey(box, svg, zoom) {
@@ -252,11 +262,11 @@
         return mark;
       }
       COLOURS.forEach(function (c) {
-        if (svg.querySelector('rect[fill="' + c[0] + '"], path[fill="' + c[0] + '"]')) entry(swatch({ background: c[0] }), c[1]);
+        if (svg.querySelector('rect[fill="' + c[0] + '"], path[fill="' + c[0] + '"]')) entry(swatch({ background: "var(--kind-" + c[2] + ")" }), c[1]);
       });
-      if (svg.querySelector('rect[stroke="#f0a868"]')) entry(swatch({ border: "2px solid #f0a868" }), "This page");
+      if (svg.querySelector('rect[stroke="#f0a868"]')) entry(swatch({ border: "2px solid var(--kind-here)" }), "This page");
       if (svg.querySelector("path[stroke-dasharray]")) {
-        entry(swatch({ height: "0", borderRadius: "0", borderTop: "2px dashed #8a93a5" }), "Component of a type");
+        entry(swatch({ height: "0", borderRadius: "0", borderTop: "2px dashed var(--kind-undoc)" }), "Component of a type");
       }
       var button = document.createElement("button");
       button.textContent = "?";
@@ -346,31 +356,286 @@ window.addEventListener('DOMContentLoaded', function () {
   });
 });
 
-// the sidebar holds all of the list of this page, and shows where this page is in it
+// the left sidebar: the list of this page grouped by module, a filter, folding, resizing, hiding, a
+// drawer on phones, and its scroll position kept from page to page
 (function () {
   var script = document.currentScript;
   var root = script ? script.src.replace(/js\/fdoc\.js.*$/, "") : "";
+  var html = document.documentElement;
+  var MIN = 180, MAX = 640;
+
+  function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function store(key, value) {
+    try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (e) {}
+  }
+  function loadSet(key) { try { return JSON.parse(load(key) || "[]"); } catch (e) { return []; } }
+  function storeSet(key, set) { store(key, set.length ? JSON.stringify(set) : null); }
+  function toggleIn(set, item, on) {
+    var k = set.indexOf(item);
+    if (on && k < 0) set.push(item);
+    if (!on && k >= 0) set.splice(k, 1);
+  }
+
+  // before the page is drawn, so that it doesn't jump
+  var width = parseInt(load("fdoc-side-w"), 10);
+  if (width >= MIN && width <= MAX) html.style.setProperty("--side-w", width + "px");
+  if (load("fdoc-side-hidden") === "1") html.classList.add("side-hidden");
+
+  function phone() { return window.matchMedia("(max-width: 860px)").matches; }
+
+  // the arrow of a fold: a button on a heading, or a plain mark inside the button of a group
+  function foldButton(mark) {
+    var b = document.createElement(mark ? "span" : "button");
+    b.className = "fold";
+    if (!mark) b.type = "button";
+    b.innerHTML = "&#9662;";
+    return b;
+  }
+
+  // put the entries of `list` under a group for each module, sorted by name
+  function group(list, key) {
+    var items = Array.prototype.slice.call(list.children), groups = {}, names = [];
+    items.forEach(function (li) {
+      var a = li.querySelector("a"), m = a ? a.getAttribute("data-m") : null;
+      if (m === null) return;
+      if (!groups[m]) { groups[m] = []; names.push(m); }
+      groups[m].push(li);
+    });
+    if (names.length < 2) return;
+    names.sort(function (x, y) { return x.toLowerCase() < y.toLowerCase() ? -1 : x.toLowerCase() > y.toLowerCase() ? 1 : 0; });
+    var open = loadSet("fdoc-open-groups");
+    list.textContent = "";
+    names.forEach(function (m) {
+      var li = document.createElement("li"), head = document.createElement("button"), ul = document.createElement("ul");
+      li.className = "group";
+      li.dataset.group = key + ":" + m;
+      head.className = "group-name";
+      head.type = "button";
+      head.appendChild(foldButton(true));
+      var label = document.createElement("span");
+      label.className = "label";
+      label.textContent = m || "(no module)";
+      head.title = label.textContent;
+      head.appendChild(label);
+      var n = document.createElement("span");
+      n.className = "n";
+      n.textContent = groups[m].length;
+      head.appendChild(n);
+      groups[m].forEach(function (item) { ul.appendChild(item); });
+      li.appendChild(head);
+      li.appendChild(ul);
+      if (open.indexOf(li.dataset.group) >= 0) li.classList.add("open");
+      head.addEventListener("click", function () {
+        var on = li.classList.toggle("open");
+        var set = loadSet("fdoc-open-groups");
+        toggleIn(set, li.dataset.group, on);
+        storeSet("fdoc-open-groups", set);
+      });
+      list.appendChild(li);
+    });
+  }
+
+  // a fold button on each heading with a list after it; the folded ones are remembered
+  function folding(side) {
+    var folded = loadSet("fdoc-folded");
+    side.querySelectorAll("h4").forEach(function (h) {
+      var ul = h.nextElementSibling;
+      if (!ul || ul.tagName !== "UL" || !ul.children.length) return;
+      var name = h.textContent.trim(), b = foldButton(false);
+      b.title = "Fold or unfold " + name;
+      h.insertBefore(b, h.firstChild);
+      if (folded.indexOf(name) >= 0) h.classList.add("folded");
+      b.addEventListener("click", function () {
+        var on = h.classList.toggle("folded"), set = loadSet("fdoc-folded");
+        toggleIn(set, name, on);
+        storeSet("fdoc-folded", set);
+      });
+    });
+  }
+
+  // the filter box at the top of the sidebar: it shows the entries whose names contain what is typed
+  function filter(side) {
+    var links = side.querySelectorAll("li > a");
+    if (links.length < 8) return;
+    var box = document.createElement("div"), input = document.createElement("input");
+    var empty = document.createElement("div");
+    box.className = "side-filter";
+    input.type = "search";
+    input.placeholder = "Filter…";
+    input.setAttribute("aria-label", "Filter the sidebar");
+    empty.className = "side-empty";
+    empty.textContent = "Nothing matches";
+    empty.hidden = true;
+    box.appendChild(input);
+    side.insertBefore(box, side.firstChild);
+    side.appendChild(empty);
+    var names = Array.prototype.map.call(links, function (a) { return (a.dataset.name || a.textContent).toLowerCase(); });
+
+    function run() {
+      var q = input.value.trim().toLowerCase(), any = false;
+      side.classList.toggle("filtering", q.length > 0);
+      links.forEach(function (a, k) {
+        var show = !q || names[k].indexOf(q) >= 0;
+        a.parentElement.hidden = !show;
+        any = any || show;
+      });
+      side.querySelectorAll("li.group").forEach(function (g) {
+        g.hidden = q && !g.querySelector("li:not([hidden])");
+        g.classList.toggle("found", !!q && !g.hidden);
+      });
+      side.querySelectorAll("h4").forEach(function (h) {
+        var ul = h.nextElementSibling;
+        h.hidden = q && !(ul && ul.tagName === "UL" && ul.querySelector("li:not([hidden])"));
+        if (ul && ul.tagName === "UL") ul.hidden = h.hidden;
+      });
+      empty.hidden = !q || any;
+      if (q) side.scrollTop = 0;
+    }
+    input.addEventListener("input", run);
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") { input.value = ""; run(); input.blur(); }
+    });
+  }
+
+  // drag the edge of the sidebar to resize it; a double click goes back to the default width
+  function resizing(side) {
+    var handle = document.createElement("div");
+    handle.className = "side-resize";
+    handle.title = "Drag to resize, double-click to reset";
+    document.body.appendChild(handle);
+    function place() { handle.style.left = side.getBoundingClientRect().right + "px"; }
+    place();
+    window.addEventListener("resize", place);
+    handle.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add("dragging");
+      var left = side.getBoundingClientRect().left;
+      function move(e) {
+        var w = Math.max(MIN, Math.min(MAX, Math.round(e.clientX - left)));
+        html.style.setProperty("--side-w", w + "px");
+        place();
+      }
+      function up() {
+        handle.classList.remove("dragging");
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        store("fdoc-side-w", String(Math.round(side.getBoundingClientRect().width)));
+      }
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    });
+    handle.addEventListener("dblclick", function () {
+      html.style.removeProperty("--side-w");
+      store("fdoc-side-w", null);
+      place();
+    });
+    return place;
+  }
 
   document.addEventListener("DOMContentLoaded", function () {
-    var side = document.querySelector("aside.side");
-    if (!side) return;
-    var headings = side.querySelectorAll("h4"), height = 0;
-    headings.forEach(function (h) { h.style.top = height + "px"; height += h.offsetHeight; });
-    headings.forEach(function (h) { height -= h.offsetHeight; h.style.bottom = height + "px"; });
-    var list = side.querySelector("ul[data-list]");
-    if (!list || !window.FDOC_SIDEBAR) return;
-    list.innerHTML = (window.FDOC_SIDEBAR[list.dataset.list] || "").replace(/href="@/g, 'href="' + root);
-    var here = location.href.split("#")[0];
-    var links = list.querySelectorAll("a");
-    for (var k = 0; k < links.length; k++) {
-      if (links[k].href !== here) continue;
-      links[k].classList.add("current");
-      links[k].setAttribute("aria-current", "page");
-      side.scrollTop = links[k].offsetTop - side.clientHeight / 2;
+    var side = document.querySelector("aside.side"), toggle = document.querySelector(".side-toggle");
+    if (!side) {
+      if (toggle) toggle.hidden = true;
       return;
     }
+    var list = side.querySelector("ul[data-list]"), key = list ? list.dataset.list : "";
+    if (list && window.FDOC_SIDEBAR) {
+      list.innerHTML = (window.FDOC_SIDEBAR[key] || "").replace(/href="@/g, 'href="' + root);
+    }
+    // the full name, and the module, as the tooltip of each entry
+    side.querySelectorAll("li > a").forEach(function (a) {
+      var name = a.textContent.trim(), m = a.getAttribute("data-m");
+      a.dataset.name = name;
+      a.title = m ? name + " — " + m : name;
+    });
+    if (list) group(list, key);
+
+    var here = location.href.split("#")[0], current = null;
+    side.querySelectorAll("li > a").forEach(function (a) {
+      if (current || a.href !== here) return;
+      current = a;
+      a.classList.add("current");
+      a.setAttribute("aria-current", "page");
+      var g = a.closest("li.group");
+      if (g) g.classList.add("open", "here");
+    });
+    folding(side);
+    filter(side);
+    var place = resizing(side);
+
+    // the sidebar opens where it was left when one of its links was followed
+    var saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem("fdoc-side-scroll") || "null"); } catch (e) {}
+    try { sessionStorage.removeItem("fdoc-side-scroll"); } catch (e) {}
+    if (saved && saved.list === key) side.scrollTop = saved.top;
+    else if (current) side.scrollTop = current.offsetTop - side.clientHeight / 2;
+    side.addEventListener("click", function (event) {
+      if (!event.target.closest("a")) return;
+      try { sessionStorage.setItem("fdoc-side-scroll", JSON.stringify({ list: key, top: side.scrollTop })); } catch (e) {}
+      html.classList.remove("side-open");
+    });
+
+    // the button at the left of the header hides the sidebar, or on a phone opens it as a drawer
+    var backdrop = document.createElement("div");
+    backdrop.className = "side-backdrop";
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener("click", function () { html.classList.remove("side-open"); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") html.classList.remove("side-open");
+    });
+    if (toggle) toggle.addEventListener("click", function () {
+      if (phone()) {
+        html.classList.toggle("side-open");
+        return;
+      }
+      var hidden = html.classList.toggle("side-hidden");
+      store("fdoc-side-hidden", hidden ? "1" : null);
+      place();
+    });
   });
 })();
+
+// the contents of the page, at the right on wide screens, with the section being read marked
+document.addEventListener("DOMContentLoaded", function () {
+  var main = document.querySelector("main"), layout = document.querySelector(".layout");
+  if (!main || !layout) return;
+  var heads = Array.prototype.filter.call(main.querySelectorAll("h2[id], .doc h1[id], .doc h3[id]"), function (h) {
+    return !h.closest(".item");
+  });
+  if (heads.length < 2) return;
+  var nav = document.createElement("nav"), ul = document.createElement("ul"), links = [];
+  nav.className = "toc";
+  nav.setAttribute("aria-label", "On this page");
+  nav.innerHTML = "<h4>On this page</h4>";
+  heads.forEach(function (h) {
+    var copy = h.cloneNode(true);
+    copy.querySelectorAll(".anchor").forEach(function (a) { a.remove(); });
+    var li = document.createElement("li"), a = document.createElement("a");
+    if (h.tagName === "H3") li.className = "sub";
+    a.href = "#" + h.id;
+    a.textContent = copy.textContent.trim();
+    a.title = a.textContent;
+    li.appendChild(a);
+    ul.appendChild(li);
+    links.push(a);
+  });
+  nav.appendChild(ul);
+  layout.appendChild(nav);
+  layout.classList.add("has-toc");
+
+  var ticking = false;
+  function mark() {
+    ticking = false;
+    var on = 0;
+    heads.forEach(function (h, k) { if (h.getBoundingClientRect().top < 110) on = k; });
+    links.forEach(function (a, k) { a.classList.toggle("on", k === on); });
+  }
+  window.addEventListener("scroll", function () {
+    if (!ticking) { ticking = true; window.requestAnimationFrame(mark); }
+  }, { passive: true });
+  mark();
+});
 
 // Mermaid diagrams are drawn in the browser, and Mermaid is only loaded for pages that have one
 (function () {
@@ -378,7 +643,8 @@ window.addEventListener('DOMContentLoaded', function () {
 
   function dark() {
     var theme = document.documentElement.getAttribute("data-theme");
-    return theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (!theme) return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return ["gruvbox-light", "catppuccin-latte", "rose-pine-dawn"].indexOf(theme) < 0;
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -399,8 +665,8 @@ window.addEventListener('DOMContentLoaded', function () {
     tag.src = URL;
     tag.onload = function () {
       draw();
-      var button = document.querySelector(".theme");
-      if (button) button.addEventListener("click", draw);
+      var select = document.querySelector("select.theme");
+      if (select) select.addEventListener("change", draw);
     };
     document.head.appendChild(tag);
   });
